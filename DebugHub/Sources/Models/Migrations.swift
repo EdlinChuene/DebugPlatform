@@ -31,10 +31,14 @@ struct CreateHTTPEvent: AsyncMigration {
             .field("trace_id", .string)
             .create()
 
-        // 创建索引
-        try await database.schema("http_events")
-            .unique(on: "id")
-            .update()
+        // Note: No need to add .unique(on: "id") constraint separately
+        // The id field with .identifier(auto: false) is already the primary key
+        // and primary keys are inherently unique
+        
+        // // 创建索引
+        // try await database.schema("http_events")
+        //     .unique(on: "id")
+        //     .update()
     }
 
     func revert(on database: Database) async throws {
