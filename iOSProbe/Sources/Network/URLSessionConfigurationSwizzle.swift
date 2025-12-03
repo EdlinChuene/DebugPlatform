@@ -14,7 +14,7 @@ import Foundation
 enum URLSessionConfigurationSwizzle {
     // MARK: - State
 
-    private static var isSwizzled = false
+    private(set) static var isSwizzled = false
     private static let lock = NSLock()
 
     // MARK: - Public API
@@ -49,6 +49,16 @@ enum URLSessionConfigurationSwizzle {
 
         isSwizzled = false
         DebugLog.info(.network, "URLSessionConfiguration swizzle disabled")
+    }
+
+    /// 获取干净的 .default configuration（不包含 CaptureURLProtocol）
+    /// 用于 CaptureURLProtocol 内部创建 URLSession，避免循环
+    static func cleanDefaultConfiguration() -> URLSessionConfiguration {
+        if isSwizzled {
+            // swizzle 后，swizzled_default 指向原始的 .default 实现
+            return URLSessionConfiguration.swizzled_default
+        }
+        return URLSessionConfiguration.default
     }
 
     // MARK: - Private

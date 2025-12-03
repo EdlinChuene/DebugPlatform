@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { ThemeToggle } from './ThemeToggle'
@@ -14,45 +14,9 @@ const quickLinks = [
   { path: '/health', label: '健康检查', icon: '💚', description: '查看服务运行状态' },
 ]
 
-// 功能模块配置 - 点击跳转到设备详情页对应 tab
-const featureModules = [
-  { 
-    icon: '🌐', 
-    label: '网络捕获', 
-    tab: 'network',
-    description: 'HTTP 请求监控',
-    tip: '查看设备网络请求',
-    enabled: true
-  },
-  { 
-    icon: '📝', 
-    label: '日志查看', 
-    tab: 'logs',
-    description: '实时日志流',
-    tip: '查看设备应用日志',
-    enabled: true
-  },
-  { 
-    icon: '🔌', 
-    label: 'WebSocket', 
-    tab: 'websocket',
-    description: '双向通信',
-    tip: '查看 WebSocket 会话',
-    enabled: true
-  },
-  { 
-    icon: '🎭', 
-    label: 'Mock 规则', 
-    tab: 'mock',
-    description: '接口模拟',
-    tip: '配置接口模拟规则',
-    enabled: true
-  },
-]
 
 export function Sidebar() {
   const location = useLocation()
-  const navigate = useNavigate()
   const { isServerOnline, isRealtimeConnected, isInDeviceDetail } = useConnectionStore()
   const devices = useDeviceStore((s) => s.devices)
   const onlineDevices = devices.filter(d => d.isOnline)
@@ -80,23 +44,6 @@ export function Sidebar() {
         label: isServerOnline ? '服务运行正常' : '服务连接失败',
         description: isServerOnline ? 'Debug Hub 在线' : '无法连接到服务器',
       }
-
-  // 处理功能模块点击
-  const handleFeatureClick = (tab: string) => {
-    if (onlineCount === 0) {
-      // 没有在线设备，跳转到设备列表
-      navigate('/')
-      return
-    }
-    
-    if (onlineCount === 1) {
-      // 只有一个在线设备，直接跳转
-      navigate(`/device/${onlineDevices[0].deviceId}?tab=${tab}`)
-    } else {
-      // 多个在线设备，跳转到设备列表让用户选择
-      navigate('/')
-    }
-  }
 
   // 清空数据库
   const handleTruncate = async () => {
@@ -218,47 +165,6 @@ export function Sidebar() {
           </Link>
         ))}
 
-        {/* Features Section */}
-        <div className="text-xs text-text-muted uppercase tracking-wider px-3 py-2 mt-4 font-medium flex items-center justify-between">
-          <span>快捷入口</span>
-          {onlineCount === 0 && (
-            <span className="text-2xs normal-case text-yellow-500">需要设备在线</span>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-2 px-1">
-          {featureModules.map((feature) => {
-            const isDisabled = !feature.enabled
-            const needsDevice = onlineCount === 0 && !isDisabled
-            
-            return (
-              <button
-                key={feature.label}
-                onClick={() => !isDisabled && handleFeatureClick(feature.tab)}
-                disabled={isDisabled}
-                className={clsx(
-                  'p-3 rounded-xl border text-left transition-all group',
-                  isDisabled
-                    ? 'bg-bg-medium/30 border-border/50 opacity-50 cursor-not-allowed'
-                    : needsDevice
-                      ? 'bg-bg-medium/50 border-border hover:border-yellow-500/30 hover:bg-yellow-500/5 cursor-pointer'
-                      : 'bg-bg-medium/50 border-border hover:border-primary/30 hover:bg-bg-light cursor-pointer'
-                )}
-                title={isDisabled ? '开发中' : needsDevice ? '请先连接设备' : feature.tip}
-              >
-                <span className={clsx(
-                  'text-xl mb-1 block transition-transform',
-                  !isDisabled && 'group-hover:scale-110'
-                )}>
-                  {feature.icon}
-                </span>
-                <div className="text-xs font-medium text-text-primary">{feature.label}</div>
-                <div className="text-2xs text-text-muted line-clamp-1">
-                  {feature.description}
-                </div>
-              </button>
-            )
-          })}
-        </div>
       </nav>
 
       {/* Footer */}
@@ -291,9 +197,9 @@ export function Sidebar() {
           <button
             onClick={() => setShowTruncateDialog(true)}
             className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/20 hover:border-red-500/30 transition-all"
-            title="清空所有数据"
+            title="清空数据库中的所有数据"
           >
-            🗑️ 清空
+            清空数据库
           </button>
         </div>
 

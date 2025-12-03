@@ -20,6 +20,7 @@ export function isSessionDivider(item: ListItem): item is SessionDivider {
 interface HTTPState {
   events: HTTPEventSummary[]
   listItems: ListItem[] // 包含会话分隔符的列表
+  filteredItems: ListItem[] // 过滤后的列表
   selectedEventId: string | null
   selectedEvent: HTTPEventDetail | null
   total: number
@@ -51,6 +52,7 @@ interface HTTPState {
   clearEvents: () => void
   setFilter: (key: string, value: string | boolean) => void
   setAutoScroll: (value: boolean) => void
+  applyFilters: () => void
 
   // 会话管理
   addSessionDivider: (sessionId: string, isConnected: boolean) => void
@@ -67,9 +69,36 @@ interface HTTPState {
   batchFavorite: (deviceId: string, isFavorite: boolean) => Promise<void>
 }
 
+// 过滤逻辑
+function filterItems(items: ListItem[], filters: HTTPState['filters']): ListItem[] {
+  return items.filter((item) => {
+    // 会话分隔符始终显示
+    if (isSessionDivider(item)) return true
+
+    const event = item as HTTPEventSummary
+
+    // 方法过滤
+    if (filters.method && event.method !== filters.method) return false
+
+    // URL 搜索
+    if (filters.urlContains && !event.url.toLowerCase().includes(filters.urlContains.toLowerCase())) {
+      return false
+    }
+
+    // 仅 Mock
+    if (filters.mockedOnly && !event.isMocked) return false
+
+    // 仅收藏
+    if (filters.favoritesOnly && !event.isFavorite) return false
+
+    return true
+  })
+}
+
 export const useHTTPStore = create<HTTPState>((set, get) => ({
   events: [],
   listItems: [],
+  filteredItems: [],
   selectedEventId: null,
   selectedEvent: null,
   total: 0,
@@ -108,9 +137,11 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
         events = events.filter((e) => e.isFavorite)
       }
 
+      const filteredItems = filterItems(events, filters)
       set({
         events,
         listItems: events, // 从 API 加载时不包含分隔符
+        filteredItems,
         total: response.total,
         page: response.page,
         isLoading: false,
@@ -160,7 +191,9 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
         return new Date(timeB).getTime() - new Date(timeA).getTime()
       })
 
-      set({ listItems: allItems })
+      const { filters } = get()
+      const filteredItems = filterItems(allItems, filters)
+      set({ listItems: allItems, filteredItems })
     } catch (error) {
       console.error('Failed to fetch session history:', error)
     }
@@ -185,7 +218,8 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
     set((state) => {
       const events = [event, ...state.events].slice(0, 1000)
       const listItems = [event as ListItem, ...state.listItems].slice(0, 1000)
-      return { events, listItems, total: state.total + 1 }
+      const filteredItems = filterItems(listItems, state.filters)
+      return { events, listItems, filteredItems, total: state.total + 1 }
     })
   },
 
@@ -193,6 +227,7 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
     set({
       events: [],
       listItems: [],
+      filteredItems: [],
       total: 0,
       selectedEventId: null,
       selectedEvent: null,
@@ -210,16 +245,26 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
         isConnected,
       }
       const listItems = [divider as ListItem, ...state.listItems]
+      const filteredItems = filterItems(listItems, state.filters)
       return {
         listItems,
+        filteredItems,
         currentSessionId: isConnected ? sessionId : state.currentSessionId,
       }
     })
   },
 
   setFilter: (key: string, value: string | boolean) => {
+    set((state) => {
+      const newFilters = { ...state.filters, [key]: value }
+      const filteredItems = filterItems(state.listItems, newFilters)
+      return { filters: newFilters, filteredItems }
+    })
+  },
+
+  applyFilters: () => {
     set((state) => ({
-      filters: { ...state.filters, [key]: value },
+      filteredItems: filterItems(state.listItems, state.filters),
     }))
   },
 
@@ -228,13 +273,22 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
   },
 
   updateEventFavorite: (eventId: string, isFavorite: boolean) => {
-    set((state) => ({
-      events: state.events.map((e) => (e.id === eventId ? { ...e, isFavorite } : e)),
-      selectedEvent:
-        state.selectedEvent?.id === eventId
-          ? { ...state.selectedEvent, isFavorite }
-          : state.selectedEvent,
-    }))
+    set((state) => {
+      const events = state.events.map((e) => (e.id === eventId ? { ...e, isFavorite } : e))
+      const listItems = state.listItems.map((item) =>
+        !isSessionDivider(item) && item.id === eventId ? { ...item, isFavorite } : item
+      )
+      const filteredItems = filterItems(listItems, state.filters)
+      return {
+        events,
+        listItems,
+        filteredItems,
+        selectedEvent:
+          state.selectedEvent?.id === eventId
+            ? { ...state.selectedEvent, isFavorite }
+            : state.selectedEvent,
+      }
+    })
   },
 
   // 批量选择

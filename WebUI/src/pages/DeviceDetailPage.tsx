@@ -23,12 +23,12 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { getExportHTTPUrl, getExportLogsUrl, getExportHARUrl } from '@/services/api'
 import clsx from 'clsx'
 
-type Tab = 'network' | 'logs' | 'websocket' | 'mock'
+type Tab = 'http' | 'logs' | 'websocket' | 'mock'
 
 const tabConfig = [
-  { id: 'network' as Tab, label: '网络', icon: '🌐', description: 'HTTP 请求监控' },
+  { id: 'http' as Tab, label: 'HTTP', icon: '🌐', description: 'HTTP/HTTPS 请求' },
+  { id: 'websocket' as Tab, label: 'WebSocket', icon: '🔌', description: 'WS 连接' },
   { id: 'logs' as Tab, label: '日志', icon: '📝', description: '应用日志' },
-  { id: 'websocket' as Tab, label: 'WebSocket', icon: '🔌', description: '双向通信' },
   { id: 'mock' as Tab, label: 'Mock', icon: '🎭', description: '接口模拟' },
 ]
 
@@ -37,8 +37,9 @@ export function DeviceDetailPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   
-  // 从 URL 参数读取初始 tab
-  const initialTab = (searchParams.get('tab') as Tab) || 'network'
+  // 从 URL 参数读取初始 tab（支持旧的 network 参数向后兼容）
+  const tabParam = searchParams.get('tab')
+  const initialTab = (tabParam === 'network' ? 'http' : tabParam as Tab) || 'http'
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [networkCapture, setNetworkCapture] = useState(true)
   const [logCapture, setLogCapture] = useState(true)
@@ -80,7 +81,7 @@ export function DeviceDetailPage() {
       description: '刷新',
       action: () => {
         if (deviceId) {
-          if (activeTab === 'network') httpStore.fetchEvents(deviceId)
+          if (activeTab === 'http') httpStore.fetchEvents(deviceId)
           else if (activeTab === 'logs') logStore.fetchEvents(deviceId)
           else if (activeTab === 'websocket') wsStore.fetchSessions(deviceId)
           else if (activeTab === 'mock') mockStore.fetchRules(deviceId)
@@ -92,7 +93,7 @@ export function DeviceDetailPage() {
       ctrl: true,
       description: '清空列表',
       action: () => {
-        if (activeTab === 'network') {
+        if (activeTab === 'http') {
           httpStore.clearEvents()
         } else if (activeTab === 'logs') {
           logStore.clearEvents()
@@ -131,7 +132,7 @@ export function DeviceDetailPage() {
       ctrl: true,
       description: '全选',
       action: () => {
-        if (activeTab === 'network' && httpStore.isSelectMode) {
+        if (activeTab === 'http' && httpStore.isSelectMode) {
           httpStore.selectAll()
         }
       },
@@ -141,7 +142,7 @@ export function DeviceDetailPage() {
       description: '删除选中',
       action: () => {
         if (
-          activeTab === 'network' &&
+          activeTab === 'http' &&
           httpStore.isSelectMode &&
           httpStore.selectedIds.size > 0 &&
           deviceId
@@ -155,7 +156,7 @@ export function DeviceDetailPage() {
       description: '收藏',
       action: () => {
         if (
-          activeTab === 'network' &&
+          activeTab === 'http' &&
           httpStore.isSelectMode &&
           httpStore.selectedIds.size > 0 &&
           deviceId
@@ -438,8 +439,8 @@ export function DeviceDetailPage() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'network' && (
-          <NetworkTab
+        {activeTab === 'http' && (
+          <HTTPTab
             deviceId={deviceId}
             httpStore={httpStore}
             onSelectEvent={handleSelectHTTPEvent}
@@ -449,11 +450,11 @@ export function DeviceDetailPage() {
           />
         )}
 
-        {activeTab === 'logs' && <LogsTab deviceId={deviceId} logStore={logStore} />}
-
         {activeTab === 'websocket' && (
           <WebSocketTab deviceId={deviceId} wsStore={wsStore} />
         )}
+
+        {activeTab === 'logs' && <LogsTab deviceId={deviceId} logStore={logStore} />}
 
         {activeTab === 'mock' && (
           <MockTab deviceId={deviceId} mockStore={mockStore} />
@@ -478,8 +479,8 @@ export function DeviceDetailPage() {
   )
 }
 
-// Network Tab Component
-function NetworkTab({
+// HTTP Tab Component
+function HTTPTab({
   deviceId,
   httpStore,
   onSelectEvent,
@@ -501,6 +502,11 @@ function NetworkTab({
     }
   }
 
+  // 显示的记录数（过滤后）
+  const filteredCount = httpStore.filteredItems.filter(
+    (item) => !('type' in item && item.type === 'session-divider')
+  ).length
+
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -511,7 +517,7 @@ function NetworkTab({
             className="btn btn-secondary"
             title="刷新列表 (Ctrl+R)"
           >
-            🔄 刷新
+            刷新
           </button>
           
           <div className="h-6 w-px bg-border" />
@@ -533,7 +539,7 @@ function NetworkTab({
             type="text"
             value={httpStore.filters.urlContains}
             onChange={(e) => httpStore.setFilter('urlContains', e.target.value)}
-            placeholder="🔍 搜索 URL..."
+            placeholder="搜索 URL..."
             className="input w-56"
             data-search-input
           />
@@ -560,7 +566,10 @@ function NetworkTab({
         
         <div className="flex items-center gap-3">
           <span className="text-xs text-text-muted bg-bg-light px-2 py-1 rounded-lg">
-            {httpStore.events.length} 条记录
+            {filteredCount !== httpStore.events.length
+              ? `${filteredCount} / ${httpStore.events.length}`
+              : `${httpStore.events.length}`}{' '}
+            条记录
           </span>
           
           <button
@@ -572,7 +581,7 @@ function NetworkTab({
                 : 'btn-secondary'
             )}
           >
-            {httpStore.isSelectMode ? '✓ 批量模式' : '☐ 批量选择'}
+            {httpStore.isSelectMode ? '退出批量' : '批量选择'}
           </button>
           
           <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
@@ -593,15 +602,15 @@ function NetworkTab({
             rel="noopener noreferrer"
             className="btn btn-secondary"
           >
-            📤 导出
+            导出
           </a>
           
           <button
             onClick={() => httpStore.clearEvents()}
-            className="btn btn-ghost text-text-muted hover:text-red-400 hover:bg-red-500/10"
-            title="清空列表 (Ctrl+L)"
+            className="btn btn-ghost text-text-muted hover:text-text-secondary"
+            title="清空当前列表（不删除数据库）"
           >
-            🧹
+            清屏
           </button>
         </div>
       </div>
@@ -610,7 +619,7 @@ function NetworkTab({
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 min-w-[400px] border-r border-border flex flex-col">
           <HTTPEventTable
-            items={httpStore.listItems}
+            items={httpStore.filteredItems}
             selectedId={httpStore.selectedEventId}
             onSelect={onSelectEvent}
             autoScroll={httpStore.autoScroll}
@@ -688,15 +697,15 @@ function LogsTab({
             rel="noopener noreferrer"
             className="btn btn-secondary"
           >
-            📤 导出
+            导出
           </a>
           
           <button
             onClick={() => logStore.clearEvents()}
-            className="btn btn-ghost text-text-muted hover:text-red-400 hover:bg-red-500/10"
-            title="清空列表 (Ctrl+L)"
+            className="btn btn-ghost text-text-muted hover:text-text-secondary"
+            title="清空当前列表（不删除数据库）"
           >
-            🧹
+            清屏
           </button>
         </div>
       </div>
@@ -747,7 +756,7 @@ function WebSocketTab({
             onClick={() => wsStore.fetchSessions(deviceId)}
             className="btn btn-secondary"
           >
-            🔄 刷新
+            刷新
           </button>
           
           <div className="h-6 w-px bg-border" />
@@ -756,7 +765,7 @@ function WebSocketTab({
             type="text"
             value={wsStore.filters.urlContains || ''}
             onChange={(e) => wsStore.setFilter('urlContains', e.target.value)}
-            placeholder="🔍 搜索 URL..."
+            placeholder="搜索 URL..."
             className="input w-56"
           />
           
@@ -870,7 +879,7 @@ function MockTab({
             onClick={() => mockStore.fetchRules(deviceId)}
             className="btn btn-secondary"
           >
-            🔄 刷新
+            刷新
           </button>
           
           <span className="text-xs text-text-muted bg-bg-light px-2 py-1 rounded-lg">
@@ -879,7 +888,7 @@ function MockTab({
         </div>
         
         <button onClick={handleCreateNew} className="btn bg-primary text-white hover:bg-primary-dark">
-          ✨ 创建规则
+          + 创建规则
         </button>
       </div>
 

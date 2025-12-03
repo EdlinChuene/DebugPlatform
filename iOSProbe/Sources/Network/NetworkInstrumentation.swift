@@ -67,7 +67,13 @@ public final class NetworkInstrumentation {
     // MARK: - Lifecycle
 
     private init() {}
-
+    
+    /// 获取干净的 .default configuration（不包含 CaptureURLProtocol）
+    /// 用于 CaptureURLProtocol 内部创建 URLSession，避免循环
+    public static func cleanDefaultConfiguration() -> URLSessionConfiguration {
+        URLSessionConfigurationSwizzle.cleanDefaultConfiguration()
+    }
+    
     // MARK: - Start / Stop
 
     /// 启动网络捕获
@@ -92,7 +98,6 @@ public final class NetworkInstrumentation {
     /// ```swift
     /// NetworkInstrumentation.shared.start(mode: .manual)
     /// // 需要手动注入到每个 URLSessionConfiguration
-    /// HTTPManager.customProtocolClasses = NetworkInstrumentation.protocolClasses
     /// ```
     public func start(mode: NetworkCaptureMode = .automatic, scope: NetworkCaptureScope = .all) {
         guard !isEnabled else { return }
@@ -232,7 +237,8 @@ public final class CaptureURLProtocol: URLProtocol {
         URLProtocol.setProperty(true, forKey: Self.handledKey, in: mutableRequest)
 
         // 创建内部 URLSession 发起真实请求
-        let config = URLSessionConfiguration.default
+        // 使用干净的 configuration，避免被 swizzle 污染导致循环
+        let config = URLSessionConfigurationSwizzle.cleanDefaultConfiguration()
         urlSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         dataTask = urlSession?.dataTask(with: mutableRequest as URLRequest)
         dataTask?.resume()
