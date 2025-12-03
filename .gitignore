@@ -1,0 +1,131 @@
+# ============================================================================
+# Debug Platform .gitignore
+# ============================================================================
+
+# ============================================================================
+# Swift / Xcode
+# ============================================================================
+
+# Build artifacts
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# Swift Package Manager
+Package.resolved
+
+# CocoaPods (if used)
+Pods/
+Podfile.lock
+
+# Carthage (if used)
+Carthage/Build/
+Carthage/Checkouts/
+
+# ============================================================================
+# Node.js / React (WebUI)
+# ============================================================================
+
+# Dependencies
+node_modules/
+
+# Build output (WebUI dist - deployed to DebugHub/Public/)
+WebUI/dist/
+
+# Vite
+*.local
+
+# ============================================================================
+# Database and Data
+# ============================================================================
+
+# SQLite
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+
+# Data directories
+data/
+
+# ============================================================================
+# Environment and Secrets
+# ============================================================================
+
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+*.pem
+*.key
+
+# ============================================================================
+# Runtime Files (DebugHub)
+# ============================================================================
+
+# Deploy script artifacts
+deploy.log
+.debughub.pid
+
+# ============================================================================
+# macOS
+# ============================================================================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ============================================================================
+# IDE and Editors
+# ============================================================================
+
+# Visual Studio Code
+.vscode/
+
+# JetBrains IDEs
+.idea/
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ============================================================================
+# Logs
+# ============================================================================
+
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================================================
+# Misc
+# ============================================================================
+
+# Thumbnails
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Coverage reports
+coverage/
+.nyc_output/

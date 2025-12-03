@@ -1,0 +1,218 @@
+// Migrations.swift
+// DebugHub
+//
+// Created by Sun on 2025/12/02.
+// Copyright © 2025 Sun. All rights reserved.
+//
+
+import Fluent
+
+// MARK: - HTTP Event Migration
+
+struct CreateHTTPEvent: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("http_events")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string, .required)
+            .field("method", .string, .required)
+            .field("url", .string, .required)
+            .field("query_items", .string, .required)
+            .field("request_headers", .string, .required)
+            .field("request_body", .data)
+            .field("status_code", .int)
+            .field("response_headers", .string)
+            .field("response_body", .data)
+            .field("start_time", .datetime, .required)
+            .field("end_time", .datetime)
+            .field("duration", .double)
+            .field("error_description", .string)
+            .field("is_mocked", .bool, .required)
+            .field("mock_rule_id", .string)
+            .field("trace_id", .string)
+            .create()
+
+        // 创建索引
+        try await database.schema("http_events")
+            .unique(on: "id")
+            .update()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("http_events").delete()
+    }
+}
+
+// MARK: - WebSocket Session Migration
+
+struct CreateWSSession: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("ws_sessions")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string, .required)
+            .field("url", .string, .required)
+            .field("request_headers", .string, .required)
+            .field("subprotocols", .string, .required)
+            .field("connect_time", .datetime, .required)
+            .field("disconnect_time", .datetime)
+            .field("close_code", .int)
+            .field("close_reason", .string)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("ws_sessions").delete()
+    }
+}
+
+// MARK: - WebSocket Frame Migration
+
+struct CreateWSFrame: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("ws_frames")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string, .required)
+            .field("session_id", .string, .required)
+            .field("direction", .string, .required)
+            .field("opcode", .string, .required)
+            .field("payload", .data, .required)
+            .field("payload_preview", .string)
+            .field("timestamp", .datetime, .required)
+            .field("is_mocked", .bool, .required)
+            .field("mock_rule_id", .string)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("ws_frames").delete()
+    }
+}
+
+// MARK: - Log Event Migration
+
+struct CreateLogEvent: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("log_events")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string, .required)
+            .field("source", .string, .required)
+            .field("timestamp", .datetime, .required)
+            .field("level", .string, .required)
+            .field("subsystem", .string)
+            .field("category", .string)
+            .field("logger_name", .string)
+            .field("thread", .string)
+            .field("file", .string)
+            .field("function", .string)
+            .field("line", .int)
+            .field("message", .string, .required)
+            .field("tags", .string, .required)
+            .field("trace_id", .string)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("log_events").delete()
+    }
+}
+
+// MARK: - Mock Rule Migration
+
+struct CreateMockRule: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("mock_rules")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string)
+            .field("name", .string, .required)
+            .field("target_type", .string, .required)
+            .field("condition_json", .string, .required)
+            .field("action_json", .string, .required)
+            .field("priority", .int, .required)
+            .field("enabled", .bool, .required)
+            .field("created_at", .datetime)
+            .field("updated_at", .datetime)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("mock_rules").delete()
+    }
+}
+
+// MARK: - Add HTTP Timing Migration
+
+struct AddHTTPTiming: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("http_events")
+            .field("timing_json", .string)
+            .update()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("http_events")
+            .deleteField("timing_json")
+            .update()
+    }
+}
+
+// MARK: - Breakpoint Rule Migration
+
+struct CreateBreakpointRule: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("breakpoint_rules")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string, .required)
+            .field("name", .string, .required)
+            .field("url_pattern", .string)
+            .field("method", .string)
+            .field("phase", .string, .required)
+            .field("enabled", .bool, .required)
+            .field("priority", .int, .required)
+            .field("created_at", .datetime)
+            .field("updated_at", .datetime)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("breakpoint_rules").delete()
+    }
+}
+
+// MARK: - Chaos Rule Migration
+
+struct CreateChaosRule: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("chaos_rules")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string, .required)
+            .field("name", .string, .required)
+            .field("url_pattern", .string)
+            .field("method", .string)
+            .field("probability", .double, .required)
+            .field("chaos_json", .string, .required)
+            .field("enabled", .bool, .required)
+            .field("priority", .int, .required)
+            .field("created_at", .datetime)
+            .field("updated_at", .datetime)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("chaos_rules").delete()
+    }
+}
+
+// MARK: - Add HTTP Event Favorite Migration
+
+struct AddHTTPEventFavorite: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("http_events")
+            .field("is_favorite", .bool, .required, .sql(.default(false)))
+            .update()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("http_events")
+            .deleteField("is_favorite")
+            .update()
+    }
+}
