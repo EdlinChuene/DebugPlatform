@@ -32,21 +32,29 @@ func configure(_ app: Application) throws {
     app.migrations.add(CreateBreakpointRule())
     app.migrations.add(CreateChaosRule())
     app.migrations.add(AddHTTPEventFavorite())
+    app.migrations.add(AddHTTPBodyParams())
+    app.migrations.add(CreateDomainPolicy())
     app.migrations.add(CreateDeviceSession())
+    app.migrations.add(CreateHTTPEventParam())
+    app.migrations.add(CreateTrafficRule())
 
     // 运行迁移
     try app.autoMigrate().wait()
 
-    // 设置 DeviceRegistry 的数据库引用
+    // 设置 DeviceRegistry 的数据库引用并注册生命周期
     DeviceRegistry.shared.database = app.db
+    app.lifecycle.use(DeviceRegistry.shared)
 
     // 设置设备断开回调（延迟后触发）
     DeviceRegistry.shared.onDeviceDisconnected = { deviceId in
         RealtimeStreamHandler.shared.broadcastDeviceDisconnected(deviceId: deviceId)
     }
 
-    // 启动数据清理服务（默认3天过期）
-    DataCleanupService.shared.start(app: app)
+    // 注册数据清理服务（生命周期管理）
+    app.lifecycle.use(DataCleanupService.shared)
+
+    // 注册实时流处理器（生命周期管理，用于优雅关闭连接）
+    app.lifecycle.use(RealtimeStreamHandler.shared)
 
     // 配置静态文件服务（Web UI）
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
@@ -144,6 +152,12 @@ func routes(_ app: Application) throws {
 
     // 数据清理 API
     try api.register(collection: CleanupController())
+    
+    // 域名策略 API
+    try api.register(collection: DomainPolicyController())
+    
+    // 流量规则 API
+    try api.register(collection: TrafficRuleController())
 
     // Debug Bridge WebSocket 端点
     app.webSocket("debug-bridge", maxFrameSize: WebSocketMaxFrameSize(integerLiteral: 50 * 1024 * 1024)) { req, ws in

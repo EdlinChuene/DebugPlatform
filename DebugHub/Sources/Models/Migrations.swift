@@ -220,3 +220,81 @@ struct AddHTTPEventFavorite: AsyncMigration {
             .update()
     }
 }
+
+// MARK: - Add HTTP Body Params Migration
+
+struct AddHTTPBodyParams: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("http_events")
+            .field("body_params", .string)
+            .update()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("http_events")
+            .deleteField("body_params")
+            .update()
+    }
+}
+
+// MARK: - Create HTTP Event Param Migration
+
+struct CreateHTTPEventParam: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        // Create Table with composite index
+        try await database.schema("http_event_params")
+            .field("id", .string, .identifier(auto: false))
+            .field("event_id", .string, .required) // 关联 http_events.id
+            .field("param_key", .string, .required)
+            .field("param_value", .string, .required)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("http_event_params").delete()
+    }
+}
+
+// MARK: - Create Traffic Rule Migration
+
+struct CreateTrafficRule: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("traffic_rules")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string)
+            .field("name", .string, .required)
+            .field("match_type", .string, .required)
+            .field("match_value", .string, .required)
+            .field("action", .string, .required)
+            .field("color", .string)
+            .field("is_enabled", .bool, .required)
+            .field("priority", .int, .required)
+            .field("created_at", .datetime)
+            .field("updated_at", .datetime)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("traffic_rules").delete()
+    }
+}
+
+// MARK: - Create Domain Policy Migration
+
+struct CreateDomainPolicy: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("domain_policies")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string)
+            .field("domain", .string, .required)
+            .field("status", .string, .required)
+            .field("note", .string)
+            .field("created_at", .datetime)
+            .field("updated_at", .datetime)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("domain_policies").delete()
+    }
+}

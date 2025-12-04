@@ -241,6 +241,11 @@ struct HTTPEventController: RouteCollection {
 
         let queryItems = (try? decoder.decode([String: String].self, from: Data(event.queryItems.utf8))) ?? [:]
         let requestHeaders = (try? decoder.decode([String: String].self, from: Data(event.requestHeaders.utf8))) ?? [:]
+        
+        let bodyParams: [String: String]? = event.bodyParams.flatMap {
+            try? decoder.decode([String: String].self, from: Data($0.utf8))
+        }
+        
         let responseHeaders: [String: String]? = event.responseHeaders.flatMap {
             try? decoder.decode([String: String].self, from: Data($0.utf8))
         }
@@ -257,6 +262,7 @@ struct HTTPEventController: RouteCollection {
             queryItems: queryItems,
             requestHeaders: requestHeaders,
             requestBody: event.requestBody?.base64EncodedString(),
+            bodyParams: bodyParams,
             statusCode: event.statusCode,
             responseHeaders: responseHeaders,
             responseBody: event.responseBody?.base64EncodedString(),
@@ -464,6 +470,7 @@ struct HTTPEventDetailDTO: Content {
     let queryItems: [String: String]
     let requestHeaders: [String: String]
     let requestBody: String? // base64
+    let bodyParams: [String: String]?
     let statusCode: Int?
     let responseHeaders: [String: String]?
     let responseBody: String? // base64

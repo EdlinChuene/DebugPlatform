@@ -44,6 +44,9 @@ final class HTTPEventModel: Model, Content, @unchecked Sendable {
     @Field(key: "response_body")
     var responseBody: Data?
 
+    @Field(key: "body_params")
+    var bodyParams: String? // JSON flattened key-value pairs
+
     @Field(key: "start_time")
     var startTime: Date
 
@@ -84,6 +87,7 @@ final class HTTPEventModel: Model, Content, @unchecked Sendable {
         statusCode: Int?,
         responseHeaders: String?,
         responseBody: Data?,
+        bodyParams: String? = nil,
         startTime: Date,
         endTime: Date?,
         duration: Double?,
@@ -104,6 +108,7 @@ final class HTTPEventModel: Model, Content, @unchecked Sendable {
         self.statusCode = statusCode
         self.responseHeaders = responseHeaders
         self.responseBody = responseBody
+        self.bodyParams = bodyParams
         self.startTime = startTime
         self.endTime = endTime
         self.duration = duration
@@ -113,6 +118,159 @@ final class HTTPEventModel: Model, Content, @unchecked Sendable {
         self.traceId = traceId
         self.timingJSON = timingJSON
         self.isFavorite = isFavorite
+    }
+}
+
+// MARK: - HTTP Event Param Model
+
+final class HTTPEventParamModel: Model, Content, @unchecked Sendable {
+    static let schema = "http_event_params"
+
+    @ID(custom: "id", generatedBy: .user)
+    var id: String?
+
+    @Field(key: "event_id")
+    var eventId: String
+
+    @Field(key: "param_key")
+    var paramKey: String
+
+    @Field(key: "param_value")
+    var paramValue: String
+
+    // 可选：param_type (query, body_form, body_json, header)
+    // 这里先只存 key-value，如果需要更细粒度可以扩展
+
+    init() {}
+
+    init(id: String? = nil, eventId: String, paramKey: String, paramValue: String) {
+        self.id = id
+        self.eventId = eventId
+        self.paramKey = paramKey
+        self.paramValue = paramValue
+    }
+}
+
+// MARK: - Traffic Rule Model
+
+enum TrafficRuleMatchType: String, Codable {
+    case domain     // 域名匹配 (legacy)
+    case urlRegex   // URL 正则
+    case header     // Header 匹配
+}
+
+enum TrafficRuleAction: String, Codable {
+    case highlight  // 高亮 (原白名单)
+    case hide       // 隐藏 (原黑名单)
+    case mark       // 染色 (颜色标记)
+}
+
+final class TrafficRuleModel: Model, Content, @unchecked Sendable {
+    static let schema = "traffic_rules"
+
+    @ID(custom: "id", generatedBy: .user)
+    var id: String?
+
+    @Field(key: "device_id")
+    var deviceId: String?
+
+    @Field(key: "name")
+    var name: String
+
+    @Enum(key: "match_type")
+    var matchType: TrafficRuleMatchType
+
+    @Field(key: "match_value")
+    var matchValue: String // domain string, regex string, or "HeaderName:HeaderValue"
+
+    @Enum(key: "action")
+    var action: TrafficRuleAction
+    
+    @Field(key: "color")
+    var color: String? // hex color for highlight/mark
+
+    @Field(key: "is_enabled")
+    var isEnabled: Bool
+    
+    @Field(key: "priority")
+    var priority: Int
+
+    @Timestamp(key: "created_at", on: .create)
+    var createdAt: Date?
+
+    @Timestamp(key: "updated_at", on: .update)
+    var updatedAt: Date?
+
+    init() {}
+
+    init(
+        id: String? = nil,
+        deviceId: String? = nil,
+        name: String,
+        matchType: TrafficRuleMatchType,
+        matchValue: String,
+        action: TrafficRuleAction,
+        color: String? = nil,
+        isEnabled: Bool = true,
+        priority: Int = 0
+    ) {
+        self.id = id
+        self.deviceId = deviceId
+        self.name = name
+        self.matchType = matchType
+        self.matchValue = matchValue
+        self.action = action
+        self.color = color
+        self.isEnabled = isEnabled
+        self.priority = priority
+    }
+}
+
+// MARK: - Domain Policy Model
+
+enum DomainPolicyStatus: String, Codable {
+    case whitelist
+    case blacklist
+}
+
+final class DomainPolicyModel: Model, Content, @unchecked Sendable {
+    static let schema = "domain_policies"
+
+    @ID(custom: "id", generatedBy: .user)
+    var id: String?
+
+    @Field(key: "device_id")
+    var deviceId: String? // Optional, nil means global
+
+    @Field(key: "domain")
+    var domain: String
+
+    @Enum(key: "status")
+    var status: DomainPolicyStatus
+
+    @Field(key: "note")
+    var note: String?
+
+    @Timestamp(key: "created_at", on: .create)
+    var createdAt: Date?
+
+    @Timestamp(key: "updated_at", on: .update)
+    var updatedAt: Date?
+
+    init() {}
+
+    init(
+        id: String? = nil,
+        deviceId: String? = nil,
+        domain: String,
+        status: DomainPolicyStatus,
+        note: String? = nil
+    ) {
+        self.id = id
+        self.deviceId = deviceId
+        self.domain = domain
+        self.status = status
+        self.note = note
     }
 }
 

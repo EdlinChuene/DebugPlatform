@@ -109,13 +109,16 @@ public final class InstrumentedWebSocketClient: NSObject, WebSocketClient {
 
         webSocketTask?.resume()
 
-        // 记录会话创建事件
+        // 记录会话创建事件（立即记录，不等待连接成功）
         session = WSEvent.Session(
             id: sessionId,
             url: url.absoluteString,
             requestHeaders: headers,
             subprotocols: subprotocols
         )
+        // 立即发送 sessionCreated 事件，让 WebUI 可以显示会话
+        // 即使连接最终失败，也会有一个会话记录
+        recordSessionCreated()
 
         receiveNextMessage()
     }
@@ -288,7 +291,7 @@ extension InstrumentedWebSocketClient: URLSessionWebSocketDelegate {
         webSocketTask _: URLSessionWebSocketTask,
         didOpenWithProtocol _: String?
     ) {
-        recordSessionCreated()
+        // sessionCreated 已在 connect() 中发送，这里只触发回调
         onConnected?()
     }
 

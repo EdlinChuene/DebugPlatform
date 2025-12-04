@@ -28,7 +28,7 @@ public final class DebugProbeSettings {
 
     private enum Defaults {
         static let host = "127.0.0.1"
-        static let port = 8080
+        static let port = 8081
         static let token = "debug-token-2025"
     }
 
@@ -167,7 +167,7 @@ public final class DebugProbeSettings {
     // MARK: - Quick Configuration
 
     /// 快速配置（用于扫码等场景）
-    public func configure(host: String, port: Int = 8080, token: String? = nil) {
+    public func configure(host: String, port: Int = 8081, token: String? = nil) {
         userDefaults.set(host, forKey: Keys.hubHost)
         userDefaults.set(port, forKey: Keys.hubPort)
         if let token {

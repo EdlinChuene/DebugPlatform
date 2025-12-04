@@ -15,6 +15,7 @@ struct WSEventController: RouteCollection {
         ws.get("ws-sessions", use: listWSSessions)
         ws.get("ws-sessions", ":sessionId", use: getWSSession)
         ws.get("ws-sessions", ":sessionId", "frames", use: listWSFrames)
+        ws.get("ws-sessions", ":sessionId", "frames", ":frameId", use: getWSFramePayload)
     }
 
     // MARK: - 获取 WebSocket 会话列表
@@ -179,6 +180,44 @@ struct WSEventController: RouteCollection {
             items: items
         )
     }
+
+    // MARK: - 获取单个 WebSocket 帧详情（含完整 Payload）
+
+    func getWSFramePayload(req: Request) async throws -> WSFrameDetailDTO {
+        guard
+            let deviceId = req.parameters.get("deviceId"),
+            let sessionId = req.parameters.get("sessionId"),
+            let frameId = req.parameters.get("frameId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId, sessionId or frameId")
+        }
+
+        guard
+            let frame = try await WSFrameModel.query(on: req.db)
+                .filter(\.$id == frameId)
+                .filter(\.$sessionId == sessionId)
+                .filter(\.$deviceId == deviceId)
+                .first()
+        else {
+            throw Abort(.notFound, reason: "WebSocket frame not found")
+        }
+
+        // 尝试将 payload 解析为 UTF-8 文本
+        let payloadText = String(data: frame.payload, encoding: .utf8)
+        // Base64 编码的完整 payload
+        let payloadBase64 = frame.payload.base64EncodedString()
+
+        return WSFrameDetailDTO(
+            id: frame.id!,
+            sessionId: frame.sessionId,
+            direction: frame.direction,
+            opcode: frame.opcode,
+            payloadText: payloadText,
+            payloadBase64: payloadBase64,
+            payloadSize: frame.payload.count,
+            timestamp: frame.timestamp,
+            isMocked: frame.isMocked
+        )
+    }
 }
 
 // MARK: - DTOs
@@ -224,6 +263,18 @@ struct WSFrameItemDTO: Content {
     let direction: String
     let opcode: String
     let payloadPreview: String?
+    let payloadSize: Int
+    let timestamp: Date
+    let isMocked: Bool
+}
+
+struct WSFrameDetailDTO: Content {
+    let id: String
+    let sessionId: String
+    let direction: String
+    let opcode: String
+    let payloadText: String?  // UTF-8 解码的文本（如果可解码）
+    let payloadBase64: String // Base64 编码的完整 payload
     let payloadSize: Int
     let timestamp: Date
     let isMocked: Bool

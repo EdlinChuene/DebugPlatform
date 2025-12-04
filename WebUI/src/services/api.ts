@@ -7,6 +7,7 @@ import type {
   WSSessionListResponse,
   WSSessionDetail,
   WSFrameListResponse,
+  WSFrameDetail,
   MockRule,
 } from '@/types'
 
@@ -27,6 +28,21 @@ async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   }
 
   return response.json()
+}
+
+export const api = {
+  get: <T>(url: string) => fetchJSON<T>(url),
+  post: <T>(url: string, body?: any) =>
+    fetchJSON<T>(url, {
+      method: 'POST',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  put: <T>(url: string, body?: any) =>
+    fetchJSON<T>(url, {
+      method: 'PUT',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  delete: <T>(url: string) => fetchJSON<T>(url, { method: 'DELETE' }),
 }
 
 // ============================================================================
@@ -185,6 +201,10 @@ export async function runCleanupNow(): Promise<void> {
   await fetch(`${API_BASE}/cleanup/run`, { method: 'POST' })
 }
 
+export async function truncateAllData(): Promise<void> {
+  await fetch(`${API_BASE}/cleanup/truncate`, { method: 'POST' })
+}
+
 // ============================================================================
 // 日志事件 API
 // ============================================================================
@@ -281,6 +301,16 @@ export async function getWSFrames(
   const query = params.toString()
   return fetchJSON(
     `${API_BASE}/devices/${deviceId}/ws-sessions/${sessionId}/frames${query ? `?${query}` : ''}`
+  )
+}
+
+export async function getWSFrameDetail(
+  deviceId: string,
+  sessionId: string,
+  frameId: string
+): Promise<WSFrameDetail> {
+  return fetchJSON(
+    `${API_BASE}/devices/${deviceId}/ws-sessions/${sessionId}/frames/${frameId}`
   )
 }
 

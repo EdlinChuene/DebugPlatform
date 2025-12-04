@@ -41,6 +41,7 @@ interface WSStore {
   setAutoScroll: (enabled: boolean) => void
   addRealtimeSession: (session: WSSessionSummary) => void
   updateSessionStatus: (sessionId: string, isOpen: boolean, closeCode?: number, closeReason?: string) => void
+  updateSessionUrl: (sessionId: string, url: string) => void
   addRealtimeFrame: (frame: WSFrame) => void
 }
 
@@ -195,6 +196,14 @@ export const useWSStore = create<WSStore>((set, get) => ({
         state.selectedSession?.id === sessionId
           ? { ...state.selectedSession, closeCode: closeCode ?? null, closeReason: closeReason ?? null }
           : state.selectedSession,
+    }))
+  },
+
+  updateSessionUrl: (sessionId: string, url: string) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, url } : s
+      ),
     }))
   },
 

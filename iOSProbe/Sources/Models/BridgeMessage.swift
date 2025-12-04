@@ -36,6 +36,18 @@ public enum BridgeMessage: Codable {
 
     /// 请求导出数据
     case requestExport(timeFrom: Date, timeTo: Date, types: [String])
+    
+    /// 重放请求
+    case replayRequest(ReplayRequestPayload)
+    
+    /// 更新断点规则
+    case updateBreakpointRules([BreakpointRule])
+    
+    /// 断点恢复
+    case breakpointResume(BreakpointResumePayload)
+    
+    /// 更新故障注入规则
+    case updateChaosRules([ChaosRule])
 
     /// 错误响应
     case error(code: Int, message: String)
@@ -56,6 +68,10 @@ public enum BridgeMessage: Codable {
         case toggleCapture
         case updateMockRules
         case requestExport
+        case replayRequest
+        case updateBreakpointRules
+        case breakpointResume
+        case updateChaosRules
         case error
     }
 
@@ -87,6 +103,18 @@ public enum BridgeMessage: Codable {
         case .requestExport:
             let payload = try container.decode(ExportPayload.self, forKey: .payload)
             self = .requestExport(timeFrom: payload.timeFrom, timeTo: payload.timeTo, types: payload.types)
+        case .replayRequest:
+            let payload = try container.decode(ReplayRequestPayload.self, forKey: .payload)
+            self = .replayRequest(payload)
+        case .updateBreakpointRules:
+            let rules = try container.decode([BreakpointRule].self, forKey: .payload)
+            self = .updateBreakpointRules(rules)
+        case .breakpointResume:
+            let payload = try container.decode(BreakpointResumePayload.self, forKey: .payload)
+            self = .breakpointResume(payload)
+        case .updateChaosRules:
+            let rules = try container.decode([ChaosRule].self, forKey: .payload)
+            self = .updateChaosRules(rules)
         case .error:
             let payload = try container.decode(ErrorPayload.self, forKey: .payload)
             self = .error(code: payload.code, message: payload.message)
@@ -120,6 +148,18 @@ public enum BridgeMessage: Codable {
         case let .requestExport(timeFrom, timeTo, types):
             try container.encode(MessageType.requestExport, forKey: .type)
             try container.encode(ExportPayload(timeFrom: timeFrom, timeTo: timeTo, types: types), forKey: .payload)
+        case let .replayRequest(payload):
+            try container.encode(MessageType.replayRequest, forKey: .type)
+            try container.encode(payload, forKey: .payload)
+        case let .updateBreakpointRules(rules):
+            try container.encode(MessageType.updateBreakpointRules, forKey: .type)
+            try container.encode(rules, forKey: .payload)
+        case let .breakpointResume(payload):
+            try container.encode(MessageType.breakpointResume, forKey: .type)
+            try container.encode(payload, forKey: .payload)
+        case let .updateChaosRules(rules):
+            try container.encode(MessageType.updateChaosRules, forKey: .type)
+            try container.encode(rules, forKey: .payload)
         case let .error(code, message):
             try container.encode(MessageType.error, forKey: .type)
             try container.encode(ErrorPayload(code: code, message: message), forKey: .payload)
@@ -152,4 +192,49 @@ private struct ExportPayload: Codable {
 private struct ErrorPayload: Codable {
     let code: Int
     let message: String
+}
+
+/// 重放请求 Payload
+public struct ReplayRequestPayload: Codable {
+    public let id: String
+    public let method: String
+    public let url: String
+    public let headers: [String: String]
+    public let body: String?  // base64 encoded
+    
+    public init(id: String, method: String, url: String, headers: [String: String], body: String?) {
+        self.id = id
+        self.method = method
+        self.url = url
+        self.headers = headers
+        self.body = body
+    }
+    
+    /// 解码 body 为 Data
+    public var bodyData: Data? {
+        guard let body = body else { return nil }
+        return Data(base64Encoded: body)
+    }
+}
+
+/// 断点恢复 Payload
+public struct BreakpointResumePayload: Codable {
+    public let breakpointId: String
+    public let requestId: String
+    public let action: String  // "continue", "abort", "modify"
+    public let modifiedRequest: ModifiedRequest?
+    
+    public struct ModifiedRequest: Codable {
+        public let method: String?
+        public let url: String?
+        public let headers: [String: String]?
+        public let body: Data?
+    }
+    
+    public init(breakpointId: String, requestId: String, action: String, modifiedRequest: ModifiedRequest? = nil) {
+        self.breakpointId = breakpointId
+        self.requestId = requestId
+        self.action = action
+        self.modifiedRequest = modifiedRequest
+    }
 }

@@ -40,13 +40,31 @@ struct StreamSubscriber {
 }
 
 /// 实时流 WebSocket 处理器
-final class RealtimeStreamHandler: @unchecked Sendable {
+final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
     static let shared = RealtimeStreamHandler()
 
     private var subscribers: [ObjectIdentifier: StreamSubscriber] = [:]
     private let lock = NSLock()
 
     private init() {}
+
+    // MARK: - LifecycleHandler
+
+    func shutdown(_: Application) {
+        lock.lock()
+        let currentSubscribers = Array(subscribers.values)
+        subscribers.removeAll()
+        lock.unlock()
+
+        // 非阻塞关闭所有 WebSocket 连接
+        for subscriber in currentSubscribers {
+            subscriber.webSocket.close(code: .goingAway, promise: nil)
+        }
+        
+        print("[RealtimeStream] Shutdown complete")
+    }
+
+    // MARK: - Connection Handling
 
     func handleConnection(req: Request, ws: WebSocket) {
         // 解析查询参数

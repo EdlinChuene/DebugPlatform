@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { HTTPEventSummary, HTTPEventDetail } from '@/types'
 import * as api from '@/services/api'
+import { useRuleStore } from './ruleStore'
 
 // 会话分隔符类型
 export interface SessionDivider {
@@ -41,6 +42,8 @@ interface HTTPState {
     urlContains: string
     mockedOnly: boolean
     favoritesOnly: boolean
+    domain: string
+    showBlacklisted: boolean
   }
 
   // Actions
@@ -69,25 +72,24 @@ interface HTTPState {
   batchFavorite: (deviceId: string, isFavorite: boolean) => Promise<void>
 }
 
-// 检查是否有任何筛选条件激活
-function hasActiveFilters(filters: HTTPState['filters']): boolean {
-  return !!(filters.method || filters.urlContains || filters.mockedOnly || filters.favoritesOnly)
-}
-
-// 过滤逻辑
+// 过滤逻辑 - 现在只处理 HTTP 事件，不再包含会话分隔符
 function filterItems(items: ListItem[], filters: HTTPState['filters']): ListItem[] {
-  const filtersActive = hasActiveFilters(filters)
-
   return items.filter((item) => {
-    // 当有筛选条件时，过滤掉会话分隔符
+    // 跳过会话分隔符（如果有的话，保持向后兼容）
     if (isSessionDivider(item)) {
-      return !filtersActive
+      return false // 不再在 HTTP 列表中显示会话分隔符
     }
 
     const event = item as HTTPEventSummary
 
     // 方法过滤
     if (filters.method && event.method !== filters.method) return false
+
+    // 状态码范围过滤
+    if (filters.statusRange && event.statusCode) {
+      const [min, max] = filters.statusRange.split('-').map(Number)
+      if (event.statusCode < min || event.statusCode > max) return false
+    }
 
     // URL 搜索
     if (filters.urlContains && !event.url.toLowerCase().includes(filters.urlContains.toLowerCase())) {
@@ -99,6 +101,26 @@ function filterItems(items: ListItem[], filters: HTTPState['filters']): ListItem
 
     // 仅收藏
     if (filters.favoritesOnly && !event.isFavorite) return false
+
+    // 域名过滤
+    if (filters.domain) {
+      try {
+        const url = new URL(event.url)
+        if (url.hostname !== filters.domain) return false
+      } catch {
+        return false
+      }
+    }
+
+    // 规则引擎过滤 (黑名单/隐藏)
+    // 仅当 showBlacklisted 为 false 时执行过滤
+    if (!filters.showBlacklisted) {
+      // 如果匹配到规则且规则动作为 'hide'，则过滤掉
+      const rule = useRuleStore.getState().matchRule(event)
+      if (rule && rule.action === 'hide') {
+        return false
+      }
+    }
 
     return true
   })
@@ -125,6 +147,8 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
     urlContains: '',
     mockedOnly: false,
     favoritesOnly: false,
+    domain: '',
+    showBlacklisted: false,
   },
 
   fetchEvents: async (deviceId: string) => {
@@ -164,48 +188,9 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
     }
   },
 
-  fetchSessionHistory: async (deviceId: string) => {
-    try {
-      const sessions = await api.getDeviceSessions(deviceId, 20)
-
-      // 将会话记录转换为分隔符并按时间插入到列表中
-      const { events } = get()
-      const dividers: SessionDivider[] = []
-
-      for (const session of sessions) {
-        // 添加连接分隔符
-        dividers.push({
-          type: 'session-divider',
-          sessionId: session.sessionId,
-          timestamp: session.connectedAt,
-          isConnected: true,
-        })
-
-        // 如果有断开时间，添加断开分隔符
-        if (session.disconnectedAt) {
-          dividers.push({
-            type: 'session-divider',
-            sessionId: session.sessionId,
-            timestamp: session.disconnectedAt,
-            isConnected: false,
-          })
-        }
-      }
-
-      // 合并事件和分隔符，按时间排序（最新在前）
-      const allItems: ListItem[] = [...events, ...dividers]
-      allItems.sort((a, b) => {
-        const timeA = isSessionDivider(a) ? a.timestamp : a.startTime
-        const timeB = isSessionDivider(b) ? b.timestamp : b.startTime
-        return new Date(timeB).getTime() - new Date(timeA).getTime()
-      })
-
-      const { filters } = get()
-      const filteredItems = filterItems(allItems, filters)
-      set({ listItems: allItems, filteredItems })
-    } catch (error) {
-      console.error('Failed to fetch session history:', error)
-    }
+  fetchSessionHistory: async (_deviceId: string) => {
+    // 会话历史现在由 SessionActivityStore 管理，不再在 HTTP 列表中显示
+    // 保留此函数以保持 API 兼容性
   },
 
   selectEvent: async (deviceId: string, eventId: string) => {
@@ -245,22 +230,9 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
     })
   },
 
-  addSessionDivider: (sessionId: string, isConnected: boolean) => {
-    set((state) => {
-      const divider: SessionDivider = {
-        type: 'session-divider',
-        sessionId,
-        timestamp: new Date().toISOString(),
-        isConnected,
-      }
-      const listItems = [divider as ListItem, ...state.listItems]
-      const filteredItems = filterItems(listItems, state.filters)
-      return {
-        listItems,
-        filteredItems,
-        currentSessionId: isConnected ? sessionId : state.currentSessionId,
-      }
-    })
+  addSessionDivider: (_sessionId: string, _isConnected: boolean) => {
+    // 会话分隔符现在由 SessionActivityStore 管理
+    // 保留此函数以保持 API 兼容性
   },
 
   setFilter: (key: string, value: string | boolean) => {

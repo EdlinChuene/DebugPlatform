@@ -71,6 +71,7 @@ export interface HTTPEventDetail {
   queryItems: Record<string, string>
   requestHeaders: Record<string, string>
   requestBody: string | null // base64
+  bodyParams: Record<string, string> | null
   statusCode: number | null
   responseHeaders: Record<string, string> | null
   responseBody: string | null // base64
@@ -148,6 +149,18 @@ export interface WSFrame {
   direction: 'send' | 'receive'
   opcode: string
   payloadPreview: string | null
+  payloadSize: number
+  timestamp: string
+  isMocked: boolean
+}
+
+export interface WSFrameDetail {
+  id: string
+  sessionId: string
+  direction: 'send' | 'receive'
+  opcode: string
+  payloadText: string | null    // UTF-8 解码的文本（如果可解码）
+  payloadBase64: string         // Base64 编码的完整 payload
   payloadSize: number
   timestamp: string
   isMocked: boolean
@@ -281,5 +294,36 @@ export interface ChaosRule {
   chaos: ChaosType
   enabled: boolean
   priority: number
+}
+
+// 域名策略
+export type DomainPolicyStatus = 'whitelist' | 'blacklist'
+
+export interface DomainPolicy {
+  id: string
+  deviceId: string | null
+  domain: string
+  status: DomainPolicyStatus
+  note: string | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+// 流量规则
+export type TrafficRuleMatchType = 'domain' | 'urlRegex' | 'header'
+export type TrafficRuleAction = 'highlight' | 'hide' | 'mark'
+
+export interface TrafficRule {
+  id: string
+  deviceId: string | null
+  name: string
+  matchType: TrafficRuleMatchType
+  matchValue: string
+  action: TrafficRuleAction
+  color?: string
+  isEnabled: boolean
+  priority: number
+  createdAt: string | null
+  updatedAt: string | null
 }
 

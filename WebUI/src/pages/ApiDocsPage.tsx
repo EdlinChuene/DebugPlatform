@@ -124,18 +124,18 @@ export function ApiDocsPage() {
         {/* Header */}
         <header className="text-center mb-16">
           <div className="text-6xl mb-4">🔍</div>
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold mb-2 text-text-primary">
             Debug Hub API
           </h1>
           <p className="text-text-secondary text-lg mb-4">网络和日志一体化调试平台</p>
-          <span className="inline-block px-4 py-1 bg-bg-light rounded-full text-sm text-primary">
+          <span className="inline-block px-4 py-1 bg-bg-light rounded text-sm text-primary border border-border">
             v1.0.0
           </span>
           <nav className="flex justify-center gap-4 mt-6">
-            <Link to="/" className="text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded-lg hover:bg-bg-light">
+            <Link to="/" className="text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded hover:bg-bg-light">
               📱 设备列表
             </Link>
-            <Link to="/health" className="text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded-lg hover:bg-bg-light">
+            <Link to="/health" className="text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded hover:bg-bg-light">
               💚 健康检查
             </Link>
           </nav>
@@ -183,7 +183,7 @@ export function ApiDocsPage() {
               <pre className="bg-bg-darkest border border-border rounded-lg p-4 font-mono text-sm overflow-x-auto">
                 <code>
                   <span className="text-info">curl</span>{' '}
-                  <span className="text-green-400">http://localhost:8080/api/devices</span>
+                  <span className="text-green-400">http://localhost:8081/api/devices</span>
                 </code>
               </pre>
             </div>
@@ -192,7 +192,7 @@ export function ApiDocsPage() {
               <pre className="bg-bg-darkest border border-border rounded-lg p-4 font-mono text-sm overflow-x-auto">
                 <code>
                   <span className="text-info">websocat</span>{' '}
-                  <span className="text-green-400">ws://localhost:8080/ws/live</span>
+                  <span className="text-green-400">ws://localhost:8081/ws/live</span>
                 </code>
               </pre>
             </div>

@@ -2,14 +2,18 @@
 
 一套专为内部 iOS App 设计的调试系统，类似于内部版的 Proxy Tool + Log Viewer。
 
+> **最新版本**: v1.2.0 | [更新日志](docs/CHANGELOG.md) | [开发路线图](docs/ROADMAP.md)
+>
+> **最后更新**: 2025-12-04
+
 ## ✨ 功能特性
 
 ### 核心调试能力
 - 🌐 **HTTP/HTTPS 捕获** - Method Swizzling 自动拦截 + URLSessionTaskMetrics 性能时间线
-- 🔌 **WebSocket 捕获** - 连接级自动监控 + 消息级 Hook 支持
+- 🔌 **WebSocket 捕获** - 连接级自动监控 + 消息帧完整内容查看（Text/JSON/Hex/Base64）
 - 📝 **日志捕获** - CocoaLumberjack + os_log 包装
 - 🎭 **Mock 规则引擎** - HTTP/WS 请求拦截与响应模拟
-- 🔄 **请求重放** - 一键重放历史请求
+- 🔄 **请求重放** - 一键重放历史请求（iOS SDK 完整实现）
 - ⏸️ **断点调试** - 请求/响应拦截与修改
 - 💥 **故障注入** - 延迟、超时、错误码注入
 
@@ -26,7 +30,7 @@
 - 📁 **HAR 导出** - HTTP Archive 1.2 格式
 
 ### 用户体验
-- 🌙 **深色/浅色主题** - 支持跟随系统
+- 🌙 **深色/浅色主题** - 支持跟随系统，简洁调试风格
 - ⌨️ **键盘快捷键** - 全局快捷键支持
 - ⭐ **请求收藏** - 收藏重要请求，防止被清理
 - 📦 **批量操作** - 多选 + 批量删除/收藏/导出
@@ -357,11 +361,11 @@ DATABASE_MODE=sqlite swift run
 ```
 
 服务启动后：
-- Web UI: http://localhost:8080
-- API 文档: http://localhost:8080/api-docs
-- 健康检查: http://localhost:8080/health
-- Debug Bridge: ws://localhost:8080/debug-bridge
-- REST API: http://localhost:8080/api/
+- Web UI: http://localhost:8081
+- API 文档: http://localhost:8081/api-docs
+- 健康检查: http://localhost:8081/health
+- Debug Bridge: ws://localhost:8081/debug-bridge
+- REST API: http://localhost:8081/api/
 
 ### 2. 构建 Web UI（可选，已预构建）
 
@@ -494,8 +498,8 @@ DebugProbe.shared.info("Operation completed", tags: ["perf"])
 import DebugProbe
 
 // 修改 DebugHub 地址（会自动重连）
-DebugProbeSettings.shared.hubHost = "192.168.1.200"
-DebugProbeSettings.shared.hubPort = 8080
+DebugProbeSettings.shared.hubHost = "127.0.0.1"
+DebugProbeSettings.shared.hubPort = 8081
 DebugProbeSettings.shared.token = "new-token"
 
 // 启用/禁用 DebugProbe
@@ -510,9 +514,9 @@ DebugProbeSettings.shared.verboseLogging = true
 Info.plist 配置（可选）：
 ```xml
 <key>DEBUGHUB_HOST</key>
-<string>192.168.1.100</string>
+<string>127.0.0.1</string>
 <key>DEBUGHUB_PORT</key>
-<integer>8080</integer>
+<integer>8081/integer>
 <key>DEBUGHUB_TOKEN</key>
 <string>your-token</string>
 ```
@@ -763,7 +767,7 @@ services:
       POSTGRES_DB: debug_hub
       DEBUG_HUB_TOKEN: your-secret-token
     ports:
-      - "8080:8080"
+      - "8081:8081"
     depends_on:
       - postgres
 

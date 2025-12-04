@@ -120,14 +120,24 @@ export function parseLogEvent(payload: string): LogEvent {
 
 export function parseWSEvent(payload: string): { type: string; data: unknown } {
   const data = JSON.parse(payload)
+
+  // 辅助函数：提取关联值（Swift Codable 默认将未命名的关联值编码为 _0）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extractValue = (obj: any) => {
+    if (obj && typeof obj === 'object' && '_0' in obj) {
+      return obj._0
+    }
+    return obj
+  }
+
   if (data.kind.sessionCreated) {
-    return { type: 'sessionCreated', data: data.kind.sessionCreated }
+    return { type: 'sessionCreated', data: extractValue(data.kind.sessionCreated) }
   }
   if (data.kind.sessionClosed) {
-    return { type: 'sessionClosed', data: data.kind.sessionClosed }
+    return { type: 'sessionClosed', data: extractValue(data.kind.sessionClosed) }
   }
   if (data.kind.frame) {
-    return { type: 'frame', data: data.kind.frame }
+    return { type: 'frame', data: extractValue(data.kind.frame) }
   }
   return { type: 'unknown', data }
 }

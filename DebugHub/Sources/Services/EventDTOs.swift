@@ -83,9 +83,15 @@ struct WSEventDTO: Content {
         let opcode: String
         let payload: Data
         let payloadPreview: String?
+        let payloadSize: Int?  // Optional - iOS SDK doesn't send this
         let timestamp: Date
         let isMocked: Bool
         let mockRuleId: String?
+        
+        /// Computed payload size for when payloadSize is not provided
+        var effectivePayloadSize: Int {
+            payloadSize ?? payload.count
+        }
     }
 
     enum Kind: Codable {

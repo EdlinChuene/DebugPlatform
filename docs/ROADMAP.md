@@ -2,6 +2,255 @@
 
 本文档规划了 Debug Platform 的功能路线，记录已完成的功能和后续优化计划。
 
+> **当前版本**: v1.2.0 | [更新日志](CHANGELOG.md)
+>
+> **最后更新**: 2025-12-04
+
+---
+
+## 🔴 待修复问题 (Code Analysis - 2025-12-04)
+
+本节记录代码审查发现的问题，按优先级排序。
+
+### P0: 协议层两端不匹配
+
+#### 断点恢复消息格式不一致
+
+**iOS SDK 端** (`iOSProbe/Sources/Models/BridgeMessage.swift`):
+```swift
+struct BreakpointResumePayload: Codable {
+    let breakpointId: String
+    let requestId: String
+    let action: String  // 简单字符串: "continue", "abort", "modify"
+    let modifiedRequest: ModifiedRequest?
+}
+```
+
+**DebugHub 端** (`DebugHub/Sources/Services/DeviceRegistry.swift`):
+```swift
+struct BreakpointResumeDTO: Content {
+    let requestId: String
+    let action: BreakpointActionDTO  // 嵌套对象
+}
+
+struct BreakpointActionDTO: Content {
+    let type: String // "resume", "modify", "abort", "mockResponse"
+    let modification: BreakpointModificationDTO?
+    let mockResponse: BreakpointResponseSnapshotDTO?
+}
+```
+
+**问题**:
+- iOS 端 `action` 是简单字符串，DebugHub 期望嵌套的 `BreakpointActionDTO` 对象
+- iOS 端缺少 `mockResponse` 动作类型
+- 字段名不一致：iOS 用 `modifiedRequest`，Hub 用 `modification`
+- **影响**: 断点恢复消息发送后 iOS 端解码会失败，导致断点功能完全不可用
+
+**修复方案**: 统一两端的消息格式，建议采用 DebugHub 的嵌套结构
+
+---
+
+### P0: 未实现的关键功能
+
+#### 1. 断点规则同步未实现
+
+**文件**: `iOSProbe/Sources/Core/DebugBridgeClient.swift:224`
+
+```swift
+case let .updateBreakpointRules(rules):
+    DebugLog.info(.bridge, "Received \(rules.count) breakpoint rules")
+    // TODO: 实现断点规则更新处理  ← 仅打印日志，未调用 BreakpointEngine
+```
+
+**应修改为**:
+```swift
+case let .updateBreakpointRules(rules):
+    DebugLog.info(.bridge, "Received \(rules.count) breakpoint rules")
+    BreakpointEngine.shared.updateRules(rules)  // 需要添加这行
+```
+
+#### 2. Chaos 规则同步未实现
+
+**文件**: `iOSProbe/Sources/Core/DebugBridgeClient.swift:228`
+
+```swift
+case let .updateChaosRules(rules):
+    DebugLog.info(.bridge, "Received \(rules.count) chaos rules")
+    // TODO: 实现故障注入规则更新处理  ← 仅打印日志，未调用 ChaosEngine
+```
+
+**应修改为**:
+```swift
+case let .updateChaosRules(rules):
+    DebugLog.info(.bridge, "Received \(rules.count) chaos rules")
+    ChaosEngine.shared.updateRules(rules)  // 需要添加这行
+```
+
+#### 3. 断点恢复功能未实现
+
+**文件**: `iOSProbe/Sources/Core/DebugBridgeClient.swift:236`
+
+```swift
+case let .breakpointResume(payload):
+    DebugLog.info(.bridge, "Received breakpoint resume for \(payload.requestId)")
+    // TODO: 实现断点恢复功能  ← 仅打印日志，未调用 BreakpointEngine
+```
+
+**应修改为**:
+```swift
+case let .breakpointResume(payload):
+    DebugLog.info(.bridge, "Received breakpoint resume for \(payload.requestId)")
+    let resume = BreakpointResume(requestId: payload.requestId, action: payload.action)
+    BreakpointEngine.shared.resumeBreakpoint(resume)  // 需要添加这行
+```
+
+#### 4. 网络层未集成断点和 Chaos
+
+**文件**: `iOSProbe/Sources/Network/NetworkInstrumentation.swift`
+
+`CaptureURLProtocol.startLoading()` 方法中：
+- ❌ 未调用 `BreakpointEngine.shared.checkRequestBreakpoint()`
+- ❌ 未调用 `ChaosEngine.shared.evaluate()`
+
+**影响**: 即使规则同步成功，断点和故障注入也不会生效
+
+---
+
+### P1: 设备重连时规则不同步
+
+**文件**: `DebugHub/Sources/WebSocket/DebugBridgeHandler.swift:178`
+
+```swift
+private func sendCurrentMockRules(to deviceId: String, session: DeviceSession) async {
+    // TODO: 从数据库加载该设备的 Mock 规则并发送
+}
+```
+
+**影响**: 
+- Mock 规则：设备断线重连后不会重新获取
+- 断点规则：完全未同步
+- Chaos 规则：完全未同步
+
+**修复方案**:
+```swift
+private func sendCurrentRules(to deviceId: String, session: DeviceSession) async {
+    // 1. Mock 规则
+    let mockRules = try? await MockRuleModel.query(on: db)
+        .filter(\.$deviceId == deviceId)
+        .filter(\.$enabled == true)
+        .all()
+    if let rules = mockRules {
+        DeviceRegistry.shared.sendMessage(to: deviceId, message: .updateMockRules(rules))
+    }
+    
+    // 2. 断点规则
+    let bpRules = try? await BreakpointRuleModel.query(on: db)
+        .filter(\.$deviceId == deviceId)
+        .filter(\.$enabled == true)
+        .all()
+    if let rules = bpRules {
+        DeviceRegistry.shared.sendMessage(to: deviceId, message: .updateBreakpointRules(rules))
+    }
+    
+    // 3. Chaos 规则
+    let chaosRules = try? await ChaosRuleModel.query(on: db)
+        .filter(\.$deviceId == deviceId)
+        .filter(\.$enabled == true)
+        .all()
+    if let rules = chaosRules {
+        DeviceRegistry.shared.sendMessage(to: deviceId, message: .updateChaosRules(rules))
+    }
+}
+```
+
+---
+
+### P1: WebUI 缺少规则管理界面
+
+**文件**: `WebUI/src/pages/DeviceDetailPage.tsx`
+
+当前只有 4 个 Tab：`http`, `websocket`, `logs`, `mock`
+
+**缺失**:
+1. **断点规则管理 Tab**
+   - API 已实现: `GET/POST/PUT/DELETE /devices/:deviceId/breakpoints`
+   - 需要创建 `BreakpointRuleList.tsx` 和 `BreakpointRuleEditor.tsx`
+   
+2. **Chaos 规则管理 Tab**
+   - API 已实现: `GET/POST/PUT/DELETE /devices/:deviceId/chaos`
+   - 需要创建 `ChaosRuleList.tsx` 和 `ChaosRuleEditor.tsx`
+
+3. **等待中断点面板**
+   - API 已实现: `GET /devices/:deviceId/breakpoints/pending`
+   - 需要显示当前命中的断点列表，允许用户恢复/修改/中止
+
+---
+
+### P2: 断点命中事件未处理
+
+**文件**: `DebugHub/Sources/WebSocket/DebugBridgeHandler.swift`
+
+`handleMessage()` 方法中，iOS SDK 发送的 `breakpointHit` 消息类型未被处理。
+
+```swift
+private func handleMessage(data: Data, ws: WebSocket, req: Request, deviceIdHolder: DeviceIdHolder) {
+    // ... 
+    switch message {
+    case let .register(deviceInfo, token):
+        // ...
+    case .heartbeat:
+        // ...
+    case let .events(events):
+        // ...
+    default:
+        print("[DebugBridge] Received unknown message type")
+        // ❌ breakpointHit 消息会进入这里被忽略
+    }
+}
+```
+
+**修复方案**:
+```swift
+case let .breakpointHit(hit):
+    BreakpointManager.shared.addPendingHit(hit)
+    // 通知 WebUI 实时流
+    RealtimeStreamHandler.shared.broadcastBreakpointHit(hit)
+```
+
+---
+
+### P3: 未使用的代码
+
+#### ruleStore 定义但未使用
+
+**文件**: `WebUI/src/stores/ruleStore.ts`
+
+- 定义了 `TrafficRule` 相关的 store
+- API 路径使用 `/api/traffic-rules`，但后端没有实现这个路由
+- 未在任何组件中被导入使用
+- 与现有的 `MockRule` 功能可能存在概念重叠
+
+**建议**: 评估是否需要此功能，若不需要则移除以减少代码冗余
+
+---
+
+### 修复优先级总结
+
+| 优先级 | 问题 | 影响 | 预估工时 |
+|-------|------|------|---------|
+| 🔴 P0 | 断点恢复消息格式不匹配 | 断点功能完全不可用 | 0.5 天 |
+| 🔴 P0 | 断点规则同步未实现 | 断点功能不生效 | 0.5 天 |
+| 🔴 P0 | Chaos 规则同步未实现 | 故障注入不生效 | 0.5 天 |
+| 🔴 P0 | 断点恢复功能未实现 | 断点无法恢复 | 0.5 天 |
+| 🔴 P0 | 网络层未集成断点/Chaos | 规则不生效 | 1 天 |
+| 🟡 P1 | 设备重连规则不同步 | 重连后规则丢失 | 0.5 天 |
+| 🟡 P1 | WebUI 缺少断点管理 | 无法管理断点规则 | 2 天 |
+| 🟡 P1 | WebUI 缺少 Chaos 管理 | 无法管理故障注入规则 | 2 天 |
+| 🟢 P2 | breakpointHit 消息未处理 | WebUI 不知道断点命中 | 0.5 天 |
+| 🟢 P3 | ruleStore 未使用 | 代码冗余 | 0.5 天 |
+
+**总预估**: 约 8.5 天
+
 ---
 
 ## ✅ 已完成功能
@@ -16,7 +265,7 @@
 | Web UI 基础框架 | ✅ 完成 | React + TypeScript + Vite + Tailwind |
 | 实时数据流 | ✅ 完成 | WebSocket 双向通信 |
 | Mock 规则引擎 | ✅ 完成 | HTTP/WS 请求拦截与响应模拟 |
-| 请求重放 | ✅ 完成 | 通过 WebSocket 指令重放请求 |
+| 请求重放 | ✅ 完成 | 通过 WebSocket 指令重放请求 (iOS SDK 完整实现) |
 | cURL 导出 | ✅ 完成 | 生成可复制的 cURL 命令 |
 | JSON 响应树形展示 | ✅ 完成 | 可折叠的 JSON 树形视图 |
 | 性能时间线 | ✅ 完成 | DNS/TCP/TLS/TTFB 时间瀑布图 |
@@ -27,8 +276,8 @@
 |------|------|------|
 | 高级搜索语法 | ✅ 完成 | method:POST status:4xx duration:>500ms |
 | HAR 导出 | ✅ 完成 | HTTP Archive 1.2 格式导出 |
-| 断点调试 | ✅ 完成 | 请求/响应拦截与修改 |
-| 故障注入 | ✅ 完成 | 延迟、超时、错误码注入 |
+| 断点调试 | ⚠️ 部分实现 | 后端 API 完成，SDK 端 TODO 未实现，WebUI 缺少管理界面 |
+| 故障注入 | ⚠️ 部分实现 | 后端 API 完成，SDK 端 TODO 未实现，WebUI 缺少管理界面 |
 | 请求 Diff 对比 | ✅ 完成 | 并排对比两个请求差异 |
 
 ### Phase 3: 用户体验增强
@@ -72,6 +321,15 @@
 | 配置持久化 | ✅ 完成 | UserDefaults + Info.plist 多层配置 |
 | HTTP 自动拦截 | ✅ 完成 | URLSessionConfigurationSwizzle 零侵入 |
 | WebSocket 监控 | ✅ 完成 | 连接级 Swizzle + 消息级 Hook |
+
+### Phase 3.8: WebSocket 增强 (v1.2.0)
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| WS 消息完整内容查看 | ✅ 完成 | 点击展开加载完整 payload |
+| 多格式显示切换 | ✅ 完成 | AUTO / TEXT / JSON / HEX / BASE64 |
+| Hex Dump 专业格式 | ✅ 完成 | 带偏移量和 ASCII 列 |
+| 视觉风格简化 | ✅ 完成 | 移除发光/渐变，纯粹调试风格 |
 
 ---
 
@@ -386,10 +644,19 @@ public class DatabaseExplorer {
 
 | 优先级 | 功能 | 预估工时 | 依赖 |
 |-------|------|---------|------|
+| **🔴 P0** | **断点恢复消息格式统一** | **0.5 天** | **协议层修复** |
+| **🔴 P0** | **断点规则同步实现** | **0.5 天** | **SDK 修复** |
+| **🔴 P0** | **Chaos 规则同步实现** | **0.5 天** | **SDK 修复** |
+| **🔴 P0** | **断点恢复功能实现** | **0.5 天** | **SDK 修复** |
+| **🔴 P0** | **网络层集成断点/Chaos** | **1 天** | **SDK 修复** |
+| **🟡 P1** | **设备重连规则同步** | **0.5 天** | **Hub 修复** |
+| **🟡 P1** | **WebUI 断点规则管理** | **2 天** | **前端开发** |
+| **🟡 P1** | **WebUI Chaos 规则管理** | **2 天** | **前端开发** |
+| **🟢 P2** | **breakpointHit 消息处理** | **0.5 天** | **Hub 修复** |
 | ~~P0~~ | ~~高级搜索语法~~ | ~~1 周~~ | ✅ 完成 |
 | ~~P0~~ | ~~HAR 导出~~ | ~~3 天~~ | ✅ 完成 |
-| ~~P1~~ | ~~断点调试~~ | ~~2 周~~ | ✅ 完成 |
-| ~~P1~~ | ~~故障注入~~ | ~~1 周~~ | ✅ 完成 |
+| ~~P1~~ | ~~断点调试~~ | ~~2 周~~ | ⚠️ 部分完成 |
+| ~~P1~~ | ~~故障注入~~ | ~~1 周~~ | ⚠️ 部分完成 |
 | ~~P1~~ | ~~请求 Diff~~ | ~~1 周~~ | ✅ 完成 |
 | ~~P1~~ | ~~数据自动清理~~ | ~~2 天~~ | ✅ 完成 |
 | ~~P1~~ | ~~图片预览~~ | ~~1 天~~ | ✅ 完成 |
@@ -413,6 +680,7 @@ public class DatabaseExplorer {
 | P3 | 审计日志 | 1 周 | 无 |
 | P3 | 高可用部署 | 2 周 | PostgreSQL 已完成 |
 | P3 | 插件系统 | 2 周 | 架构设计 |
+| P3 | ruleStore 清理 | 0.5 天 | 代码清理 |
 
 ---
 
@@ -516,7 +784,7 @@ iOS Probe 支持将事件持久化到本地 SQLite 数据库，确保断线期�
 
 ```swift
 var config = DebugProbe.Configuration(
-    hubURL: URL(string: "ws://192.168.1.100:8080/debug-bridge")!,
+    hubURL: URL(string: "ws://127.0.0.1:8081/debug-bridge")!,
     token: "your-token"
 )
 config.enablePersistence = true
@@ -594,7 +862,3 @@ DebugProbe.shared.start(configuration: config)
 | Redis | `RediStack` | Vapor Redis 客户端 |
 | PostgreSQL | `fluent-postgres-driver` | 生产数据库 |
 
----
-
-*文档版本: 2.4*  
-*最后更新: 2025-12-02*

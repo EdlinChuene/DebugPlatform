@@ -10,7 +10,7 @@ import Foundation
 import Vapor
 
 /// 数据清理服务 - 自动清理过期数据
-final class DataCleanupService: @unchecked Sendable {
+final class DataCleanupService: LifecycleHandler, @unchecked Sendable {
     static let shared = DataCleanupService()
 
     private var isRunning = false
@@ -24,6 +24,16 @@ final class DataCleanupService: @unchecked Sendable {
     var cleanupIntervalSeconds: Int = 3600
 
     private init() {}
+
+    // MARK: - LifecycleHandler
+
+    func didBoot(_ application: Application) throws {
+        start(app: application)
+    }
+
+    func shutdown(_ application: Application) {
+        stop()
+    }
 
     // MARK: - Public Methods
 

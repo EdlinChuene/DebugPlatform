@@ -1,314 +1,316 @@
-import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useDeviceStore } from '@/stores/deviceStore'
-import { ThemeToggle } from './ThemeToggle'
+import { useHTTPStore } from '@/stores/httpStore'
+import { useRuleStore } from '@/stores/ruleStore'
 import clsx from 'clsx'
 
-const navItems = [
-  { path: '/', label: '设备列表', icon: '📱', description: '管理已连接的调试设备' },
-]
-
-const quickLinks = [
-  { path: '/api-docs', label: 'API 文档', icon: '📚', description: 'RESTful API 接口文档' },
-  { path: '/health', label: '健康检查', icon: '💚', description: '查看服务运行状态' },
-]
-
-
 export function Sidebar() {
-  const location = useLocation()
-  const { isServerOnline, isRealtimeConnected, isInDeviceDetail } = useConnectionStore()
-  const devices = useDeviceStore((s) => s.devices)
-  const onlineDevices = devices.filter(d => d.isOnline)
-  const onlineCount = onlineDevices.length
+  const navigate = useNavigate()
+  const { isServerOnline } = useConnectionStore()
 
-  // 清空数据库对话框状态
-  const [showTruncateDialog, setShowTruncateDialog] = useState(false)
-  const [truncateConfirmText, setTruncateConfirmText] = useState('')
-  const [isTruncating, setIsTruncating] = useState(false)
-  const [truncateResult, setTruncateResult] = useState<{ success: boolean; message: string } | null>(null)
+  // Device Store
+  const { devices, fetchDevices, currentDeviceId, selectDevice } = useDeviceStore()
 
-  // 根据当前页面决定显示哪种连接状态
-  const isInDetail = location.pathname.startsWith('/device/')
-  const showRealtimeStatus = isInDetail && isInDeviceDetail
-  
-  // 连接状态信息
-  const connectionInfo = showRealtimeStatus
-    ? {
-        isConnected: isRealtimeConnected,
-        label: isRealtimeConnected ? '实时流已连接' : '实时流已断开',
-        description: isRealtimeConnected ? '正在接收实时数据' : '等待重新连接...',
-      }
-    : {
-        isConnected: isServerOnline,
-        label: isServerOnline ? '服务运行正常' : '服务连接失败',
-        description: isServerOnline ? 'Debug Hub 在线' : '无法连接到服务器',
-      }
+  // HTTP Store (for Domain List)
+  const { events, setFilter, filters } = useHTTPStore()
 
-  // 清空数据库
-  const handleTruncate = async () => {
-    if (truncateConfirmText !== 'DELETE') return
-    
-    setIsTruncating(true)
-    setTruncateResult(null)
-    
-    try {
-      const response = await fetch('/api/cleanup/truncate', {
-        method: 'POST',
-        headers: { 'Accept': 'application/json' }
-      })
-      const data = await response.json()
-      setTruncateResult(data)
-      
-      if (data.success) {
-        // 清空成功，3秒后关闭对话框
-        setTimeout(() => {
-          setShowTruncateDialog(false)
-          setTruncateConfirmText('')
-          setTruncateResult(null)
-        }, 3000)
+  // Rule Store
+  const { fetchRules, getDomainRule, createOrUpdateRule, deleteRule } = useRuleStore()
+
+  // Domain search filter
+  const [domainSearch, setDomainSearch] = useState('')
+
+  // Track recently updated domains for highlight effect
+  const [highlightedDomains, setHighlightedDomains] = useState<Set<string>>(new Set())
+  const prevEventsCountRef = useRef<Record<string, number>>({})
+
+  useEffect(() => {
+    fetchDevices()
+    fetchRules()
+  }, [])
+
+  // Extract Domains from Events
+  const domainStats = useMemo(() => {
+    const stats: Record<string, number> = {}
+    events.forEach(e => {
+      try {
+        const hostname = new URL(e.url).hostname
+        stats[hostname] = (stats[hostname] || 0) + 1
+      } catch { }
+    })
+    return Object.entries(stats)
+      .map(([domain, count]) => ({ domain, count }))
+      .sort((a, b) => b.count - a.count)
+  }, [events])
+
+  // Detect new requests and highlight domains
+  useEffect(() => {
+    const currentCounts: Record<string, number> = {}
+    domainStats.forEach(({ domain, count }) => {
+      currentCounts[domain] = count
+    })
+
+    const newHighlights = new Set<string>()
+    for (const [domain, count] of Object.entries(currentCounts)) {
+      const prevCount = prevEventsCountRef.current[domain] || 0
+      if (count > prevCount) {
+        newHighlights.add(domain)
       }
-    } catch (error) {
-      setTruncateResult({ success: false, message: '请求失败，请重试' })
-    } finally {
-      setIsTruncating(false)
+    }
+
+    if (newHighlights.size > 0) {
+      setHighlightedDomains(prev => new Set([...prev, ...newHighlights]))
+
+      // Remove highlights after animation
+      setTimeout(() => {
+        setHighlightedDomains(prev => {
+          const next = new Set(prev)
+          newHighlights.forEach(d => next.delete(d))
+          return next
+        })
+      }, 1500)
+    }
+
+    prevEventsCountRef.current = currentCounts
+  }, [domainStats])
+
+  // Filter domains by search
+  const filteredDomainStats = useMemo(() => {
+    if (!domainSearch.trim()) return domainStats
+    const searchLower = domainSearch.toLowerCase()
+    return domainStats.filter(({ domain }) =>
+      domain.toLowerCase().includes(searchLower)
+    )
+  }, [domainStats, domainSearch])
+
+  const handleDeviceClick = (deviceId: string) => {
+    selectDevice(deviceId)
+    navigate(`/device/${deviceId}`)
+  }
+
+  const handleDomainClick = (domain: string) => {
+    if (filters.domain === domain) {
+      setFilter('domain', '') // Toggle off
+    } else {
+      setFilter('domain', domain)
     }
   }
 
-  const closeTruncateDialog = () => {
-    if (!isTruncating) {
-      setShowTruncateDialog(false)
-      setTruncateConfirmText('')
-      setTruncateResult(null)
+  // Cycle: None -> Whitelist (Highlight) -> Blacklist (Hide) -> None
+  const cycleDomainRule = async (e: React.MouseEvent, domain: string) => {
+    e.stopPropagation()
+    const current = getDomainRule(domain)
+
+    if (!current) {
+      // Create Highlight Rule
+      await createOrUpdateRule({
+        name: domain,
+        matchType: 'domain',
+        matchValue: domain,
+        action: 'highlight',
+        isEnabled: true,
+        priority: 0
+      })
+    } else if (current.action === 'highlight') {
+      // Update to Hide Rule
+      await createOrUpdateRule({ ...current, action: 'hide' })
+    } else {
+      // Delete Rule
+      if (current.id) await deleteRule(current.id)
     }
   }
 
   return (
-    <aside className="w-72 bg-bg-dark/80 backdrop-blur-xl border-r border-border flex flex-col relative overflow-hidden">
-      {/* Decorative gradient */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-24 -left-24 w-48 h-48 bg-primary/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-accent-blue/10 rounded-full blur-3xl" />
-      </div>
-
-      {/* Logo */}
-      <div className="relative p-6 border-b border-border">
+    <aside className="w-72 bg-bg-dark border-r border-border flex flex-col h-full">
+      {/* Header */}
+      <div className="p-5 border-b border-border flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center shadow-glow">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
             <span className="text-xl">🔍</span>
           </div>
           <div>
-            <h1 className="text-lg font-bold bg-gradient-to-r from-primary via-accent-blue to-primary bg-clip-text text-transparent">
-              Debug Platform
-            </h1>
-            <p className="text-2xs text-text-muted">网络和日志调试平台</p>
+            <h1 className="font-semibold text-text-primary text-lg">Debug Hub</h1>
+            <p className="text-2xs text-text-muted">Network Inspector</p>
           </div>
         </div>
+        {/* Rules Management Link */}
+        <Link
+          to="/rules"
+          className="text-xs text-text-muted hover:text-primary transition-colors px-2 py-1 rounded hover:bg-bg-light"
+          title="管理流量规则"
+        >
+          Rules
+        </Link>
       </div>
 
-      {/* Connection Status Card */}
-      <div className="relative px-4 py-3">
-        <div className={clsx(
-          'p-4 rounded-xl border transition-all',
-          connectionInfo.isConnected 
-            ? 'bg-green-500/5 border-green-500/20' 
-            : 'bg-red-500/5 border-red-500/20'
-        )}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span
+      <div className="flex-1 overflow-y-auto">
+        {/* Device List Section */}
+        <div className="px-3 py-4">
+          <div className="px-2 mb-3 text-xs font-semibold text-text-secondary uppercase tracking-wider flex justify-between items-center">
+            <span className="flex items-center gap-2">
+              <span className="text-sm">📱</span>
+              Devices
+            </span>
+            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-2xs font-bold">{devices.length}</span>
+          </div>
+
+          <div className="space-y-1.5">
+            {devices.map(device => (
+              <div
+                key={device.deviceId}
+                onClick={() => handleDeviceClick(device.deviceId)}
                 className={clsx(
-                  'w-2.5 h-2.5 rounded-full',
-                  connectionInfo.isConnected ? 'bg-green-500 status-dot-online' : 'bg-red-500'
+                  "group flex items-center gap-3 px-3 py-3 rounded-lg cursor-pointer transition-colors",
+                  currentDeviceId === device.deviceId
+                    ? "bg-primary/10 text-primary border border-primary/20"
+                    : "text-text-secondary hover:bg-bg-light hover:text-text-primary border border-transparent"
                 )}
-              />
-              <span className={clsx(
-                'text-sm font-medium',
-                connectionInfo.isConnected ? 'text-green-400' : 'text-red-400'
-              )}>
-                {connectionInfo.label}
-              </span>
-            </div>
-          </div>
-          <p className="text-2xs text-text-muted mb-2">{connectionInfo.description}</p>
-          <div className="flex items-center justify-between text-xs text-text-muted pt-2 border-t border-border/50">
-            <span>在线设备</span>
-            <span className="font-mono font-medium text-text-secondary">{onlineCount} / {devices.length}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="relative flex-1 px-3 py-2 overflow-auto">
-        <div className="text-xs text-text-muted uppercase tracking-wider px-3 py-2 font-medium">
-          导航
-        </div>
-        {navItems.map((item) => (
-          <Link
-            key={item.path}
-            to={item.path}
-            className={clsx(
-              'flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all group mb-1',
-              location.pathname === item.path
-                ? 'bg-gradient-to-r from-primary/20 to-primary/5 text-primary border border-primary/20'
-                : 'text-text-secondary hover:bg-bg-light hover:text-text-primary'
-            )}
-          >
-            <span className="text-lg group-hover:scale-110 transition-transform">{item.icon}</span>
-            <div className="flex-1">
-              <div className="font-medium">{item.label}</div>
-              <div className="text-2xs text-text-muted">{item.description}</div>
-            </div>
-            {location.pathname === item.path && (
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-            )}
-          </Link>
-        ))}
-
-      </nav>
-
-      {/* Footer */}
-      <div className="relative p-4 border-t border-border space-y-3">
-        {/* Quick Links */}
-        <div className="flex gap-2">
-          {quickLinks.map((link) => (
-            <Link
-              key={link.path}
-              to={link.path}
-              className={clsx(
-                'flex-1 flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl transition-all',
-                'bg-bg-medium/50 border border-border hover:border-primary/30 hover:bg-bg-light',
-                location.pathname === link.path && 'border-primary/40 bg-primary/5'
-              )}
-              title={link.description}
-            >
-              <span className="text-lg">{link.icon}</span>
-              <span className="text-xs font-medium text-text-secondary">{link.label}</span>
-            </Link>
-          ))}
-        </div>
-
-        {/* Theme Toggle & Clear Data */}
-        <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center justify-between px-2 py-2 rounded-xl bg-bg-medium/30">
-            <div className="text-xs text-text-muted">主题</div>
-            <ThemeToggle />
-          </div>
-          <button
-            onClick={() => setShowTruncateDialog(true)}
-            className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/20 hover:border-red-500/30 transition-all"
-            title="清空数据库中的所有数据"
-          >
-            清空数据库
-          </button>
-        </div>
-
-        {/* Version Info */}
-        <div className="text-center text-2xs text-text-muted pt-2">
-          <span className="opacity-70">Debug Platform v1.0.0</span>
-        </div>
-      </div>
-
-      {/* Truncate Confirmation Dialog */}
-      {showTruncateDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-bg-dark border border-border rounded-2xl shadow-2xl w-[420px] overflow-hidden">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-border bg-red-500/5">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
-                  <span className="text-xl">⚠️</span>
+              >
+                <div className="relative flex-shrink-0">
+                  <div className={clsx(
+                    "w-10 h-10 rounded-lg flex items-center justify-center",
+                    currentDeviceId === device.deviceId
+                      ? "bg-primary/20"
+                      : "bg-bg-medium"
+                  )}>
+                    <span className="text-xl">📱</span>
+                  </div>
+                  {device.isOnline && (
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-bg-dark rounded-full" />
+                  )}
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-red-400">危险操作</h3>
-                  <p className="text-sm text-text-muted">此操作不可撤销</p>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium truncate text-sm">{device.deviceName}</div>
+                  <div className="text-2xs text-text-muted truncate mt-0.5">
+                    {device.appName} <span className="opacity-60">v{device.appVersion}</span>
+                  </div>
                 </div>
+                <span className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity text-sm">→</span>
               </div>
+            ))}
+
+            {devices.length === 0 && !isServerOnline && (
+              <div className="px-4 py-6 text-center text-xs text-text-muted bg-bg-light/20 rounded-lg border border-dashed border-border">
+                <span className="text-2xl block mb-2 opacity-50">📡</span>
+                等待服务连接...
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Separator */}
+        {currentDeviceId && (
+          <div className="divider mx-5 my-2" />
+        )}
+
+        {/* Domain List Section (Only if device selected) */}
+        {currentDeviceId && (
+          <div className="px-3 py-3">
+            <div className="px-2 mb-3 text-xs font-semibold text-text-secondary uppercase tracking-wider flex justify-between items-center">
+              <span className="flex items-center gap-2">
+                <span className="text-sm">🌐</span>
+                Domains
+              </span>
+              <span className="bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded-full text-2xs font-bold">{domainStats.length}</span>
             </div>
 
-            {/* Content */}
-            <div className="px-6 py-5">
-              <p className="text-text-secondary mb-4">
-                即将清空数据库中的<strong className="text-text-primary">所有数据</strong>，包括：
-              </p>
-              <ul className="text-sm text-text-muted space-y-1.5 mb-5 pl-4">
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400/60"></span>
-                  所有 HTTP 请求记录
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400/60"></span>
-                  所有日志事件
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400/60"></span>
-                  所有 WebSocket 会话和消息
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400/60"></span>
-                  所有设备会话记录
-                </li>
-              </ul>
-              
-              <div className="bg-bg-medium/50 rounded-xl p-4 border border-border">
-                <p className="text-sm text-text-secondary mb-2">
-                  请输入 <code className="px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded font-mono text-xs">DELETE</code> 确认操作：
-                </p>
+            {/* Domain Search */}
+            <div className="px-1 mb-3">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">🔍</span>
                 <input
                   type="text"
-                  value={truncateConfirmText}
-                  onChange={(e) => setTruncateConfirmText(e.target.value.toUpperCase())}
-                  placeholder="输入 DELETE"
-                  disabled={isTruncating}
-                  className="w-full px-4 py-2.5 bg-bg-dark border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-red-500/50 font-mono text-center tracking-widest"
+                  value={domainSearch}
+                  onChange={(e) => setDomainSearch(e.target.value)}
+                  placeholder="搜索域名..."
+                  className="w-full pl-8 pr-3 py-2 text-xs bg-bg-medium border border-border rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
                 />
               </div>
+            </div>
 
-              {/* Result Message */}
-              {truncateResult && (
-                <div className={clsx(
-                  'mt-4 px-4 py-3 rounded-lg text-sm',
-                  truncateResult.success 
-                    ? 'bg-green-500/10 border border-green-500/20 text-green-400'
-                    : 'bg-red-500/10 border border-red-500/20 text-red-400'
-                )}>
-                  {truncateResult.success ? '✓' : '✗'} {truncateResult.message}
+            <div className="space-y-0.5 max-h-[400px] overflow-y-auto pr-1">
+              {filteredDomainStats.map(({ domain, count }) => {
+                const rule = getDomainRule(domain)
+                const isWhitelist = rule?.action === 'highlight'
+                const isBlacklist = rule?.action === 'hide'
+                const isSelected = filters.domain === domain
+                const isHighlighted = highlightedDomains.has(domain)
+
+                return (
+                  <div
+                    key={domain}
+                    onClick={() => handleDomainClick(domain)}
+                    className={clsx(
+                      "flex items-center justify-between px-3 py-2 rounded cursor-pointer text-xs transition-colors group",
+                      isSelected
+                        ? "bg-accent-blue/15 text-accent-blue font-medium border border-accent-blue/20"
+                        : "text-text-secondary hover:bg-bg-light border border-transparent",
+                      isHighlighted && "animate-domain-highlight"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {isWhitelist && <span className="text-yellow-500 text-xs" title="Highlighted">★</span>}
+                      {isBlacklist && <span className="text-red-400 text-xs" title="Hidden">⛔</span>}
+                      <span className={clsx(
+                        "truncate font-mono",
+                        isBlacklist && "opacity-50 line-through"
+                      )}>
+                        {domain}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className={clsx(
+                        "font-mono text-2xs px-1.5 py-0.5 rounded",
+                        isHighlighted
+                          ? "text-primary font-bold bg-primary/10"
+                          : "opacity-60 bg-bg-medium"
+                      )}>{count}</span>
+
+                      {/* Quick Action on Hover */}
+                      <button
+                        onClick={(e) => cycleDomainRule(e, domain)}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-bg-medium rounded transition-colors text-text-muted hover:text-text-primary"
+                        title="Toggle Rule (None -> Highlight -> Hide)"
+                      >
+                        ⋮
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {filteredDomainStats.length === 0 && domainSearch && (
+                <div className="px-4 py-4 text-center text-xs text-text-muted bg-bg-light/20 rounded border border-dashed border-border">
+                  <span className="text-lg block mb-1 opacity-50">🔍</span>
+                  未找到匹配的域名
+                </div>
+              )}
+
+              {domainStats.length === 0 && (
+                <div className="px-4 py-4 text-center text-xs text-text-muted bg-bg-light/20 rounded border border-dashed border-border">
+                  <span className="text-lg block mb-1 opacity-50">🌐</span>
+                  暂无域名记录
                 </div>
               )}
             </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-border bg-bg-medium/30 flex justify-end gap-3">
-              <button
-                onClick={closeTruncateDialog}
-                disabled={isTruncating}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-light transition-all disabled:opacity-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleTruncate}
-                disabled={truncateConfirmText !== 'DELETE' || isTruncating}
-                className={clsx(
-                  'px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                  truncateConfirmText === 'DELETE' && !isTruncating
-                    ? 'bg-red-500 text-white hover:bg-red-600'
-                    : 'bg-red-500/30 text-red-400/50 cursor-not-allowed'
-                )}
-              >
-                {isTruncating ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                    清空中...
-                  </span>
-                ) : (
-                  '确认清空'
-                )}
-              </button>
-            </div>
           </div>
+        )}
+      </div>
+
+      {/* Footer Status */}
+      <div className="p-4 bg-bg-darker border-t border-border text-xs text-text-muted flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <div className={clsx(
+            "w-2 h-2 rounded-full",
+            isServerOnline ? "bg-green-500" : "bg-red-500"
+          )} />
+          <span className="font-medium">{isServerOnline ? "Online" : "Offline"}</span>
         </div>
-      )}
+        <span className="text-text-muted/50">v1.0</span>
+      </div>
     </aside>
   )
 }

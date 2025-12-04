@@ -7,6 +7,7 @@ import { useWSStore } from '@/stores/wsStore'
 import { useMockStore } from '@/stores/mockStore'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useThemeStore } from '@/stores/themeStore'
+import { useSessionActivityStore } from '@/stores/sessionActivityStore'
 import { realtimeService, parseHTTPEvent, parseLogEvent, parseWSEvent } from '@/services/realtime'
 import { HTTPEventTable } from '@/components/HTTPEventTable'
 import { HTTPEventDetail } from '@/components/HTTPEventDetail'
@@ -19,6 +20,7 @@ import { WSSessionDetail } from '@/components/WSSessionDetail'
 import { MockRuleList } from '@/components/MockRuleList'
 import { MockRuleEditor } from '@/components/MockRuleEditor'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { SessionActivityIndicator } from '@/components/SessionActivityIndicator'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { getExportHTTPUrl, getExportLogsUrl, getExportHARUrl } from '@/services/api'
 import clsx from 'clsx'
@@ -36,7 +38,7 @@ export function DeviceDetailPage() {
   const { deviceId } = useParams<{ deviceId: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  
+
   // 从 URL 参数读取初始 tab（支持旧的 network 参数向后兼容）
   const tabParam = searchParams.get('tab')
   const initialTab = (tabParam === 'network' ? 'http' : tabParam as Tab) || 'http'
@@ -46,11 +48,13 @@ export function DeviceDetailPage() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
   const [showClearDeviceDialog, setShowClearDeviceDialog] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showActivityPanel, setShowActivityPanel] = useState(false)
 
   const { currentDevice, selectDevice, clearSelection, toggleCapture, clearDeviceData } =
     useDeviceStore()
   const { setConnected, setInDeviceDetail } = useConnectionStore()
   const toggleTheme = useThemeStore((s) => s.toggleTheme)
+  const { addActivity, clearActivities } = useSessionActivityStore()
 
   // HTTP Store
   const httpStore = useHTTPStore()
@@ -208,26 +212,55 @@ export function DeviceDetailPage() {
               isOpen: true,
             })
           } else if (wsEvent.type === 'sessionClosed') {
-            const data = wsEvent.data as { sessionId: string; closeCode?: number; closeReason?: string }
-            wsStore.updateSessionStatus(data.sessionId, false, data.closeCode, data.closeReason)
+            const data = wsEvent.data as { id: string; closeCode?: number; closeReason?: string }
+            wsStore.updateSessionStatus(data.id, false, data.closeCode, data.closeReason)
           } else if (wsEvent.type === 'frame') {
             const frame = wsEvent.data as {
               id: string
               sessionId: string
               direction: 'send' | 'receive'
               opcode: string
+              payload?: string // base64 encoded
               payloadPreview?: string
-              payloadSize: number
               timestamp: string
               isMocked: boolean
             }
+
+            // 如果没有对应的 session，尝试从 API 获取
+            // 这可能发生在 sessionCreated 事件丢失或页面刷新后的情况
+            if (!wsStore.sessions.some(s => s.id === frame.sessionId)) {
+              // 先创建一个占位 session 避免重复请求
+              wsStore.addRealtimeSession({
+                id: frame.sessionId,
+                url: '(loading...)',
+                connectTime: frame.timestamp,
+                disconnectTime: null,
+                closeCode: null,
+                closeReason: null,
+                isOpen: true,
+              })
+              // 异步获取真实的 session 信息
+              import('@/services/api').then(({ getWSSessionDetail }) => {
+                getWSSessionDetail(deviceId, frame.sessionId)
+                  .then(detail => {
+                    wsStore.updateSessionUrl(frame.sessionId, detail.url)
+                  })
+                  .catch(() => {
+                    // 如果获取失败，更新为 unknown
+                    wsStore.updateSessionUrl(frame.sessionId, '(unknown)')
+                  })
+              })
+            }
+
+            // payload 是 base64 编码的字符串，计算实际字节大小
+            const payloadSize = frame.payload ? Math.floor(frame.payload.length * 3 / 4) : 0
             wsStore.addRealtimeFrame({
               id: frame.id,
               sessionId: frame.sessionId,
               direction: frame.direction,
               opcode: frame.opcode,
               payloadPreview: frame.payloadPreview ?? null,
-              payloadSize: frame.payloadSize,
+              payloadSize,
               timestamp: frame.timestamp,
               isMocked: frame.isMocked,
             })
@@ -236,12 +269,28 @@ export function DeviceDetailPage() {
         }
         case 'deviceConnected': {
           const data = JSON.parse(message.payload)
-          httpStore.addSessionDivider(data.sessionId, true)
+          // 添加到连接活动记录（独立于 HTTP 列表）
+          addActivity({
+            id: `${data.sessionId}-connected`,
+            deviceId: deviceId,
+            sessionId: data.sessionId,
+            timestamp: new Date().toISOString(),
+            type: 'connected',
+            deviceName: data.deviceName,
+          })
           break
         }
-        case 'deviceDisconnected':
-          httpStore.addSessionDivider('', false)
+        case 'deviceDisconnected': {
+          // 添加到连接活动记录
+          addActivity({
+            id: `${Date.now()}-disconnected`,
+            deviceId: deviceId,
+            sessionId: '',
+            timestamp: new Date().toISOString(),
+            type: 'disconnected',
+          })
           break
+        }
       }
     })
 
@@ -256,6 +305,7 @@ export function DeviceDetailPage() {
       logStore.clearEvents()
       wsStore.clearSessions()
       mockStore.clearRules()
+      clearActivities()
       // 标记离开设备详情页
       setInDeviceDetail(false)
     }
@@ -307,106 +357,115 @@ export function DeviceDetailPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="px-6 py-4 bg-bg-dark/80 backdrop-blur-xl border-b border-border">
-        <div className="flex items-center gap-4">
+      <header className="px-6 py-5 bg-bg-dark border-b border-border">
+        <div className="flex items-center gap-5">
           <button
             onClick={handleBack}
-            className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors group"
+            className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors group px-3 py-2 rounded hover:bg-bg-light"
           >
-            <span className="group-hover:-translate-x-1 transition-transform">←</span>
-            <span>返回</span>
+            <span className="group-hover:-translate-x-1 transition-transform text-lg">←</span>
+            <span className="font-medium">返回</span>
           </button>
-          
-          <div className="h-6 w-px bg-border" />
-          
-          <div className="flex items-center gap-3 flex-1">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent-blue/20 flex items-center justify-center border border-border">
-              <span className="text-lg">📱</span>
+
+          <div className="h-8 w-px bg-border" />
+
+          <div className="flex items-center gap-4 flex-1">
+            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center border border-border">
+              <span className="text-2xl">📱</span>
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-text-primary">
+              <h1 className="text-xl font-bold text-text-primary">
                 {currentDevice?.deviceInfo.deviceName || '加载中...'}
               </h1>
               {currentDevice && (
-                <p className="text-xs text-text-muted">
-                  {currentDevice.deviceInfo.platform} {currentDevice.deviceInfo.systemVersion} • {currentDevice.deviceInfo.appName}
+                <p className="text-sm text-text-muted mt-0.5">
+                  {currentDevice.deviceInfo.platform} {currentDevice.deviceInfo.systemVersion} • <span className="text-text-secondary">{currentDevice.deviceInfo.appName}</span>
                 </p>
               )}
             </div>
             {currentDevice && (
               <span
                 className={clsx(
-                  'badge ml-2',
+                  'badge ml-3 px-3 py-1',
                   currentDevice.isOnline ? 'badge-success' : 'badge-danger'
                 )}
               >
                 <span className={clsx(
-                  'w-1.5 h-1.5 rounded-full mr-1.5',
+                  'w-2 h-2 rounded-full mr-2',
                   currentDevice.isOnline ? 'bg-green-400' : 'bg-red-400'
                 )} />
                 {currentDevice.isOnline ? '在线' : '离线'}
               </span>
             )}
+
+            {/* Connection Activity Indicator */}
+            {deviceId && (
+              <SessionActivityIndicator
+                deviceId={deviceId}
+                isExpanded={showActivityPanel}
+                onToggleExpand={() => setShowActivityPanel(!showActivityPanel)}
+              />
+            )}
           </div>
-          
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-4">
             {/* Capture Toggles */}
-            <div className="flex items-center gap-4 px-4 py-2 bg-bg-medium rounded-xl border border-border">
-              <label className="flex items-center gap-2 text-sm cursor-pointer group">
+            <div className="flex items-center gap-5 px-5 py-2.5 bg-bg-medium rounded-lg border border-border">
+              <label className="flex items-center gap-2.5 text-sm cursor-pointer group">
                 <input
                   type="checkbox"
                   checked={networkCapture}
                   onChange={(e) => handleNetworkCaptureChange(e.target.checked)}
                   className="accent-primary w-4 h-4"
                 />
-                <span className="text-text-secondary group-hover:text-text-primary transition-colors">
+                <span className="text-text-secondary group-hover:text-text-primary transition-colors font-medium">
                   🌐 网络
                 </span>
               </label>
-              <div className="w-px h-4 bg-border" />
-              <label className="flex items-center gap-2 text-sm cursor-pointer group">
+              <div className="w-px h-5 bg-border" />
+              <label className="flex items-center gap-2.5 text-sm cursor-pointer group">
                 <input
                   type="checkbox"
                   checked={logCapture}
                   onChange={(e) => handleLogCaptureChange(e.target.checked)}
                   className="accent-primary w-4 h-4"
                 />
-                <span className="text-text-secondary group-hover:text-text-primary transition-colors">
+                <span className="text-text-secondary group-hover:text-text-primary transition-colors font-medium">
                   📝 日志
                 </span>
               </label>
             </div>
-            
+
             <button
               onClick={() => setShowShortcutsHelp(true)}
-              className="btn btn-ghost px-3"
+              className="btn btn-ghost px-3.5 py-2.5 rounded"
               title="快捷键 (Ctrl+/)"
             >
               ⌨️
             </button>
-            
+
             {/* More Menu */}
             <div className="relative">
               <button
                 onClick={() => setShowMoreMenu(!showMoreMenu)}
-                className="btn btn-ghost px-3"
+                className="btn btn-ghost px-3.5 py-2.5 rounded"
                 title="更多操作"
               >
-                ⋯
+                ⋮
               </button>
               {showMoreMenu && (
                 <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setShowMoreMenu(false)} 
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowMoreMenu(false)}
                   />
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-bg-dark border border-border rounded-xl shadow-xl z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-bg-dark border border-border rounded-lg shadow-lg z-50 overflow-hidden">
                     <button
                       onClick={() => {
                         setShowMoreMenu(false)
                         setShowClearDeviceDialog(true)
                       }}
-                      className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+                      className="w-full px-4 py-3.5 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-3 transition-colors font-medium"
                     >
                       <span>🗑️</span>
                       <span>清空设备数据</span>
@@ -420,18 +479,20 @@ export function DeviceDetailPage() {
       </header>
 
       {/* Tabs */}
-      <div className="px-6 py-3 bg-bg-dark border-b border-border">
-        <div className="flex gap-2">
+      <div className="px-6 py-4 bg-bg-dark border-b border-border">
+        <div className="flex gap-1 p-1 bg-bg-medium rounded-lg border border-border w-fit">
           {tabConfig.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={clsx(
-                'tab flex items-center gap-2',
-                activeTab === tab.id && 'active'
+                'flex items-center gap-2 px-5 py-2.5 rounded text-sm font-medium transition-colors',
+                activeTab === tab.id
+                  ? 'bg-primary text-bg-darkest'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
               )}
             >
-              <span>{tab.icon}</span>
+              <span className="text-base">{tab.icon}</span>
               <span>{tab.label}</span>
             </button>
           ))}
@@ -517,8 +578,8 @@ function HTTPTab({
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="px-4 py-3 bg-bg-medium/50 border-b border-border flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="px-5 py-4 bg-bg-medium border-b border-border flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
           <button
             onClick={onRefresh}
             className="btn btn-secondary"
@@ -526,9 +587,9 @@ function HTTPTab({
           >
             刷新
           </button>
-          
-          <div className="h-6 w-px bg-border" />
-          
+
+          <div className="h-7 w-px bg-border" />
+
           <select
             value={httpStore.filters.method}
             onChange={(e) => httpStore.setFilter('method', e.target.value)}
@@ -541,68 +602,94 @@ function HTTPTab({
             <option value="DELETE">DELETE</option>
             <option value="PATCH">PATCH</option>
           </select>
-          
+
           <input
             type="text"
             value={httpStore.filters.urlContains}
             onChange={(e) => httpStore.setFilter('urlContains', e.target.value)}
-            placeholder="搜索 URL..."
-            className="input w-56"
+            placeholder="🔍 搜索 URL..."
+            className="input w-60"
             data-search-input
           />
-          
-          <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
+
+          <label className="flex items-center gap-2.5 text-sm text-text-secondary cursor-pointer hover:text-text-primary transition-colors px-2">
             <input
               type="checkbox"
               checked={httpStore.filters.mockedOnly}
               onChange={(e) => httpStore.setFilter('mockedOnly', e.target.checked)}
-              className="accent-primary"
+              className="accent-primary w-4 h-4"
             />
             仅 Mock
           </label>
-          <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
+          <label className="flex items-center gap-2.5 text-sm text-text-secondary cursor-pointer hover:text-text-primary transition-colors px-2">
             <input
               type="checkbox"
               checked={httpStore.filters.favoritesOnly}
               onChange={(e) => httpStore.setFilter('favoritesOnly', e.target.checked)}
-              className="accent-primary"
+              className="accent-primary w-4 h-4"
             />
             仅收藏
           </label>
+
+          <div className="h-6 w-px bg-border/50" />
+
+          <label className="flex items-center gap-2.5 text-sm text-text-secondary cursor-pointer hover:text-text-primary transition-colors px-2" title="显示被黑名单策略隐藏的域名">
+            <input
+              type="checkbox"
+              checked={httpStore.filters.showBlacklisted}
+              onChange={(e) => httpStore.setFilter('showBlacklisted', e.target.checked)}
+              className="accent-primary w-4 h-4"
+            />
+            显示黑名单
+          </label>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => httpStore.setFilter('statusRange', httpStore.filters.statusRange === '400-599' ? '' : '400-599')}
+              className={clsx(
+                "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all shadow-sm",
+                httpStore.filters.statusRange === '400-599'
+                  ? "bg-red-500/20 text-red-400 border-red-500/30 shadow-red-500/10"
+                  : "bg-bg-light text-text-secondary border-border/50 hover:bg-bg-lighter hover:border-border"
+              )}
+            >
+              ⚠️ Errors
+            </button>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-text-muted bg-bg-light px-2 py-1 rounded-lg">
+
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-text-muted bg-bg-light/70 px-3 py-1.5 rounded-lg border border-border/30 font-medium">
             {filteredCount !== httpStore.events.length
               ? `${filteredCount} / ${httpStore.events.length}`
               : `${httpStore.events.length}`}{' '}
             条记录
           </span>
-          
+
           <button
             onClick={() => httpStore.toggleSelectMode()}
             className={clsx(
-              'btn',
+              'btn shadow-sm',
               httpStore.isSelectMode
-                ? 'bg-primary/20 text-primary border-primary/30'
+                ? 'bg-primary/20 text-primary border border-primary/30'
                 : 'btn-secondary'
             )}
           >
-            {httpStore.isSelectMode ? '退出批量' : '批量选择'}
+            {httpStore.isSelectMode ? '✓ 退出批量' : '☐ 批量选择'}
           </button>
-          
-          <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
+
+          <label className="flex items-center gap-2.5 text-sm text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
             <input
               type="checkbox"
               checked={httpStore.autoScroll}
               onChange={(e) => httpStore.setAutoScroll(e.target.checked)}
-              className="accent-primary"
+              className="accent-primary w-4 h-4"
             />
             自动滚动
           </label>
-          
-          <div className="h-6 w-px bg-border" />
-          
+
+          <div className="h-6 w-px bg-border/50" />
+
           <a
             href={getExportHTTPUrl(deviceId)}
             target="_blank"
@@ -611,7 +698,7 @@ function HTTPTab({
           >
             导出
           </a>
-          
+
           <button
             onClick={() => httpStore.clearEvents()}
             className="btn btn-ghost text-text-muted hover:text-text-secondary"
@@ -780,12 +867,13 @@ function WebSocketTab({
           <button
             onClick={() => wsStore.fetchSessions(deviceId)}
             className="btn btn-secondary"
+            title="刷新列表"
           >
             刷新
           </button>
-          
+
           <div className="h-6 w-px bg-border" />
-          
+
           <input
             type="text"
             value={wsStore.filters.urlContains || ''}
@@ -793,7 +881,7 @@ function WebSocketTab({
             placeholder="搜索 URL..."
             className="input w-56"
           />
-          
+
           <select
             value={wsStore.filters.isOpen === undefined ? '' : String(wsStore.filters.isOpen)}
             onChange={(e) =>
@@ -809,12 +897,12 @@ function WebSocketTab({
             <option value="false">已关闭</option>
           </select>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <span className="text-xs text-text-muted bg-bg-light px-2 py-1 rounded-lg">
             {wsStore.totalSessions} 个会话
           </span>
-          
+
           <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
             <input
               type="checkbox"
@@ -824,6 +912,16 @@ function WebSocketTab({
             />
             自动滚动
           </label>
+
+          <div className="h-6 w-px bg-border" />
+
+          <button
+            onClick={() => wsStore.clearSessions()}
+            className="btn btn-ghost text-text-muted hover:text-text-secondary"
+            title="清空当前列表（不删除数据库）"
+          >
+            清屏
+          </button>
         </div>
       </div>
 
@@ -840,6 +938,7 @@ function WebSocketTab({
         </div>
         <div className="flex-1 min-w-[400px] bg-bg-dark/50">
           <WSSessionDetail
+            deviceId={deviceId}
             session={wsStore.selectedSession}
             frames={wsStore.frames}
             loading={wsStore.framesLoading}
@@ -906,12 +1005,12 @@ function MockTab({
           >
             刷新
           </button>
-          
+
           <span className="text-xs text-text-muted bg-bg-light px-2 py-1 rounded-lg">
             {mockStore.rules.length} 条规则
           </span>
         </div>
-        
+
         <button onClick={handleCreateNew} className="btn bg-primary text-white hover:bg-primary-dark">
           + 创建规则
         </button>

@@ -16,16 +16,16 @@ public final class DebugBridgeClient: NSObject {
         public let token: String
 
         /// 初始重连间隔（秒）
-        public var reconnectInterval: TimeInterval = 5.0
+        public var reconnectInterval: TimeInterval = 3.0
 
         /// 最大重连间隔（秒）- 指数退避上限
-        public var maxReconnectInterval: TimeInterval = 60.0
+        public var maxReconnectInterval: TimeInterval = 30.0
 
         /// 最大重连尝试次数（0 = 无限）
         public var maxReconnectAttempts: Int = 0
 
-        /// 心跳间隔
-        public var heartbeatInterval: TimeInterval = 30.0
+        /// 心跳间隔（更频繁的心跳可以更快检测连接问题）
+        public var heartbeatInterval: TimeInterval = 15.0
 
         public var batchSize: Int = 100
         public var flushInterval: TimeInterval = 1.0
@@ -218,14 +218,69 @@ public final class DebugBridgeClient: NSObject {
             DispatchQueue.main.async { [weak self] in
                 self?.onMockRulesReceived?(rules)
             }
+            
+        case let .updateBreakpointRules(rules):
+            DebugLog.info(.bridge, "Received \(rules.count) breakpoint rules")
+            // TODO: 实现断点规则更新处理
+            
+        case let .updateChaosRules(rules):
+            DebugLog.info(.bridge, "Received \(rules.count) chaos rules")
+            // TODO: 实现故障注入规则更新处理
+            
+        case let .replayRequest(payload):
+            DebugLog.info(.bridge, "Received replay request for \(payload.url)")
+            executeReplayRequest(payload)
+            
+        case let .breakpointResume(payload):
+            DebugLog.info(.bridge, "Received breakpoint resume for \(payload.requestId)")
+            // TODO: 实现断点恢复功能
 
         case let .error(code, errorMessage):
             let error = NSError(domain: "DebugBridge", code: code, userInfo: [NSLocalizedDescriptionKey: errorMessage])
             handleError(error)
 
         default:
+            // 其他消息类型（如 register, heartbeat, events 等是发送消息，不应接收）
             break
         }
+    }
+    
+    /// 执行请求重放
+    private func executeReplayRequest(_ payload: ReplayRequestPayload) {
+        guard let url = URL(string: payload.url) else {
+            DebugLog.error(.bridge, "Invalid URL for replay: \(payload.url)")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = payload.method
+        
+        // 设置请求头
+        for (key, value) in payload.headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        
+        // 设置请求体
+        request.httpBody = payload.bodyData
+        
+        // 使用非监控的 session 执行请求，避免重放请求也被记录
+        let session = URLSession(configuration: .ephemeral)
+        
+        DebugLog.info(.bridge, "Executing replay request: \(payload.method) \(payload.url)")
+        
+        session.dataTask(with: request) { data, response, error in
+            if let error = error {
+                DebugLog.error(.bridge, "Replay request failed: \(error.localizedDescription)")
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                DebugLog.info(.bridge, "Replay request completed: \(httpResponse.statusCode)")
+            }
+            
+            // 可选：发送重放结果回服务端
+            // self?.sendReplayResult(id: payload.id, response: response, data: data, error: error)
+        }.resume()
     }
 
     private func handleError(_ error: Error) {

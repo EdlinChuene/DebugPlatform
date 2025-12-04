@@ -1,10 +1,14 @@
-import { useState } from 'react'
-import type { WSSessionDetail as WSSessionDetailType, WSFrame } from '@/types'
+import { useState, useCallback } from 'react'
+import type { WSSessionDetail as WSSessionDetailType, WSFrame, WSFrameDetail } from '@/types'
 import { formatSmartTime } from '@/utils/format'
 import { JSONTree } from './JSONTree'
+import { getWSFrameDetail } from '@/services/api'
 import clsx from 'clsx'
 
+type PayloadFormat = 'auto' | 'text' | 'json' | 'hex' | 'base64'
+
 interface WSSessionDetailProps {
+  deviceId: string
   session: WSSessionDetailType | null
   frames: WSFrame[]
   loading?: boolean
@@ -15,6 +19,7 @@ interface WSSessionDetailProps {
 }
 
 export function WSSessionDetail({
+  deviceId,
   session,
   frames,
   loading,
@@ -84,6 +89,8 @@ export function WSSessionDetail({
       <div className="flex-1 overflow-hidden">
         {activeTab === 'frames' && (
           <FramesTab
+            deviceId={deviceId}
+            sessionId={session.id}
             frames={frames}
             loading={loading}
             onLoadMore={onLoadMore}
@@ -118,6 +125,8 @@ function SessionStatusBadge({ isOpen, closeCode }: { isOpen: boolean; closeCode?
 }
 
 function FramesTab({
+  deviceId,
+  sessionId,
   frames,
   loading,
   onLoadMore,
@@ -127,6 +136,8 @@ function FramesTab({
   direction,
   onDirectionChange,
 }: {
+  deviceId: string
+  sessionId: string
   frames: WSFrame[]
   loading?: boolean
   onLoadMore?: () => void
@@ -164,6 +175,8 @@ function FramesTab({
             {frames.map((frame) => (
               <FrameItem
                 key={frame.id}
+                deviceId={deviceId}
+                sessionId={sessionId}
                 frame={frame}
                 isExpanded={expandedFrameId === frame.id}
                 onToggle={() => onToggleExpand(expandedFrameId === frame.id ? null : frame.id)}
@@ -190,10 +203,14 @@ function FramesTab({
 }
 
 function FrameItem({
+  deviceId,
+  sessionId,
   frame,
   isExpanded,
   onToggle,
 }: {
+  deviceId: string
+  sessionId: string
   frame: WSFrame
   isExpanded: boolean
   onToggle: () => void
@@ -201,15 +218,106 @@ function FrameItem({
   const isSend = frame.direction === 'send'
   const isText = frame.opcode === 'text'
 
-  // 尝试解析 JSON
-  let parsedPayload: unknown = null
-  let isJson = false
-  if (isText && frame.payloadPreview) {
+  // 完整 payload 状态
+  const [frameDetail, setFrameDetail] = useState<WSFrameDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [format, setFormat] = useState<PayloadFormat>('auto')
+
+  // 加载完整 payload
+  const loadFullPayload = useCallback(async () => {
+    if (frameDetail || detailLoading) return
+    setDetailLoading(true)
+    setDetailError(null)
     try {
-      parsedPayload = JSON.parse(frame.payloadPreview)
-      isJson = true
-    } catch {
-      // Not JSON
+      const detail = await getWSFrameDetail(deviceId, sessionId, frame.id)
+      setFrameDetail(detail)
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : '加载失败')
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [deviceId, sessionId, frame.id, frameDetail, detailLoading])
+
+  // 展开时加载完整 payload
+  const handleToggle = () => {
+    if (!isExpanded) {
+      loadFullPayload()
+    }
+    onToggle()
+  }
+
+  // 格式化 payload 显示
+  const renderPayload = () => {
+    if (detailLoading) {
+      return (
+        <div className="bg-bg-dark rounded-lg p-4 text-center text-text-muted text-sm">
+          <span className="animate-pulse">加载中...</span>
+        </div>
+      )
+    }
+
+    if (detailError) {
+      return (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-center text-red-400 text-sm">
+          {detailError}
+        </div>
+      )
+    }
+
+    if (!frameDetail) {
+      return (
+        <div className="bg-bg-dark rounded-lg p-3 text-xs font-mono text-text-secondary">
+          {frame.payloadPreview || '(无法预览)'}
+        </div>
+      )
+    }
+
+    const { payloadText, payloadBase64 } = frameDetail
+    const currentFormat = format === 'auto' ? detectBestFormat(payloadText) : format
+
+    switch (currentFormat) {
+      case 'json': {
+        try {
+          const parsed = JSON.parse(payloadText || '')
+          return (
+            <div className="bg-bg-dark rounded-lg p-3 max-h-80 overflow-auto">
+              <JSONTree data={parsed} />
+            </div>
+          )
+        } catch {
+          // 回退到文本
+          return (
+            <pre className="bg-bg-dark rounded-lg p-3 text-xs font-mono text-text-secondary overflow-auto max-h-60 whitespace-pre-wrap break-all">
+              {payloadText || payloadBase64}
+            </pre>
+          )
+        }
+      }
+      case 'text':
+        return (
+          <pre className="bg-bg-dark rounded-lg p-3 text-xs font-mono text-text-secondary overflow-auto max-h-60 whitespace-pre-wrap break-all">
+            {payloadText || '(binary - cannot display as text)'}
+          </pre>
+        )
+      case 'hex':
+        return (
+          <pre className="bg-bg-dark rounded-lg p-3 text-xs font-mono text-text-secondary overflow-auto max-h-60 whitespace-pre-wrap break-all">
+            {base64ToHex(payloadBase64)}
+          </pre>
+        )
+      case 'base64':
+        return (
+          <pre className="bg-bg-dark rounded-lg p-3 text-xs font-mono text-text-secondary overflow-auto max-h-60 whitespace-pre-wrap break-all">
+            {payloadBase64}
+          </pre>
+        )
+      default:
+        return (
+          <pre className="bg-bg-dark rounded-lg p-3 text-xs font-mono text-text-secondary overflow-auto max-h-60 whitespace-pre-wrap break-all">
+            {payloadText || base64ToHex(payloadBase64)}
+          </pre>
+        )
     }
   }
 
@@ -220,7 +328,7 @@ function FrameItem({
         'hover:bg-bg-light/30',
         isExpanded && 'bg-bg-light/50'
       )}
-      onClick={onToggle}
+      onClick={handleToggle}
     >
       {/* 帧头部 */}
       <div className="flex items-center gap-3">
@@ -247,7 +355,7 @@ function FrameItem({
           </div>
           {!isExpanded && (
             <p className="text-xs text-text-secondary truncate font-mono mt-0.5">
-              {frame.payloadPreview || '(binary data)'}
+              {frame.payloadPreview || (isText ? '(empty)' : '(binary data)')}
             </p>
           )}
         </div>
@@ -263,20 +371,70 @@ function FrameItem({
 
       {/* 展开内容 */}
       {isExpanded && (
-        <div className="mt-3 ml-9">
-          {isJson && parsedPayload ? (
-            <div className="bg-bg-dark rounded-lg p-3 max-h-80 overflow-auto">
-              <JSONTree data={parsedPayload} />
+        <div className="mt-3 ml-9" onClick={(e) => e.stopPropagation()}>
+          {/* 格式切换 */}
+          {frameDetail && (
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs text-text-muted">格式:</span>
+              {(['auto', 'text', 'json', 'hex', 'base64'] as PayloadFormat[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFormat(f)}
+                  className={clsx(
+                    'px-2 py-0.5 text-xs rounded transition-colors',
+                    format === f
+                      ? 'bg-primary/20 text-primary'
+                      : 'text-text-muted hover:text-text-primary hover:bg-bg-light'
+                  )}
+                >
+                  {f.toUpperCase()}
+                </button>
+              ))}
             </div>
-          ) : (
-            <pre className="bg-bg-dark rounded-lg p-3 text-xs font-mono text-text-secondary overflow-auto max-h-60 whitespace-pre-wrap break-all">
-              {frame.payloadPreview || '(binary data)'}
-            </pre>
           )}
+          {renderPayload()}
         </div>
       )}
     </div>
   )
+}
+
+// 检测最佳显示格式
+function detectBestFormat(payloadText: string | null): PayloadFormat {
+  if (!payloadText) return 'hex'
+  try {
+    JSON.parse(payloadText)
+    return 'json'
+  } catch {
+    return 'text'
+  }
+}
+
+// Base64 转 Hex 显示
+function base64ToHex(base64: string): string {
+  try {
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    // 格式化为 hex dump 格式
+    const lines: string[] = []
+    for (let i = 0; i < bytes.length; i += 16) {
+      const chunk = bytes.slice(i, i + 16)
+      const hex = Array.from(chunk)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join(' ')
+      const ascii = Array.from(chunk)
+        .map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.'))
+        .join('')
+      const offset = i.toString(16).padStart(8, '0')
+      lines.push(`${offset}  ${hex.padEnd(48)}  ${ascii}`)
+    }
+    return lines.join('\n')
+  } catch {
+    return base64
+  }
 }
 
 function InfoTab({ session }: { session: WSSessionDetailType }) {

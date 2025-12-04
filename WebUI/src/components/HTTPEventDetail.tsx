@@ -26,7 +26,7 @@ export function HTTPEventDetail({
   onShowRelatedLogs,
   onFavoriteChange,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<'headers' | 'body' | 'timing'>('headers')
+  const [activeTab, setActiveTab] = useState<'headers' | 'params' | 'body' | 'timing'>('headers')
   const [curlCommand, setCurlCommand] = useState<string | null>(null)
   const [curlLoading, setCurlLoading] = useState(false)
   const [replayStatus, setReplayStatus] = useState<string | null>(null)
@@ -191,6 +191,9 @@ export function HTTPEventDetail({
         <TabButton active={activeTab === 'headers'} onClick={() => setActiveTab('headers')}>
           Headers
         </TabButton>
+        <TabButton active={activeTab === 'params'} onClick={() => setActiveTab('params')}>
+          Params
+        </TabButton>
         <TabButton active={activeTab === 'body'} onClick={() => setActiveTab('body')}>
           Body
         </TabButton>
@@ -214,12 +217,19 @@ export function HTTPEventDetail({
                 <HeadersTable headers={event.responseHeaders} />
               </Section>
             )}
+          </div>
+        )}
 
-            {event.queryItems && Object.keys(event.queryItems).length > 0 && (
-              <Section title="Query 参数">
-                <HeadersTable headers={event.queryItems} />
+        {activeTab === 'params' && (
+          <div className="space-y-6">
+             <Section title="Query Params">
+               <HeadersTable headers={event.queryItems || {}} />
+             </Section>
+
+             <Section title="Body Params">
+               <HeadersTable headers={event.bodyParams || {}} />
+               {!event.bodyParams && <div className="text-text-muted text-sm">无解析后的 Body 参数</div>}
               </Section>
-            )}
           </div>
         )}
 

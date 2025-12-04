@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { truncateAllData } from '@/services/api'
+import { DangerConfirmDialog } from '@/components/DangerConfirmDialog'
 
 interface HealthData {
   status: string
@@ -44,6 +46,8 @@ export function HealthPage() {
   const [error, setError] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [displayUptime, setDisplayUptime] = useState('--:--:--')
+  const [showTruncateDialog, setShowTruncateDialog] = useState(false)
+  const [isTruncating, setIsTruncating] = useState(false)
 
   // 保存 startTime 的时间戳，避免每次重新解析
   const startTimeRef = useRef<number | null>(null)
@@ -95,6 +99,20 @@ export function HealthPage() {
   }, [])
 
   const isHealthy = !error && health?.status === 'healthy'
+
+  const handleTruncateAll = async () => {
+    setIsTruncating(true)
+    try {
+      await truncateAllData()
+      setShowTruncateDialog(false)
+      // 可选：刷新页面或显示成功提示
+      alert('所有数据已清空')
+    } catch (err) {
+      alert('清空数据失败: ' + (err instanceof Error ? err.message : '未知错误'))
+    } finally {
+      setIsTruncating(false)
+    }
+  }
 
   return (
     <div className="h-full overflow-auto flex items-center justify-center p-6">
@@ -162,7 +180,7 @@ export function HealthPage() {
           )}
 
           {/* Navigation */}
-          <nav className="flex justify-center gap-3">
+          <nav className="flex justify-center gap-3 mb-6">
             <Link
               to="/"
               className="btn btn-secondary"
@@ -176,6 +194,17 @@ export function HealthPage() {
               📚 API 文档
             </Link>
           </nav>
+
+          {/* Danger Zone */}
+          <div className="pt-6 border-t border-border">
+            <p className="text-xs text-text-muted mb-3">危险操作</p>
+            <button
+              onClick={() => setShowTruncateDialog(true)}
+              className="btn bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
+            >
+              🗑️ 清空所有数据
+            </button>
+          </div>
         </div>
 
         {/* Footer */}
@@ -183,6 +212,18 @@ export function HealthPage() {
           <span className="opacity-70">Debug Hub © 2025 Sun</span>
         </p>
       </div>
+
+      {/* Truncate Confirmation Dialog */}
+      <DangerConfirmDialog
+        isOpen={showTruncateDialog}
+        title="清空所有数据"
+        message="此操作将删除数据库中的所有数据，包括所有设备的 HTTP 事件、日志、WebSocket 会话等。此操作不可撤销！"
+        confirmWord="DELETE"
+        confirmText="确认清空"
+        loading={isTruncating}
+        onConfirm={handleTruncateAll}
+        onClose={() => setShowTruncateDialog(false)}
+      />
     </div>
   )
 }

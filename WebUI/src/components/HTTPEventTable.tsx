@@ -1,12 +1,11 @@
 import { useEffect, useRef } from 'react'
 import type { HTTPEventSummary } from '@/types'
-import { type ListItem, type SessionDivider, isSessionDivider } from '@/stores/httpStore'
+import { type ListItem, isSessionDivider } from '@/stores/httpStore'
 import {
   formatSmartTime,
   formatDuration,
   getDurationClass,
   getStatusClass,
-  getStatusText,
   getMethodClass,
   truncateUrl,
   extractDomain,
@@ -36,14 +35,13 @@ export function HTTPEventTable({
   const containerRef = useRef<HTMLDivElement>(null)
   const lastFirstItemRef = useRef<string | null>(null)
 
+  // 过滤掉会话分隔符，只显示 HTTP 事件
+  const httpEvents = items.filter((item) => !isSessionDivider(item)) as HTTPEventSummary[]
+
   // 当有新事件添加到列表头部时自动滚动到顶部
   useEffect(() => {
-    const firstItem = items[0]
-    const firstId = firstItem
-      ? isSessionDivider(firstItem)
-        ? `divider-${firstItem.sessionId}`
-        : firstItem.id
-      : null
+    const firstEvent = httpEvents[0]
+    const firstId = firstEvent?.id ?? null
     const hasNewItem = firstId !== null && firstId !== lastFirstItemRef.current
 
     if (autoScroll && containerRef.current && hasNewItem) {
@@ -51,7 +49,7 @@ export function HTTPEventTable({
     }
 
     lastFirstItemRef.current = firstId
-  }, [items, autoScroll])
+  }, [httpEvents, autoScroll])
 
   const handleRowClick = (event: HTTPEventSummary, e: React.MouseEvent) => {
     if (isSelectMode && onToggleSelect) {
@@ -61,45 +59,6 @@ export function HTTPEventTable({
       onSelect(event.id)
     }
   }
-
-  const renderSessionDivider = (divider: SessionDivider) => (
-    <tr
-      key={`divider-${divider.sessionId}-${divider.timestamp}`}
-      className="bg-gradient-to-r from-transparent via-bg-medium to-transparent"
-    >
-      <td colSpan={isSelectMode ? 8 : 7} className="px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className={clsx(
-            'w-8 h-8 rounded-full flex items-center justify-center',
-            divider.isConnected ? 'bg-green-500/10' : 'bg-red-500/10'
-          )}>
-            <span
-              className={clsx(
-                'w-2 h-2 rounded-full',
-                divider.isConnected ? 'bg-green-500 status-dot-online' : 'bg-red-500'
-              )}
-            />
-          </div>
-          <div className="flex-1">
-            <span className={clsx(
-              'text-sm font-medium',
-              divider.isConnected ? 'text-green-400' : 'text-red-400'
-            )}>
-              {divider.isConnected ? '📱 设备已连接' : '📴 设备已断开'}
-            </span>
-            <span className="text-xs text-text-muted ml-3">
-              {formatSmartTime(divider.timestamp)}
-            </span>
-          </div>
-          {divider.isConnected && divider.sessionId && (
-            <span className="text-xs text-text-muted font-mono bg-bg-light px-2 py-1 rounded">
-              会话 {divider.sessionId.slice(0, 8)}
-            </span>
-          )}
-        </div>
-      </td>
-    </tr>
-  )
 
   const renderEventRow = (event: HTTPEventSummary) => {
     const isError = !event.statusCode || event.statusCode >= 400
@@ -111,94 +70,89 @@ export function HTTPEventTable({
         key={event.id}
         onClick={(e) => handleRowClick(event, e)}
         className={clsx(
-          'cursor-pointer border-b border-border-light transition-all group',
-          isError && 'bg-red-500/5',
-          isSelected && 'bg-bg-hover border-l-2 border-l-primary',
-          isChecked && 'bg-primary/10',
-          !isSelected && !isChecked && 'hover:bg-bg-light'
+          'cursor-pointer transition-all duration-150 group',
+          isError && 'bg-red-500/5 hover:bg-red-500/10',
+          isSelected && 'bg-primary/10 border-l-2 border-l-primary shadow-sm shadow-primary/5',
+          isChecked && 'bg-primary/15',
+          !isSelected && !isChecked && !isError && 'hover:bg-bg-light/60'
         )}
       >
         {isSelectMode && (
-          <td className="px-3 py-3 w-10" onClick={(e) => e.stopPropagation()}>
+          <td className="px-3 py-3.5 w-10" onClick={(e) => e.stopPropagation()}>
             <input
               type="checkbox"
               checked={isChecked}
               onChange={() => onToggleSelect?.(event.id)}
-              className="w-4 h-4 rounded border-border cursor-pointer"
+              className="w-4 h-4 rounded border-border cursor-pointer accent-primary"
             />
           </td>
         )}
-        
+
         {/* Time */}
-        <td className="px-4 py-3 text-text-muted whitespace-nowrap">
-          <span className="text-xs">{formatSmartTime(event.startTime)}</span>
+        <td className="px-4 py-3.5 text-text-muted whitespace-nowrap">
+          <span className="text-sm font-mono">{formatSmartTime(event.startTime)}</span>
         </td>
-        
+
         {/* Method */}
-        <td className="px-4 py-3">
+        <td className="px-4 py-3.5">
           <span
             className={clsx(
-              'inline-flex items-center justify-center px-2 py-0.5 rounded-md text-2xs font-mono font-bold min-w-[52px]',
+              'inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-mono font-bold min-w-[60px] shadow-sm',
               getMethodClass(event.method)
             )}
           >
             {event.method}
           </span>
         </td>
-        
+
         {/* Status */}
-        <td className="px-4 py-3">
+        <td className="px-4 py-3.5">
           <div className="flex items-center gap-1.5">
             <span
               className={clsx(
-                'inline-flex items-center justify-center px-2 py-0.5 rounded-md text-2xs font-mono font-medium min-w-[36px]',
+                'inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-mono font-semibold min-w-[44px] shadow-sm',
                 getStatusClass(event.statusCode)
               )}
             >
               {event.statusCode ?? 'ERR'}
             </span>
-            {event.statusCode && (
-              <span className="text-2xs text-text-muted hidden group-hover:inline">
-                {getStatusText(event.statusCode)}
-              </span>
-            )}
           </div>
         </td>
-        
+
         {/* URL */}
-        <td className="px-4 py-3 max-w-xs">
-          <div className="flex flex-col">
-            <span className="text-xs text-text-primary truncate" title={event.url}>
+        <td className="px-4 py-3.5 max-w-md">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm text-text-primary truncate group-hover:text-primary transition-colors" title={event.url}>
               {truncateUrl(event.url)}
             </span>
-            <span className="text-2xs text-text-muted truncate">
+            <span className="text-xs text-text-muted truncate font-mono opacity-70">
               {extractDomain(event.url)}
             </span>
           </div>
         </td>
-        
+
         {/* Duration */}
-        <td className="px-4 py-3 whitespace-nowrap">
-          <span className={clsx('text-xs font-mono', getDurationClass(event.duration))}>
+        <td className="px-4 py-3.5 whitespace-nowrap">
+          <span className={clsx('text-sm font-mono font-medium', getDurationClass(event.duration))}>
             {formatDuration(event.duration)}
           </span>
         </td>
-        
+
         {/* Tags */}
-        <td className="px-4 py-3 text-center">
-          <div className="flex items-center justify-center gap-1.5">
+        <td className="px-4 py-3.5 text-center">
+          <div className="flex items-center justify-center gap-2">
             {event.isMocked && (
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-purple-500/10 text-purple-400" title="已 Mock">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/15 text-purple-400 shadow-sm shadow-purple-500/10" title="已 Mock">
                 🎭
               </span>
             )}
             {event.isFavorite && (
-              <span className="badge-favorite text-sm" title="已收藏">
+              <span className="badge-favorite text-base" title="已收藏">
                 ★
               </span>
             )}
             {!event.isMocked && !event.isFavorite && (
-              <span className="w-6 h-6" />
+              <span className="w-7 h-7" />
             )}
           </div>
         </td>
@@ -209,35 +163,33 @@ export function HTTPEventTable({
   return (
     <div ref={containerRef} className="flex-1 overflow-auto">
       <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-gradient-to-b from-bg-medium to-bg-dark z-10 border-b border-border">
+        <thead className="sticky top-0 bg-bg-medium z-10 border-b border-border">
           <tr className="text-left text-text-secondary">
             {isSelectMode && (
-              <th className="px-3 py-3 w-10">
+              <th className="px-3 py-3.5 w-10">
                 <span className="sr-only">选择</span>
               </th>
             )}
-            <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider">时间</th>
-            <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider">方法</th>
-            <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider">状态</th>
-            <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider">URL / 域名</th>
-            <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider">耗时</th>
-            <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider w-20 text-center">标记</th>
+            <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">时间</th>
+            <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">方法</th>
+            <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">状态</th>
+            <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">URL / 域名</th>
+            <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">耗时</th>
+            <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider w-20 text-center">标记</th>
           </tr>
         </thead>
-        <tbody>
-          {items.map((item) =>
-            isSessionDivider(item)
-              ? renderSessionDivider(item)
-              : renderEventRow(item)
-          )}
+        <tbody className="divide-y divide-border-light">
+          {httpEvents.map((event) => renderEventRow(event))}
         </tbody>
       </table>
 
-      {items.length === 0 && (
+      {httpEvents.length === 0 && (
         <div className="flex flex-col items-center justify-center h-full text-text-muted py-20">
-          <span className="text-4xl mb-4 opacity-50">🌐</span>
-          <p className="text-sm">暂无 HTTP 请求</p>
-          <p className="text-xs mt-1 text-text-muted">等待网络请求被捕获...</p>
+          <div className="w-16 h-16 rounded-lg bg-bg-light flex items-center justify-center mb-4 border border-border">
+            <span className="text-3xl opacity-60">🌐</span>
+          </div>
+          <p className="text-sm font-medium text-text-secondary mb-1">暂无 HTTP 请求</p>
+          <p className="text-xs text-text-muted">等待网络请求被捕获...</p>
         </div>
       )}
     </div>

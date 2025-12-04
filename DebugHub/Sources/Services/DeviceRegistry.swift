@@ -48,7 +48,7 @@ final class DeviceSession {
 
 // MARK: - Device Registry
 
-final class DeviceRegistry: @unchecked Sendable {
+final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
     static let shared = DeviceRegistry()
 
     private var sessions: [String: DeviceSession] = [:]
@@ -56,7 +56,8 @@ final class DeviceRegistry: @unchecked Sendable {
     private let lock = NSLock()
 
     /// 延迟断开时间（秒）- 只有超过这个时间没有重连才认为真正断开
-    private let disconnectDelay: TimeInterval = 5.0
+    /// 减少到 3 秒以配合更频繁的心跳检测
+    private let disconnectDelay: TimeInterval = 3.0
 
     /// 数据库引用（由外部设置）
     var database: Database?
@@ -65,6 +66,28 @@ final class DeviceRegistry: @unchecked Sendable {
     var onDeviceDisconnected: ((String) -> Void)?
 
     private init() {}
+
+    // MARK: - LifecycleHandler
+
+    func shutdown(_: Application) {
+        lock.lock()
+        // 取消所有挂起的断开任务
+        for item in pendingDisconnects.values {
+            item.cancel()
+        }
+        pendingDisconnects.removeAll()
+        
+        let currentSessions = Array(sessions.values)
+        sessions.removeAll()
+        lock.unlock()
+        
+        // 非阻塞关闭所有 WebSocket 连接
+        for session in currentSessions {
+            session.webSocket.close(code: .goingAway, promise: nil)
+        }
+        
+        print("[DeviceRegistry] Shutdown complete")
+    }
 
     // MARK: - Session Management
 
