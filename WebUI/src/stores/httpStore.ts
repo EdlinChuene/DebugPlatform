@@ -42,7 +42,7 @@ interface HTTPState {
     urlContains: string
     mockedOnly: boolean
     favoritesOnly: boolean
-    domain: string
+    domains: string[] // 支持多选域名，空数组表示"全部"
     showBlacklisted: boolean
   }
 
@@ -53,7 +53,9 @@ interface HTTPState {
   clearSelection: () => void
   addRealtimeEvent: (event: HTTPEventSummary) => void
   clearEvents: () => void
-  setFilter: (key: string, value: string | boolean) => void
+  setFilter: (key: string, value: string | boolean | string[]) => void
+  toggleDomain: (domain: string) => void  // 切换域名选中状态
+  clearDomains: () => void  // 清空域名选择（选择"全部"）
   setAutoScroll: (value: boolean) => void
   applyFilters: () => void
 
@@ -102,11 +104,11 @@ function filterItems(items: ListItem[], filters: HTTPState['filters']): ListItem
     // 仅收藏
     if (filters.favoritesOnly && !event.isFavorite) return false
 
-    // 域名过滤
-    if (filters.domain) {
+    // 域名过滤（支持多选）
+    if (filters.domains && filters.domains.length > 0) {
       try {
         const url = new URL(event.url)
-        if (url.hostname !== filters.domain) return false
+        if (!filters.domains.includes(url.hostname)) return false
       } catch {
         return false
       }
@@ -147,7 +149,7 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
     urlContains: '',
     mockedOnly: false,
     favoritesOnly: false,
-    domain: '',
+    domains: [],
     showBlacklisted: false,
   },
 
@@ -235,9 +237,29 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
     // 保留此函数以保持 API 兼容性
   },
 
-  setFilter: (key: string, value: string | boolean) => {
+  setFilter: (key: string, value: string | boolean | string[]) => {
     set((state) => {
       const newFilters = { ...state.filters, [key]: value }
+      const filteredItems = filterItems(state.listItems, newFilters)
+      return { filters: newFilters, filteredItems }
+    })
+  },
+
+  toggleDomain: (domain: string) => {
+    set((state) => {
+      const currentDomains = state.filters.domains
+      const newDomains = currentDomains.includes(domain)
+        ? currentDomains.filter((d) => d !== domain)
+        : [...currentDomains, domain]
+      const newFilters = { ...state.filters, domains: newDomains }
+      const filteredItems = filterItems(state.listItems, newFilters)
+      return { filters: newFilters, filteredItems }
+    })
+  },
+
+  clearDomains: () => {
+    set((state) => {
+      const newFilters = { ...state.filters, domains: [] }
       const filteredItems = filterItems(state.listItems, newFilters)
       return { filters: newFilters, filteredItems }
     })

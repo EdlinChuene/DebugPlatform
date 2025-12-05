@@ -106,6 +106,13 @@ public final class BreakpointEngine {
         defer { rulesLock.unlock() }
         return rules
     }
+    
+    /// 检查是否有匹配的响应阶段断点规则
+    /// 用于预先判断是否需要拦截响应
+    public func hasResponseBreakpoint(for request: URLRequest) -> Bool {
+        guard isEnabled else { return false }
+        return matchingRule(for: request, phase: .response) != nil
+    }
 
     // MARK: - Request Phase Breakpoint
 

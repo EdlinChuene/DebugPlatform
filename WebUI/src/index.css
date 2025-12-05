@@ -12,11 +12,11 @@
   --color-primary-light: #55efc4;
   --color-primary-glow: rgba(0, 212, 170, 0.1);
 
-  /* Accent colors */
-  --color-accent-blue: #60a5fa;
-  --color-accent-purple: #a78bfa;
-  --color-accent-orange: #fb923c;
-  --color-accent-pink: #f472b6;
+  /* Accent colors - Softer for dark theme */
+  --color-accent-blue: #4a90d9;
+  --color-accent-purple: #9171c8;
+  --color-accent-orange: #e07830;
+  --color-accent-pink: #d6609e;
 
   /* Background - Flat dark colors */
   --color-bg-darkest: #0d1117;
@@ -36,10 +36,12 @@
   --color-text-secondary: #8b949e;
   --color-text-muted: #6e7681;
 
-  /* Borders - Much more subtle */
-  --color-border: rgba(48, 54, 61, 0.6);
-  --color-border-light: rgba(48, 54, 61, 0.3);
-  --color-border-active: rgba(0, 212, 170, 0.5);
+  /* Borders - Much more subtle for dark theme */
+  --color-border: rgba(48, 54, 61, 0.35);
+  --color-border-light: rgba(48, 54, 61, 0.15);
+  --color-border-subtle: rgba(48, 54, 61, 0.2);
+  --color-border-active: rgba(0, 212, 170, 0.3);
+  --color-primary-rgb: 0, 212, 170;
 
   /* Scrollbar */
   --color-scrollbar-track: #161b22;
@@ -65,6 +67,12 @@
   --color-primary-dark: #008c74;
   --color-primary-light: #00d4aa;
   --color-primary-glow: none;
+
+  /* Accent colors - More vibrant for light theme */
+  --color-accent-blue: #2563eb;
+  --color-accent-purple: #7c3aed;
+  --color-accent-orange: #ea580c;
+  --color-accent-pink: #db2777;
 
   --color-bg-darkest: #ffffff;
   --color-bg-dark: #f6f8fa;

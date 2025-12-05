@@ -13,16 +13,19 @@ export function Sidebar() {
   const { isServerOnline } = useConnectionStore()
 
   // Device Store
-  const { devices, fetchDevices, currentDeviceId, selectDevice } = useDeviceStore()
+  const { devices, fetchDevices, currentDeviceId, selectDevice, favoriteDeviceIds, toggleFavorite } = useDeviceStore()
 
-  // HTTP Store (for Domain List)
-  const { events, setFilter: setHttpFilter, filters: httpFilters } = useHTTPStore()
+  // HTTP Store (for Domain List) - 支持多选
+  const { events, toggleDomain, clearDomains, filters: httpFilters } = useHTTPStore()
 
-  // WebSocket Store (for Host List)
+  // WebSocket Store (for Host List) - 保持单选
   const { sessions: wsSessions, setFilter: setWsFilter, filters: wsFilters } = useWSStore()
 
   // Rule Store
   const { getDomainRule, createOrUpdateRule, deleteRule } = useRuleStore()
+
+  // Show all devices toggle
+  const [showAllDevices, setShowAllDevices] = useState(false)
 
   // Get current tab from URL
   const currentTab = useMemo(() => {
@@ -72,8 +75,23 @@ export function Sidebar() {
     }
   }, [events, wsSessions, currentTab])
 
+  // Track previous tab to detect tab switches
+  const prevTabRef = useRef<string>(currentTab)
+
   // Detect new requests and highlight domains
   useEffect(() => {
+    // If tab changed, just update the ref without highlighting
+    if (prevTabRef.current !== currentTab) {
+      prevTabRef.current = currentTab
+      // Reset the counts for the new tab context
+      const currentCounts: Record<string, number> = {}
+      domainStats.forEach(({ domain, count }) => {
+        currentCounts[domain] = count
+      })
+      prevEventsCountRef.current = currentCounts
+      return
+    }
+
     const currentCounts: Record<string, number> = {}
     domainStats.forEach(({ domain, count }) => {
       currentCounts[domain] = count
@@ -101,7 +119,7 @@ export function Sidebar() {
     }
 
     prevEventsCountRef.current = currentCounts
-  }, [domainStats])
+  }, [domainStats, currentTab])
 
   // Filter domains by search
   const filteredDomainStats = useMemo(() => {
@@ -112,26 +130,47 @@ export function Sidebar() {
     )
   }, [domainStats, domainSearch])
 
+  // Filter devices: show current device + favorites, or all if toggled
+  const displayedDevices = useMemo(() => {
+    if (showAllDevices) return devices
+    return devices.filter(d =>
+      d.deviceId === currentDeviceId || favoriteDeviceIds.has(d.deviceId)
+    )
+  }, [devices, currentDeviceId, favoriteDeviceIds, showAllDevices])
+
+  // Count of hidden devices
+  const hiddenDevicesCount = devices.length - displayedDevices.length
+
   const handleDeviceClick = (deviceId: string) => {
     selectDevice(deviceId)
     navigate(`/device/${deviceId}`)
   }
 
+  const handleToggleFavorite = (e: React.MouseEvent, deviceId: string) => {
+    e.stopPropagation()
+    toggleFavorite(deviceId)
+  }
+
   const handleDomainClick = (domain: string) => {
     if (currentTab === 'websocket') {
-      // Toggle WebSocket host filter
+      // Toggle WebSocket host filter (单选)
       if (wsFilters.host === domain) {
         setWsFilter('host', '')
       } else {
         setWsFilter('host', domain)
       }
     } else {
-      // Toggle HTTP domain filter
-      if (httpFilters.domain === domain) {
-        setHttpFilter('domain', '')
-      } else {
-        setHttpFilter('domain', domain)
-      }
+      // Toggle HTTP domain filter (多选)
+      toggleDomain(domain)
+    }
+  }
+
+  // Handle "All Domains" click
+  const handleAllDomainsClick = () => {
+    if (currentTab === 'websocket') {
+      setWsFilter('host', '')
+    } else {
+      clearDomains()
     }
   }
 
@@ -140,7 +179,15 @@ export function Sidebar() {
     if (currentTab === 'websocket') {
       return wsFilters.host === domain
     }
-    return httpFilters.domain === domain
+    return httpFilters.domains.includes(domain)
+  }
+
+  // Check if "All Domains" is selected
+  const isAllDomainsSelected = () => {
+    if (currentTab === 'websocket') {
+      return !wsFilters.host
+    }
+    return httpFilters.domains.length === 0
   }
 
   // Cycle: None -> Whitelist (Highlight) -> Blacklist (Hide) -> None
@@ -198,46 +245,97 @@ export function Sidebar() {
               <span className="text-sm">📱</span>
               Devices
             </span>
-            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-2xs font-bold">{devices.length}</span>
+            <div className="flex items-center gap-2">
+              {hiddenDevicesCount > 0 && !showAllDevices && (
+                <button
+                  onClick={() => setShowAllDevices(true)}
+                  className="text-2xs text-text-muted hover:text-primary transition-colors"
+                  title="显示所有设备"
+                >
+                  +{hiddenDevicesCount} 更多
+                </button>
+              )}
+              {showAllDevices && (
+                <button
+                  onClick={() => setShowAllDevices(false)}
+                  className="text-2xs text-text-muted hover:text-primary transition-colors"
+                  title="只显示收藏设备"
+                >
+                  收起
+                </button>
+              )}
+              <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-2xs font-bold">{devices.length}</span>
+            </div>
           </div>
 
           <div className="space-y-1.5">
-            {devices.map(device => (
-              <div
-                key={device.deviceId}
-                onClick={() => handleDeviceClick(device.deviceId)}
-                className={clsx(
-                  "group flex items-center gap-3 px-3 py-3 rounded-lg cursor-pointer transition-colors",
-                  currentDeviceId === device.deviceId
-                    ? "bg-primary/10 text-primary border border-primary/20"
-                    : "text-text-secondary hover:bg-bg-light hover:text-text-primary border border-transparent"
-                )}
-              >
-                <div className="relative flex-shrink-0">
-                  <div className={clsx(
-                    "w-10 h-10 rounded-lg flex items-center justify-center",
+            {displayedDevices.map(device => {
+              const isFavorite = favoriteDeviceIds.has(device.deviceId)
+              return (
+                <div
+                  key={device.deviceId}
+                  onClick={() => handleDeviceClick(device.deviceId)}
+                  className={clsx(
+                    "group flex items-center gap-3 px-3 py-3 rounded-lg cursor-pointer transition-colors",
                     currentDeviceId === device.deviceId
-                      ? "bg-primary/20"
-                      : "bg-bg-medium"
-                  )}>
-                    <span className="text-xl">📱</span>
-                  </div>
-                  {device.isOnline && (
-                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-bg-dark rounded-full" />
+                      ? "bg-primary text-bg-darkest"
+                      : "text-text-secondary hover:bg-bg-light hover:text-text-primary"
                   )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium truncate text-sm">{device.deviceName}</div>
-                  <div className="text-2xs text-text-muted truncate mt-0.5">
-                    {device.appName} <span className="opacity-60">{device.appVersion} ({device.buildNumber})</span>
+                >
+                  <div className="relative flex-shrink-0">
+                    <div className={clsx(
+                      "w-10 h-10 rounded-lg flex items-center justify-center",
+                      currentDeviceId === device.deviceId
+                        ? "bg-bg-darkest/20"
+                        : "bg-bg-medium"
+                    )}>
+                      <span className="text-xl">📱</span>
+                    </div>
+                    {device.isOnline && (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-bg-dark rounded-full" />
+                    )}
                   </div>
-                  <div className="text-2xs text-text-muted truncate mt-0.5">
-                    {device.platform} <span className="opacity-60">{device.systemVersion}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium truncate text-sm flex items-center gap-1">
+                      {device.deviceName}
+                      {isFavorite && <span className="text-yellow-400 text-xs">⭐</span>}
+                    </div>
+                    <div className="text-2xs text-text-muted truncate mt-0.5">
+                      {device.appName} <span className="opacity-60">{device.appVersion} ({device.buildNumber})</span>
+                    </div>
+                    <div className="text-2xs text-text-muted truncate mt-0.5">
+                      {device.platform} <span className="opacity-60">{device.systemVersion}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={(e) => handleToggleFavorite(e, device.deviceId)}
+                      className={clsx(
+                        "p-1.5 rounded transition-all",
+                        isFavorite
+                          ? "text-yellow-400 hover:text-yellow-300"
+                          : "text-text-muted opacity-0 group-hover:opacity-100 hover:text-yellow-400"
+                      )}
+                      title={isFavorite ? "取消收藏" : "收藏设备"}
+                    >
+                      {isFavorite ? "⭐" : "☆"}
+                    </button>
+                    <span className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity text-sm">→</span>
                   </div>
                 </div>
-                <span className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity text-sm">→</span>
+              )
+            })}
+
+            {displayedDevices.length === 0 && devices.length > 0 && (
+              <div className="px-4 py-4 text-center text-xs text-text-muted">
+                <button
+                  onClick={() => setShowAllDevices(true)}
+                  className="text-primary hover:underline"
+                >
+                  显示全部 {devices.length} 个设备
+                </button>
               </div>
-            ))}
+            )}
 
             {devices.length === 0 && !isServerOnline && (
               <div className="px-4 py-6 text-center text-xs text-text-muted bg-bg-light/20 rounded-lg border border-dashed border-border">
@@ -279,6 +377,37 @@ export function Sidebar() {
             </div>
 
             <div className="space-y-0.5 max-h-[400px] overflow-y-auto pr-1">
+              {/* "All Domains" Option */}
+              <div
+                onClick={handleAllDomainsClick}
+                className={clsx(
+                  "flex items-center justify-between px-3 py-2 rounded cursor-pointer text-xs transition-colors group",
+                  isAllDomainsSelected()
+                    ? "bg-primary text-bg-darkest font-medium"
+                    : "text-text-secondary hover:bg-bg-light"
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm">📋</span>
+                  <span className="font-medium">
+                    {currentTab === 'websocket' ? '全部主机' : '全部域名'}
+                  </span>
+                </div>
+                <span className={clsx(
+                  "font-mono text-2xs px-1.5 py-0.5 rounded",
+                  isAllDomainsSelected()
+                    ? "text-bg-darkest font-bold bg-bg-darkest/20"
+                    : "opacity-60 bg-bg-medium"
+                )}>
+                  {domainStats.reduce((sum, { count }) => sum + count, 0)}
+                </span>
+              </div>
+
+              {/* Divider */}
+              {domainStats.length > 0 && (
+                <div className="border-t border-border-subtle my-1" />
+              )}
+
               {filteredDomainStats.map(({ domain, count }) => {
                 const rule = getDomainRule(domain)
                 const isWhitelist = rule?.action === 'highlight'
@@ -293,12 +422,22 @@ export function Sidebar() {
                     className={clsx(
                       "flex items-center justify-between px-3 py-2 rounded cursor-pointer text-xs transition-colors group",
                       isSelected
-                        ? "bg-accent-blue/15 text-accent-blue font-medium border border-accent-blue/20"
-                        : "text-text-secondary hover:bg-bg-light border border-transparent",
+                        ? "bg-accent-blue text-white font-medium"
+                        : "text-text-secondary hover:bg-bg-light",
                       isHighlighted && "animate-domain-highlight"
                     )}
                   >
                     <div className="flex items-center gap-2 min-w-0">
+                      {/* Checkbox indicator for multi-select (HTTP only) */}
+                      {currentTab === 'http' && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleDomainClick(domain)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-4 h-4 min-w-4 min-h-4 flex-shrink-0 rounded border-border cursor-pointer accent-primary"
+                        />
+                      )}
                       {isWhitelist && <span className="text-yellow-500 text-xs" title="Highlighted">★</span>}
                       {isBlacklist && <span className="text-red-400 text-xs" title="Hidden">⛔</span>}
                       <span className={clsx(

@@ -2,10 +2,11 @@ import { useState, useCallback, useRef, useEffect, memo } from 'react'
 import type { WSSessionDetail as WSSessionDetailType, WSFrame, WSFrameDetail } from '@/types'
 import { formatSmartTime, formatBytes } from '@/utils/format'
 import { JSONTree } from './JSONTree'
+import { ProtobufViewer } from './ProtobufViewer'
 import { getWSFrameDetail } from '@/services/api'
 import clsx from 'clsx'
 
-type PayloadFormat = 'auto' | 'text' | 'json' | 'hex' | 'base64'
+type PayloadFormat = 'auto' | 'text' | 'json' | 'hex' | 'base64' | 'protobuf'
 
 interface WSSessionDetailProps {
   deviceId: string
@@ -335,7 +336,7 @@ const FrameItem = memo(function FrameItem({
     }
 
     const { payloadText, payloadBase64 } = frameDetail
-    const currentFormat = format === 'auto' ? detectBestFormat(payloadText) : format
+    const currentFormat = format === 'auto' ? detectBestFormat(payloadText, payloadBase64) : format
 
     switch (currentFormat) {
       case 'json': {
@@ -372,6 +373,12 @@ const FrameItem = memo(function FrameItem({
           <pre className="bg-bg-dark rounded-lg p-3 text-xs font-mono text-text-secondary overflow-auto max-h-60 whitespace-pre-wrap break-all">
             {payloadBase64}
           </pre>
+        )
+      case 'protobuf':
+        return (
+          <div className="bg-bg-dark rounded-lg max-h-80 overflow-auto">
+            <ProtobufViewer base64Data={payloadBase64} />
+          </div>
         )
       default:
         return (
@@ -446,7 +453,7 @@ const FrameItem = memo(function FrameItem({
           {frameDetail && (
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xs text-text-muted">格式:</span>
-              {(['auto', 'text', 'json', 'hex', 'base64'] as PayloadFormat[]).map((f) => (
+              {(['auto', 'text', 'json', 'protobuf', 'hex', 'base64'] as PayloadFormat[]).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFormat(f)}
@@ -470,8 +477,26 @@ const FrameItem = memo(function FrameItem({
 })
 
 // 检测最佳显示格式
-function detectBestFormat(payloadText: string | null): PayloadFormat {
-  if (!payloadText) return 'hex'
+function detectBestFormat(payloadText: string | null, payloadBase64?: string): PayloadFormat {
+  if (!payloadText) {
+    // 如果没有文本，可能是二进制数据，尝试检测 protobuf
+    if (payloadBase64) {
+      try {
+        const binary = atob(payloadBase64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i)
+        }
+        // 简单的 protobuf 检测：检查第一个字节是否是有效的 wire type
+        if (bytes.length > 0 && (bytes[0] & 0x07) <= 5) {
+          return 'protobuf'
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return 'hex'
+  }
   try {
     JSON.parse(payloadText)
     return 'json'

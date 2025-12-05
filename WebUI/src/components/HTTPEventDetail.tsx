@@ -29,6 +29,7 @@ export function HTTPEventDetail({
   const [activeTab, setActiveTab] = useState<'headers' | 'params' | 'body' | 'timing'>('headers')
   const [curlCommand, setCurlCommand] = useState<string | null>(null)
   const [curlLoading, setCurlLoading] = useState(false)
+  const [curlCopied, setCurlCopied] = useState(false)
   const [replayStatus, setReplayStatus] = useState<string | null>(null)
   const [isFavorite, setIsFavorite] = useState(event?.isFavorite ?? false)
   const [favoriteLoading, setFavoriteLoading] = useState(false)
@@ -62,6 +63,8 @@ export function HTTPEventDetail({
   const handleCopyCurl = async () => {
     if (curlCommand) {
       await navigator.clipboard.writeText(curlCommand)
+      setCurlCopied(true)
+      setTimeout(() => setCurlCopied(false), 2000)
       return
     }
 
@@ -70,6 +73,8 @@ export function HTTPEventDetail({
       const response = await getHTTPEventCurl(deviceId, event.id)
       setCurlCommand(response.curl)
       await navigator.clipboard.writeText(response.curl)
+      setCurlCopied(true)
+      setTimeout(() => setCurlCopied(false), 2000)
     } catch (error) {
       console.error('Failed to generate cURL:', error)
     } finally {
@@ -166,14 +171,14 @@ export function HTTPEventDetail({
           <button
             onClick={handleCopyCurl}
             disabled={curlLoading}
-            className="px-3 py-1.5 bg-bg-light border border-border rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 bg-bg-light border border-border-subtle rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
           >
-            {curlLoading ? '生成中...' : curlCommand ? '✓ 已复制 cURL' : '复制 cURL'}
+            {curlLoading ? '生成中...' : curlCopied ? '✓ 已复制' : '📋 复制 cURL'}
           </button>
           <button
             onClick={handleReplay}
             disabled={replayStatus !== null}
-            className="px-3 py-1.5 bg-primary/20 border border-primary/50 text-primary rounded text-xs hover:bg-primary/30 transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 bg-bg-light border border-border-subtle rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
           >
             {replayStatus || '🔄 重放请求'}
           </button>

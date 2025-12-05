@@ -39,20 +39,24 @@ struct ChaosController: RouteCollection {
         }
 
         let input = try req.content.decode(ChaosRuleInput.self)
+        
+        guard let chaos = input.chaos else {
+            throw Abort(.badRequest, reason: "Missing chaos type for new rule")
+        }
 
         let encoder = JSONEncoder()
-        let chaosJSON = try String(data: encoder.encode(input.chaos), encoding: .utf8) ?? "{}"
+        let chaosJSON = try String(data: encoder.encode(chaos), encoding: .utf8) ?? "{}"
 
         let model = ChaosRuleModel(
             id: UUID().uuidString,
             deviceId: deviceId,
-            name: input.name,
+            name: input.name ?? "",
             urlPattern: input.urlPattern,
             method: input.method,
-            probability: input.probability,
+            probability: input.probability ?? 1.0,
             chaosJSON: chaosJSON,
-            enabled: input.enabled,
-            priority: input.priority
+            enabled: input.enabled ?? true,
+            priority: input.priority ?? 0
         )
 
         try await model.save(on: req.db)
@@ -81,16 +85,18 @@ struct ChaosController: RouteCollection {
 
         let input = try req.content.decode(ChaosRuleInput.self)
 
-        let encoder = JSONEncoder()
-        let chaosJSON = try String(data: encoder.encode(input.chaos), encoding: .utf8) ?? "{}"
-
-        model.name = input.name
-        model.urlPattern = input.urlPattern
-        model.method = input.method
-        model.probability = input.probability
-        model.chaosJSON = chaosJSON
-        model.enabled = input.enabled
-        model.priority = input.priority
+        // 只更新提供的字段
+        if let name = input.name { model.name = name }
+        if let urlPattern = input.urlPattern { model.urlPattern = urlPattern }
+        if let method = input.method { model.method = method }
+        if let probability = input.probability { model.probability = probability }
+        if let chaos = input.chaos {
+            let encoder = JSONEncoder()
+            let chaosJSON = try String(data: encoder.encode(chaos), encoding: .utf8) ?? "{}"
+            model.chaosJSON = chaosJSON
+        }
+        if let enabled = input.enabled { model.enabled = enabled }
+        if let priority = input.priority { model.priority = priority }
 
         try await model.save(on: req.db)
 
@@ -143,13 +149,13 @@ struct ChaosController: RouteCollection {
 // MARK: - Input DTO
 
 struct ChaosRuleInput: Content {
-    let name: String
+    let name: String?
     let urlPattern: String?
     let method: String?
-    let probability: Double
-    let chaos: ChaosTypeDTO
-    let enabled: Bool
-    let priority: Int
+    let probability: Double?
+    let chaos: ChaosTypeDTO?
+    let enabled: Bool?
+    let priority: Int?
 }
 
 // MARK: - Database Model

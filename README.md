@@ -2,7 +2,13 @@
 
 一套专为内部 iOS App 设计的调试系统，类似于内部版的 Proxy Tool + Log Viewer。
 
+> [!IMPORTANT]
+>
+> **本项全部代码和文档均有 Agent AI 生成**
+
 > **当前版本**: v1.2.0 | [更新日志](docs/CHANGELOG.md) | [开发路线图](docs/ROADMAP.md)
+>
+> **最后更新**: 2025-12-05
 
 ## ✨ 功能特性
 

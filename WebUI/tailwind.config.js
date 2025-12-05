@@ -39,6 +39,7 @@ export default {
         border: {
           DEFAULT: 'var(--color-border)',
           light: 'var(--color-border-light)',
+          subtle: 'var(--color-border-subtle)',
           active: 'var(--color-border-active)',
           glass: 'var(--color-glass-border)',
         },

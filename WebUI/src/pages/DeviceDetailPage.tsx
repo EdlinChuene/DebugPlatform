@@ -61,7 +61,7 @@ export function DeviceDetailPage() {
     setSearchParams({ tab }, { replace: true })
   }, [setSearchParams])
 
-  const { currentDevice, selectDevice, clearSelection, toggleCapture, clearDeviceData } =
+  const { currentDevice, selectDevice, clearSelection, toggleCapture, clearDeviceData, toggleFavorite, isFavorite } =
     useDeviceStore()
   const { setConnected, setInDeviceDetail } = useConnectionStore()
   const toggleTheme = useThemeStore((s) => s.toggleTheme)
@@ -395,8 +395,22 @@ export function DeviceDetailPage() {
               <span className="text-2xl">📱</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold text-text-primary">
+              <h1 className="text-xl font-bold text-text-primary flex items-center gap-2">
                 {currentDevice?.deviceInfo.deviceName || '加载中...'}
+                {deviceId && (
+                  <button
+                    onClick={() => toggleFavorite(deviceId)}
+                    className={clsx(
+                      "p-1 rounded transition-colors",
+                      isFavorite(deviceId)
+                        ? "text-yellow-400 hover:text-yellow-300"
+                        : "text-text-muted hover:text-yellow-400"
+                    )}
+                    title={isFavorite(deviceId) ? "取消收藏" : "收藏设备"}
+                  >
+                    {isFavorite(deviceId) ? "⭐" : "☆"}
+                  </button>
+                )}
               </h1>
               {currentDevice && (
                 <p className="text-sm text-text-muted mt-0.5">
@@ -745,8 +759,8 @@ function HTTPTab({
               className={clsx(
                 "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all shadow-sm",
                 httpStore.filters.statusRange === '400-599'
-                  ? "bg-red-500/20 text-red-400 border-red-500/30 shadow-red-500/10"
-                  : "bg-bg-light text-text-secondary border-border/50 hover:bg-bg-lighter hover:border-border"
+                  ? "bg-red-500/20 text-red-400 border-red-500/10 shadow-red-500/10"
+                  : "bg-bg-light text-text-secondary border-border-subtle hover:bg-bg-lighter hover:border-border-light"
               )}
             >
               ⚠️ Errors
@@ -755,7 +769,7 @@ function HTTPTab({
         </div>
 
         <div className="flex items-center gap-4">
-          <span className="text-xs text-text-muted bg-bg-light/70 px-3 py-1.5 rounded-lg border border-border/30 font-medium">
+          <span className="text-xs text-text-muted bg-bg-light/70 px-3 py-1.5 rounded-lg border border-border-subtle font-medium">
             {filteredCount !== httpStore.events.length
               ? `${filteredCount} / ${httpStore.events.length}`
               : `${httpStore.events.length}`}{' '}

@@ -4,12 +4,38 @@ import * as api from '@/services/api'
 import { useHTTPStore } from './httpStore'
 import { useLogStore } from './logStore'
 
+// localStorage key for favorite devices
+const FAVORITE_DEVICES_KEY = 'debug-hub-favorite-devices'
+
+// Load favorites from localStorage
+const loadFavorites = (): Set<string> => {
+  try {
+    const saved = localStorage.getItem(FAVORITE_DEVICES_KEY)
+    if (saved) {
+      return new Set(JSON.parse(saved))
+    }
+  } catch (e) {
+    console.error('Failed to load favorite devices:', e)
+  }
+  return new Set()
+}
+
+// Save favorites to localStorage
+const saveFavorites = (favorites: Set<string>) => {
+  try {
+    localStorage.setItem(FAVORITE_DEVICES_KEY, JSON.stringify([...favorites]))
+  } catch (e) {
+    console.error('Failed to save favorite devices:', e)
+  }
+}
+
 interface DeviceState {
   devices: DeviceListItem[]
   currentDeviceId: string | null
   currentDevice: DeviceDetail | null
   isLoading: boolean
   error: string | null
+  favoriteDeviceIds: Set<string>
 
   // Actions
   fetchDevices: () => Promise<void>
@@ -17,6 +43,8 @@ interface DeviceState {
   clearSelection: () => void
   toggleCapture: (network: boolean, log: boolean) => Promise<void>
   clearDeviceData: () => Promise<void>
+  toggleFavorite: (deviceId: string) => void
+  isFavorite: (deviceId: string) => boolean
 }
 
 export const useDeviceStore = create<DeviceState>((set, get) => ({
@@ -25,6 +53,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   currentDevice: null,
   isLoading: false,
   error: null,
+  favoriteDeviceIds: loadFavorites(),
 
   fetchDevices: async () => {
     set({ isLoading: true, error: null })
@@ -73,6 +102,24 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
     } catch (error) {
       set({ error: (error as Error).message })
     }
+  },
+
+  toggleFavorite: (deviceId: string) => {
+    const { favoriteDeviceIds } = get()
+    const newFavorites = new Set(favoriteDeviceIds)
+
+    if (newFavorites.has(deviceId)) {
+      newFavorites.delete(deviceId)
+    } else {
+      newFavorites.add(deviceId)
+    }
+
+    saveFavorites(newFavorites)
+    set({ favoriteDeviceIds: newFavorites })
+  },
+
+  isFavorite: (deviceId: string) => {
+    return get().favoriteDeviceIds.has(deviceId)
   },
 }))
 

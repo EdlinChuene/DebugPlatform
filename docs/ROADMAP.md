@@ -15,6 +15,7 @@
 #### 断点恢复消息格式不一致
 
 **iOS SDK 端** (`BridgeMessage.swift`):
+
 ```swift
 struct BreakpointResumePayload {
     let breakpointId: String

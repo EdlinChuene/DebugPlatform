@@ -109,12 +109,12 @@ struct BreakpointController: RouteCollection {
         let model = BreakpointRuleModel(
             id: UUID().uuidString,
             deviceId: deviceId,
-            name: input.name,
+            name: input.name ?? "",
             urlPattern: input.urlPattern,
             method: input.method,
-            phase: input.phase,
-            enabled: input.enabled,
-            priority: input.priority
+            phase: input.phase ?? "request",
+            enabled: input.enabled ?? true,
+            priority: input.priority ?? 0
         )
 
         try await model.save(on: req.db)
@@ -143,12 +143,13 @@ struct BreakpointController: RouteCollection {
 
         let input = try req.content.decode(BreakpointRuleInput.self)
 
-        model.name = input.name
-        model.urlPattern = input.urlPattern
-        model.method = input.method
-        model.phase = input.phase
-        model.enabled = input.enabled
-        model.priority = input.priority
+        // 只更新提供的字段
+        if let name = input.name { model.name = name }
+        if let urlPattern = input.urlPattern { model.urlPattern = urlPattern }
+        if let method = input.method { model.method = method }
+        if let phase = input.phase { model.phase = phase }
+        if let enabled = input.enabled { model.enabled = enabled }
+        if let priority = input.priority { model.priority = priority }
 
         try await model.save(on: req.db)
 
@@ -226,12 +227,12 @@ struct BreakpointController: RouteCollection {
 // MARK: - Input DTO
 
 struct BreakpointRuleInput: Content {
-    let name: String
+    let name: String?
     let urlPattern: String?
     let method: String?
-    let phase: String
-    let enabled: Bool
-    let priority: Int
+    let phase: String?
+    let enabled: Bool?
+    let priority: Int?
 }
 
 // MARK: - Database Model
