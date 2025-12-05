@@ -4,15 +4,16 @@
 
 > [!IMPORTANT]
 >
-> **本项全部代码和文档均有 Agent AI 生成**
+> **本项全部代码和文档均由 Agent AI 生成**
 
 > **当前版本**: v1.3.0 | [更新日志](docs/CHANGELOG.md) | [开发路线图](docs/ROADMAP.md)
 >
-> **最后更新**: 2025-12-06
+> **最后更新**: 2025-12-05
 
 ## ✨ 功能特性
 
 ### 核心调试能力
+
 - 🌐 **HTTP/HTTPS 捕获** - URLProtocol 自动拦截 + URLSessionTaskMetrics 性能时间线
 - 🔌 **WebSocket 捕获** - 连接级监控 + 消息帧完整内容查看（Text/JSON/Hex/Base64）
 - 📝 **日志捕获** - CocoaLumberjack + os_log 支持
