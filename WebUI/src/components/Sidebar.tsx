@@ -288,7 +288,7 @@ export function Sidebar() {
                     <div className={clsx(
                       "w-10 h-10 rounded-lg flex items-center justify-center",
                       isSelected
-                        ? "bg-bg-darkest/20"
+                        ? "bg-bg-dark/30"
                         : "bg-bg-medium"
                     )}>
                       <span className="text-xl">{getPlatformIcon(device.platform)}</span>

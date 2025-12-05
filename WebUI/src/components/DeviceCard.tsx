@@ -36,10 +36,9 @@ export function DeviceCard({ device, style }: Props) {
           {/* Platform Icon */}
           <div className={clsx(
             'w-12 h-12 rounded-xl flex items-center justify-center text-2xl',
-            'bg-gradient-to-br',
             device.isOnline
-              ? 'from-primary/20 to-accent-blue/20 border border-primary/20'
-              : 'from-bg-light to-bg-medium border border-border'
+              ? 'bg-primary/10'
+              : 'bg-bg-medium'
           )}>
             {getPlatformIcon(device.platform)}
           </div>
