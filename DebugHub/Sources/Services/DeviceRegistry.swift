@@ -20,6 +20,7 @@ struct DeviceInfoDTO: Content {
     let appVersion: String
     let buildNumber: String
     let platform: String
+    let isSimulator: Bool
     var captureEnabled: Bool
     var logCaptureEnabled: Bool
 }

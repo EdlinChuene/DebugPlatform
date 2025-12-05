@@ -146,7 +146,7 @@ export const useDBStore = create<DBState>((set, get) => ({
     },
 
     loadTableData: async (deviceId: string, dbId: string, table: string) => {
-        const { page, pageSize, orderBy, ascending } = get()
+        const { page, pageSize, orderBy, ascending, tables } = get()
         set({ dataLoading: true, dataError: null })
         try {
             const result = await api.fetchTablePage(deviceId, dbId, table, {
@@ -155,7 +155,13 @@ export const useDBStore = create<DBState>((set, get) => ({
                 orderBy: orderBy ?? undefined,
                 ascending,
             })
-            set({ tableData: result, dataLoading: false })
+            // 同时更新 tables 列表中对应表的 rowCount
+            const updatedTables = tables.map(t =>
+                t.name === table && result.totalRows !== null
+                    ? { ...t, rowCount: result.totalRows }
+                    : t
+            )
+            set({ tableData: result, dataLoading: false, tables: updatedTables })
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : 'Failed to load table data'
             console.error('Failed to load table data:', error)

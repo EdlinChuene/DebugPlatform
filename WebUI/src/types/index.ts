@@ -8,6 +8,7 @@ export interface DeviceInfo {
   appVersion: string
   buildNumber: string
   platform: string
+  isSimulator: boolean
   captureEnabled: boolean
   logCaptureEnabled: boolean
 }
@@ -20,6 +21,7 @@ export interface DeviceListItem {
   buildNumber: string
   platform: string
   systemVersion: string
+  isSimulator: boolean
   isOnline: boolean
   lastSeenAt: string
   connectedAt: string

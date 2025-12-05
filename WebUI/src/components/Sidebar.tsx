@@ -271,13 +271,14 @@ export function Sidebar() {
           <div className="space-y-1.5">
             {displayedDevices.map(device => {
               const isFavorite = favoriteDeviceIds.has(device.deviceId)
+              const isSelected = currentDeviceId === device.deviceId
               return (
                 <div
                   key={device.deviceId}
                   onClick={() => handleDeviceClick(device.deviceId)}
                   className={clsx(
                     "group flex items-center gap-3 px-3 py-3 rounded-lg cursor-pointer transition-colors",
-                    currentDeviceId === device.deviceId
+                    isSelected
                       ? "bg-primary text-bg-darkest"
                       : "text-text-secondary hover:bg-bg-light hover:text-text-primary"
                   )}
@@ -285,7 +286,7 @@ export function Sidebar() {
                   <div className="relative flex-shrink-0">
                     <div className={clsx(
                       "w-10 h-10 rounded-lg flex items-center justify-center",
-                      currentDeviceId === device.deviceId
+                      isSelected
                         ? "bg-bg-darkest/20"
                         : "bg-bg-medium"
                     )}>
@@ -296,14 +297,30 @@ export function Sidebar() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate text-sm">
+                    <div className="font-medium truncate text-sm flex items-center gap-1.5">
                       {device.deviceName}
+                      {device.isSimulator && (
+                        <span className={clsx(
+                          "text-2xs px-1.5 py-0.5 rounded",
+                          isSelected
+                            ? "bg-bg-darkest/20 text-bg-darkest"
+                            : "bg-purple-500/20 text-purple-400"
+                        )} title="模拟器">
+                          💻
+                        </span>
+                      )}
                     </div>
-                    <div className="text-2xs text-text-muted truncate mt-0.5">
-                      {device.appName} <span className="opacity-60">{device.appVersion} ({device.buildNumber})</span>
+                    <div className={clsx(
+                      "text-2xs truncate mt-0.5",
+                      isSelected ? "text-bg-darkest/80" : "text-text-muted"
+                    )}>
+                      {device.appName} <span className={isSelected ? "text-bg-darkest/60" : "opacity-60"}>{device.appVersion} ({device.buildNumber})</span>
                     </div>
-                    <div className="text-2xs text-text-muted truncate mt-0.5">
-                      {device.platform} <span className="opacity-60">{device.systemVersion}</span>
+                    <div className={clsx(
+                      "text-2xs truncate mt-0.5",
+                      isSelected ? "text-bg-darkest/80" : "text-text-muted"
+                    )}>
+                      {device.platform} <span className={isSelected ? "text-bg-darkest/60" : "opacity-60"}>{device.systemVersion}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -313,13 +330,18 @@ export function Sidebar() {
                         "p-1.5 rounded transition-all",
                         isFavorite
                           ? "text-yellow-400 hover:text-yellow-300"
-                          : "text-text-muted opacity-0 group-hover:opacity-100 hover:text-yellow-400"
+                          : isSelected
+                            ? "text-bg-darkest/50 opacity-0 group-hover:opacity-100 hover:text-yellow-400"
+                            : "text-text-muted opacity-0 group-hover:opacity-100 hover:text-yellow-400"
                       )}
                       title={isFavorite ? "取消收藏" : "收藏设备"}
                     >
                       {isFavorite ? "⭐" : "☆"}
                     </button>
-                    <span className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity text-sm">→</span>
+                    <span className={clsx(
+                      "opacity-0 group-hover:opacity-100 transition-opacity text-sm",
+                      isSelected ? "text-bg-darkest/70" : "text-text-muted"
+                    )}>→</span>
                   </div>
                 </div>
               )

@@ -73,6 +73,7 @@ struct DeviceController: RouteCollection {
                 buildNumber: session.deviceInfo.buildNumber,
                 platform: session.deviceInfo.platform,
                 systemVersion: session.deviceInfo.systemVersion,
+                isSimulator: session.deviceInfo.isSimulator,
                 isOnline: true,
                 lastSeenAt: session.lastSeenAt,
                 connectedAt: session.connectedAt
@@ -198,6 +199,7 @@ struct DeviceListItemDTO: Content {
     let buildNumber: String
     let platform: String
     let systemVersion: String
+    let isSimulator: Bool
     let isOnline: Bool
     let lastSeenAt: Date
     let connectedAt: Date

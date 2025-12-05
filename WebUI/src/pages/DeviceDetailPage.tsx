@@ -414,6 +414,14 @@ export function DeviceDetailPage() {
             <div>
               <h1 className="text-xl font-bold text-text-primary flex items-center gap-2">
                 {currentDevice?.deviceInfo.deviceName || '加载中...'}
+                {currentDevice?.deviceInfo.isSimulator && (
+                  <span
+                    className="text-sm px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                    title="模拟器"
+                  >
+                    💻 模拟器
+                  </span>
+                )}
                 {deviceId && (
                   <button
                     onClick={() => toggleFavorite(deviceId)}

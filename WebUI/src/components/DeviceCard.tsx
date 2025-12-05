@@ -62,6 +62,14 @@ export function DeviceCard({ device, style }: Props) {
 
         {/* Status & Favorite */}
         <div className="flex items-center gap-2">
+          {device.isSimulator && (
+            <span
+              className="badge bg-purple-500/20 text-purple-400 border-purple-500/30"
+              title="模拟器"
+            >
+              💻 模拟器
+            </span>
+          )}
           <button
             onClick={handleToggleFavorite}
             className={clsx(
