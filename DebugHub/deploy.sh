@@ -339,16 +339,64 @@ check_swift() {
     return 0
 }
 
+# 查找合适版本的 Node.js
+find_suitable_node() {
+    local node_path=""
+    local node_version=""
+    
+    # 优先使用 Homebrew 安装的 Node.js
+    if [[ -x "/opt/homebrew/bin/node" ]]; then
+        node_path="/opt/homebrew/bin/node"
+        node_version=$("$node_path" --version 2>&1 | grep -oE '[0-9]+' | head -1)
+        if [[ $node_version -ge $MIN_NODE_VERSION ]]; then
+            echo "$node_path"
+            return 0
+        fi
+    fi
+    
+    # 检查 /usr/local/bin (Intel Mac Homebrew)
+    if [[ -x "/usr/local/bin/node" ]]; then
+        node_path="/usr/local/bin/node"
+        node_version=$("$node_path" --version 2>&1 | grep -oE '[0-9]+' | head -1)
+        if [[ $node_version -ge $MIN_NODE_VERSION ]]; then
+            echo "$node_path"
+            return 0
+        fi
+    fi
+    
+    # 回退到 PATH 中的 node
+    if command_exists node; then
+        echo "node"
+        return 0
+    fi
+    
+    return 1
+}
+
 check_node() {
-    if ! command_exists node; then
-        log_error "Node.js 未安装"
+    local node_cmd
+    node_cmd=$(find_suitable_node) || {
+        log_error "未找到 Node.js >= v$MIN_NODE_VERSION"
         log_info "安装 Node.js:"
         log_info "  brew install node"
         return 1
+    }
+    
+    # 导出 NODE 和 NPM 路径供后续使用
+    export NODE_CMD="$node_cmd"
+    if [[ "$node_cmd" != "node" ]]; then
+        local node_dir
+        node_dir=$(dirname "$node_cmd")
+        export NPM_CMD="$node_dir/npm"
+        # 临时将正确的 Node 路径加到 PATH 最前面
+        export PATH="$node_dir:$PATH"
+        log_info "使用 Node.js: $node_cmd"
+    else
+        export NPM_CMD="npm"
     fi
     
     local node_version
-    node_version=$(node --version 2>&1 | grep -oE '[0-9]+' | head -1)
+    node_version=$("$NODE_CMD" --version 2>&1 | grep -oE '[0-9]+' | head -1)
     
     if [[ -z "$node_version" ]]; then
         log_warning "无法检测 Node.js 版本"
@@ -357,12 +405,12 @@ check_node() {
         return 1
     fi
     
-    if ! command_exists npm; then
+    if ! command -v "$NPM_CMD" &> /dev/null; then
         log_error "npm 未安装"
         return 1
     fi
     
-    log_success "Node.js v$node_version"
+    log_success "Node.js v$node_version ($NODE_CMD)"
     return 0
 }
 
