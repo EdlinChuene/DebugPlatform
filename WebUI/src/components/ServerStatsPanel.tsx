@@ -6,14 +6,14 @@ function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return '-'
   if (bytes === 0) return '0 B'
   if (isNaN(bytes)) return '-'
-  
+
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  
+
   // 确保索引不超出数组范围
   const sizeIndex = Math.min(i, sizes.length - 1)
-  
+
   return parseFloat((bytes / Math.pow(k, sizeIndex)).toFixed(1)) + ' ' + sizes[sizeIndex]
 }
 
@@ -97,19 +97,19 @@ export function ServerStatsPanel() {
           <StatRow icon="📝" label="日志条目" value={formatNumber(stats.logEventCount)} />
           <StatRow icon="🔌" label="WS 会话" value={formatNumber(stats.wsSessionCount)} />
           <StatRow icon="📨" label="WS 帧" value={formatNumber(stats.wsFrameCount)} />
-          
+
           {/* 规则统计 */}
           <div className="text-text-muted/60 text-2xs uppercase tracking-wider mt-2 mb-1">规则配置</div>
           <StatRow icon="🎭" label="Mock 规则" value={stats.mockRuleCount} />
           <StatRow icon="⏸️" label="断点规则" value={stats.breakpointRuleCount} />
           <StatRow icon="🌀" label="混沌规则" value={stats.chaosRuleCount} />
           <StatRow icon="🚦" label="流量规则" value={stats.trafficRuleCount} />
-          
+
           {/* 设备统计 */}
           <div className="text-text-muted/60 text-2xs uppercase tracking-wider mt-2 mb-1">设备连接</div>
           <StatRow icon="📱" label="在线设备" value={stats.onlineDeviceCount} />
           <StatRow icon="📋" label="历史会话" value={stats.deviceSessionCount} />
-          
+
           {/* 数据库大小 */}
           {stats.databaseSizeBytes !== null && (
             <>
@@ -117,7 +117,7 @@ export function ServerStatsPanel() {
               <StatRow icon="💾" label="数据库大小" value={formatBytes(stats.databaseSizeBytes)} />
             </>
           )}
-          
+
           {/* 刷新按钮 */}
           <button
             onClick={fetchStats}
