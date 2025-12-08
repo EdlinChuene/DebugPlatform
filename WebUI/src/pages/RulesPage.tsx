@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useRuleStore } from '@/stores/ruleStore'
 import { TrafficRule } from '@/types'
+import { BackIcon, SettingsIcon, LogIcon, StarIcon, ClearIcon, TagIcon, EditIcon, TrashIcon } from '@/components/icons'
 import clsx from 'clsx'
 
 export function RulesPage() {
@@ -60,18 +61,18 @@ export function RulesPage() {
                         to="/"
                         className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors group"
                     >
-                        <span className="group-hover:-translate-x-1 transition-transform">←</span>
+                        <span className="group-hover:-translate-x-1 transition-transform"><BackIcon size={16} /></span>
                         <span>返回</span>
                     </Link>
 
                     <div className="h-6 w-px bg-border" />
 
                     <div className="flex items-center gap-3 flex-1">
-                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center border border-border">
-                            <span className="text-lg">⚙️</span>
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center border border-border text-primary">
+                            <SettingsIcon size={20} />
                         </div>
                         <div>
-                            <h1 className="text-lg font-semibold text-text-primary">Traffic Rules</h1>
+                            <h1 className="text-lg font-semibold text-text-primary">流量规则</h1>
                             <p className="text-xs text-text-muted">管理域名高亮、隐藏等过滤规则</p>
                         </div>
                     </div>
@@ -93,7 +94,7 @@ export function RulesPage() {
                     </div>
                 ) : rules.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-text-muted">
-                        <div className="text-4xl mb-4">📋</div>
+                        <div className="mb-4 opacity-50"><LogIcon size={48} /></div>
                         <h2 className="text-lg font-medium text-text-primary mb-2">暂无规则</h2>
                         <p className="text-sm mb-4">点击"新建规则"添加流量过滤规则</p>
                         <button onClick={handleCreateNew} className="btn btn-primary">
@@ -146,23 +147,23 @@ export function RulesPage() {
                                                 rule.action === 'mark' && "badge-info"
                                             )}
                                         >
-                                            {rule.action === 'highlight' && '⭐ 高亮'}
-                                            {rule.action === 'hide' && '🚫 隐藏'}
-                                            {rule.action === 'mark' && '🏷️ 标记'}
+                                            {rule.action === 'highlight' && <><StarIcon size={14} filled className="mr-1" /> 高亮</>}
+                                            {rule.action === 'hide' && <><ClearIcon size={14} className="mr-1" /> 隐藏</>}
+                                            {rule.action === 'mark' && <><TagIcon size={14} className="mr-1" /> 标记</>}
                                         </span>
                                         <button
                                             onClick={() => handleEdit(rule)}
                                             className="btn btn-ghost px-3"
                                             title="编辑"
                                         >
-                                            ✏️
+                                            <EditIcon size={16} />
                                         </button>
                                         <button
                                             onClick={() => rule.id && handleDelete(rule.id)}
                                             className="btn btn-ghost px-3 text-red-400 hover:bg-red-500/10"
                                             title="删除"
                                         >
-                                            🗑️
+                                            <TrashIcon size={16} />
                                         </button>
                                     </div>
                                 </div>
@@ -226,9 +227,9 @@ export function RulesPage() {
                                         onChange={(e) => setEditingRule({ ...editingRule, action: e.target.value as any })}
                                         className="w-full px-3 py-2 bg-bg-medium border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary"
                                     >
-                                        <option value="highlight">⭐ 高亮显示</option>
-                                        <option value="hide">🚫 隐藏</option>
-                                        <option value="mark">🏷️ 标记</option>
+                                        <option value="highlight">高亮显示</option>
+                                        <option value="hide">隐藏</option>
+                                        <option value="mark">标记</option>
                                     </select>
                                 </div>
                             </div>

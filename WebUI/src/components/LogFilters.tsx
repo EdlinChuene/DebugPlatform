@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { LogLevel } from '@/types'
 import { SEARCH_HELP } from '@/utils/logSearch'
 import clsx from 'clsx'
+import { XMarkIcon, WarningIcon, InfoIcon, BugIcon, FileTextIcon } from './icons'
 
 interface Props {
   minLevel: LogLevel
@@ -19,22 +20,13 @@ interface Props {
 }
 
 // 日志级别配置（从高到低排列，符合用户预期）
-const logLevels: { level: LogLevel; label: string; emoji: string; bgClass: string; textClass: string }[] = [
-  { level: 'error', label: 'Error', emoji: '❌', bgClass: 'bg-level-error', textClass: 'text-white' },
-  { level: 'warning', label: 'Warning', emoji: '⚠️', bgClass: 'bg-level-warning', textClass: 'text-white' },
-  { level: 'info', label: 'Info', emoji: 'ℹ️', bgClass: 'bg-level-info', textClass: 'text-white' },
-  { level: 'debug', label: 'Debug', emoji: '🔍', bgClass: 'bg-level-debug', textClass: 'text-white' },
-  { level: 'verbose', label: 'Verbose', emoji: '📝', bgClass: 'bg-level-verbose', textClass: 'text-white' },
+const logLevels: { level: LogLevel; label: string; icon: React.ReactNode; bgClass: string; textClass: string }[] = [
+  { level: 'error', label: 'Error', icon: <XMarkIcon size={14} />, bgClass: 'bg-level-error', textClass: 'text-white' },
+  { level: 'warning', label: 'Warning', icon: <WarningIcon size={14} />, bgClass: 'bg-level-warning', textClass: 'text-white' },
+  { level: 'info', label: 'Info', icon: <InfoIcon size={14} />, bgClass: 'bg-level-info', textClass: 'text-white' },
+  { level: 'debug', label: 'Debug', icon: <BugIcon size={14} />, bgClass: 'bg-level-debug', textClass: 'text-white' },
+  { level: 'verbose', label: 'Verbose', icon: <FileTextIcon size={14} />, bgClass: 'bg-level-verbose', textClass: 'text-white' },
 ]
-
-// 日志级别优先级（用于显示提示）
-const LEVEL_PRIORITY: Record<LogLevel, number> = {
-  verbose: 0,
-  debug: 1,
-  info: 2,
-  warning: 3,
-  error: 4,
-}
 
 export function LogFilters({
   minLevel,
@@ -53,7 +45,6 @@ export function LogFilters({
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const helpRef = useRef<HTMLDivElement>(null)
-  const currentPriority = LEVEL_PRIORITY[minLevel]
 
   // 点击外部关闭帮助
   useEffect(() => {
@@ -70,10 +61,8 @@ export function LogFilters({
     <div className="flex flex-wrap items-center gap-4">
       {/* Level Filters - 单选层级模式 */}
       <div className="flex gap-1">
-        {logLevels.map(({ level, label, emoji, bgClass, textClass }) => {
+        {logLevels.map(({ level, label, icon, bgClass, textClass }) => {
           const isActive = level === minLevel
-          const priority = LEVEL_PRIORITY[level]
-          const isIncluded = priority >= currentPriority
 
           return (
             <button
@@ -81,15 +70,13 @@ export function LogFilters({
               onClick={() => onMinLevelChange(level)}
               title={`显示 ${label} 及更高级别日志`}
               className={clsx(
-                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all',
+                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap',
                 isActive
                   ? `${bgClass} ${textClass} shadow-sm`
-                  : isIncluded
-                    ? `${bgClass}/30 ${textClass.replace('text-white', 'text-' + level.replace('level-', ''))}`
-                    : 'bg-bg-light/50 text-text-muted hover:bg-bg-light border border-transparent opacity-50'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
               )}
             >
-              <span>{emoji}</span>
+              <span>{icon}</span>
               <span>{label}</span>
             </button>
           )
@@ -178,7 +165,7 @@ export function LogFilters({
             type="text"
             value={searchText}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="🔍 搜索日志内容..."
+            placeholder="搜索日志内容..."
             className="input flex-1"
           />
         )}

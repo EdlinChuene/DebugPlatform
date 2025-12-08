@@ -145,6 +145,7 @@ struct MockRuleDTO: Content {
         var headerContains: [String: String]?
         var bodyContains: String?
         var wsPayloadContains: String?
+        var enabled: Bool?
     }
 
     struct Action: Codable {

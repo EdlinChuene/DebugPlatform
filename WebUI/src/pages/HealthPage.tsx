@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { truncateAllData } from '@/services/api'
-import { DangerConfirmDialog } from '@/components/DangerConfirmDialog'
+import { XIcon, SuccessCheckIcon, OnlineIcon, PackageIcon, ClockIcon, IPhoneIcon, BookIcon } from '@/components/icons'
 
 interface HealthData {
   status: string
@@ -46,8 +45,6 @@ export function HealthPage() {
   const [error, setError] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [displayUptime, setDisplayUptime] = useState('--:--:--')
-  const [showTruncateDialog, setShowTruncateDialog] = useState(false)
-  const [isTruncating, setIsTruncating] = useState(false)
 
   // 保存 startTime 的时间戳，避免每次重新解析
   const startTimeRef = useRef<number | null>(null)
@@ -100,20 +97,6 @@ export function HealthPage() {
 
   const isHealthy = !error && health?.status === 'healthy'
 
-  const handleTruncateAll = async () => {
-    setIsTruncating(true)
-    try {
-      await truncateAllData()
-      setShowTruncateDialog(false)
-      // 可选：刷新页面或显示成功提示
-      alert('所有数据已清空')
-    } catch (err) {
-      alert('清空数据失败: ' + (err instanceof Error ? err.message : '未知错误'))
-    } finally {
-      setIsTruncating(false)
-    }
-  }
-
   return (
     <div className="h-full overflow-auto flex items-center justify-center p-6">
       {/* Background effects */}
@@ -131,7 +114,7 @@ export function HealthPage() {
             <div className={`absolute inset-0 rounded-full animate-ping opacity-25 ${error ? 'bg-red-500' : 'bg-green-500'
               }`} style={{ animationDuration: '2s' }} />
             {/* Icon */}
-            <span className="relative z-10">{error ? '❌' : '💚'}</span>
+            <span className="relative z-10">{error ? <XIcon size={48} /> : <SuccessCheckIcon size={48} />}</span>
           </div>
 
           {/* Title */}
@@ -147,24 +130,24 @@ export function HealthPage() {
             <InfoCard
               label="状态"
               value={health?.status?.toUpperCase() || '--'}
-              icon="🟢"
+              icon={<OnlineIcon size={16} />}
               highlight={isHealthy}
             />
             <InfoCard
               label="版本"
               value={health?.version || '--'}
-              icon="📦"
+              icon={<PackageIcon size={16} />}
             />
             <InfoCard
               label="运行时间"
               value={displayUptime}
-              icon="⏱️"
+              icon={<ClockIcon size={16} />}
               mono
             />
             <InfoCard
               label="当前时间"
               value={currentTime.toLocaleTimeString('zh-CN')}
-              icon="🕐"
+              icon={<ClockIcon size={16} />}
               mono
             />
           </div>
@@ -180,31 +163,20 @@ export function HealthPage() {
           )}
 
           {/* Navigation */}
-          <nav className="flex justify-center gap-3 mb-6">
+          <nav className="flex justify-center gap-3">
             <Link
               to="/"
-              className="btn btn-secondary"
+              className="btn btn-secondary flex items-center gap-2"
             >
-              📱 设备列表
+              <IPhoneIcon size={16} /> 设备列表
             </Link>
             <Link
               to="/api-docs"
-              className="btn btn-secondary"
+              className="btn btn-secondary flex items-center gap-2"
             >
-              📚 API 文档
+              <BookIcon size={16} /> API 文档
             </Link>
           </nav>
-
-          {/* Danger Zone */}
-          <div className="pt-6 border-t border-border">
-            <p className="text-xs text-text-muted mb-3">危险操作</p>
-            <button
-              onClick={() => setShowTruncateDialog(true)}
-              className="btn bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
-            >
-              🗑️ 清空所有数据
-            </button>
-          </div>
         </div>
 
         {/* Footer */}
@@ -212,18 +184,6 @@ export function HealthPage() {
           <span className="opacity-70">Debug Hub © 2025 Sun</span>
         </p>
       </div>
-
-      {/* Truncate Confirmation Dialog */}
-      <DangerConfirmDialog
-        isOpen={showTruncateDialog}
-        title="清空所有数据"
-        message="此操作将删除数据库中的所有数据，包括所有设备的 HTTP 事件、日志、WebSocket 会话等。此操作不可撤销！"
-        confirmWord="DELETE"
-        confirmText="确认清空"
-        loading={isTruncating}
-        onConfirm={handleTruncateAll}
-        onClose={() => setShowTruncateDialog(false)}
-      />
     </div>
   )
 }
@@ -237,7 +197,7 @@ function InfoCard({
 }: {
   label: string
   value: string
-  icon: string
+  icon: React.ReactNode
   mono?: boolean
   highlight?: boolean
 }) {
@@ -245,7 +205,7 @@ function InfoCard({
     <div className={`bg-bg-medium/50 rounded-xl p-4 border border-border transition-all ${highlight ? 'border-green-500/30' : ''
       }`}>
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-sm">{icon}</span>
+        {icon}
         <span className="text-xs text-text-muted uppercase tracking-wider">{label}</span>
       </div>
       <div className={`text-xl font-semibold text-primary ${mono ? 'font-mono' : ''}`}>

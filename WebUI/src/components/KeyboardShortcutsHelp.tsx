@@ -6,26 +6,34 @@ interface Props {
 }
 
 const shortcuts = [
-  { category: '导航', items: [
-    { keys: ['↑', '↓'], description: '上/下选择请求' },
-    { keys: ['Enter'], description: '查看详情' },
-    { keys: ['Esc'], description: '取消选择/关闭面板' },
-  ]},
-  { category: '操作', items: [
-    { keys: ['⌘/Ctrl', 'K'], description: '搜索' },
-    { keys: ['⌘/Ctrl', 'R'], description: '刷新列表' },
-    { keys: ['⌘/Ctrl', 'L'], description: '清空列表' },
-    { keys: ['⌘/Ctrl', 'E'], description: '导出数据' },
-    { keys: ['⌘/Ctrl', 'A'], description: '全选' },
-  ]},
-  { category: '收藏与删除', items: [
-    { keys: ['F'], description: '收藏/取消收藏选中项' },
-    { keys: ['Delete', '/', 'Backspace'], description: '删除选中项' },
-  ]},
-  { category: '界面', items: [
-    { keys: ['⌘/Ctrl', 'T'], description: '切换主题' },
-    { keys: ['⌘/Ctrl', '/'], description: '显示快捷键帮助' },
-  ]},
+  {
+    category: '导航', items: [
+      { keys: ['↑', '↓'], description: '上/下选择请求' },
+      { keys: ['Enter'], description: '查看详情' },
+      { keys: ['Esc'], description: '取消选择/关闭面板' },
+    ]
+  },
+  {
+    category: '操作', items: [
+      { keys: ['⌘/Ctrl', 'K'], description: '搜索' },
+      { keys: ['⌘/Ctrl', 'R'], description: '刷新列表' },
+      { keys: ['⌘/Ctrl', 'L'], description: '清屏' },
+      { keys: ['⌘/Ctrl', 'E'], description: '导出数据' },
+      { keys: ['⌘/Ctrl', 'A'], description: '全选' },
+    ]
+  },
+  {
+    category: '收藏与删除', items: [
+      { keys: ['F'], description: '收藏/取消收藏选中项' },
+      { keys: ['Delete', '/', 'Backspace'], description: '删除选中项' },
+    ]
+  },
+  {
+    category: '界面', items: [
+      { keys: ['⌘/Ctrl', 'T'], description: '切换主题' },
+      { keys: ['⌘/Ctrl', '/'], description: '显示快捷键帮助' },
+    ]
+  },
 ]
 
 export function KeyboardShortcutsHelp({ isOpen, onClose }: Props) {

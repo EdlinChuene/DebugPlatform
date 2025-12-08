@@ -1,10 +1,28 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { DeviceCard } from '@/components/DeviceCard'
+import { RefreshIcon, IPhoneIcon, ClearIcon } from '@/components/icons'
+import clsx from 'clsx'
+
+type FilterType = 'all' | 'online' | 'offline'
 
 export function DeviceListPage() {
-  const { devices, isLoading, fetchDevices } = useDeviceStore()
+  const { devices, isLoading, fetchDevices, removeAllOfflineDevices } = useDeviceStore()
+  const [filter, setFilter] = useState<FilterType>('all')
+
   const onlineCount = devices.filter(d => d.isOnline).length
+  const offlineCount = devices.filter(d => !d.isOnline).length
+
+  const filteredDevices = useMemo(() => {
+    switch (filter) {
+      case 'online':
+        return devices.filter(d => d.isOnline)
+      case 'offline':
+        return devices.filter(d => !d.isOnline)
+      default:
+        return devices
+    }
+  }, [devices, filter])
 
   useEffect(() => {
     fetchDevices()
@@ -13,6 +31,12 @@ export function DeviceListPage() {
     const interval = setInterval(fetchDevices, 5000)
     return () => clearInterval(interval)
   }, [fetchDevices])
+
+  const handleRemoveAllOffline = async () => {
+    if (confirm(`确定要移除所有 ${offlineCount} 个离线设备吗？`)) {
+      await removeAllOfflineDevices()
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -27,22 +51,78 @@ export function DeviceListPage() {
               管理已连接的调试设备 · {onlineCount} 在线 / {devices.length} 总计
             </p>
           </div>
-          <button
-            onClick={fetchDevices}
-            disabled={isLoading}
-            className="btn btn-primary disabled:opacity-50"
-          >
-            <span className={isLoading ? 'animate-spin' : ''}>🔄</span>
-            <span>刷新</span>
-          </button>
+          <div className="flex items-center gap-3">
+            {/* 筛选按钮组 */}
+            <div className="flex items-center gap-0.5 p-0.5 bg-bg-medium rounded-lg border border-border">
+              <button
+                onClick={() => setFilter('all')}
+                className={clsx(
+                  'px-3 py-1.5 text-xs font-medium rounded transition-colors',
+                  filter === 'all'
+                    ? 'bg-primary text-bg-darkest'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
+                )}
+              >
+                全部 ({devices.length})
+              </button>
+              <button
+                onClick={() => setFilter('online')}
+                className={clsx(
+                  'px-3 py-1.5 text-xs font-medium rounded transition-colors',
+                  filter === 'online'
+                    ? 'bg-green-500 text-white'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
+                )}
+              >
+                在线 ({onlineCount})
+              </button>
+              <button
+                onClick={() => setFilter('offline')}
+                className={clsx(
+                  'px-3 py-1.5 text-xs font-medium rounded transition-colors',
+                  filter === 'offline'
+                    ? 'bg-gray-500 text-white'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
+                )}
+              >
+                离线 ({offlineCount})
+              </button>
+            </div>
+
+            {offlineCount > 0 && (
+              <button
+                onClick={handleRemoveAllOffline}
+                className="btn btn-secondary text-red-400 hover:text-red-300 flex items-center gap-2"
+              >
+                <ClearIcon size={16} />
+                <span>移除离线</span>
+              </button>
+            )}
+            <button
+              onClick={fetchDevices}
+              disabled={isLoading}
+              className="btn btn-primary disabled:opacity-50 flex items-center gap-2"
+            >
+              <span className={isLoading ? 'animate-spin' : ''}>
+                <RefreshIcon size={16} />
+              </span>
+              <span>刷新</span>
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
-        {devices.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {devices.map((device, index) => (
+      {/* Content - 加载时添加闪烁效果 */}
+      <div className={clsx(
+        "flex-1 overflow-auto p-6 transition-opacity duration-300",
+        isLoading && "opacity-70"
+      )}>
+        {filteredDevices.length > 0 ? (
+          <div className={clsx(
+            "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
+            isLoading && "animate-pulse"
+          )}>
+            {filteredDevices.map((device, index) => (
               <DeviceCard
                 key={device.deviceId}
                 device={device}
@@ -51,14 +131,31 @@ export function DeviceListPage() {
             ))}
           </div>
         ) : (
-          <EmptyState isLoading={isLoading} />
+          <EmptyState isLoading={isLoading} filter={filter} totalCount={devices.length} />
         )}
       </div>
     </div>
   )
 }
 
-function EmptyState({ isLoading }: { isLoading: boolean }) {
+function EmptyState({ isLoading, filter, totalCount }: { isLoading: boolean; filter: FilterType; totalCount: number }) {
+  // 如果有设备但当前筛选结果为空
+  if (totalCount > 0 && !isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full">
+        <div className="glass-card p-12 text-center max-w-md">
+          <IPhoneIcon size={48} className="mx-auto mb-4 text-text-muted opacity-50" />
+          <h2 className="text-xl font-semibold text-text-primary mb-2">
+            没有{filter === 'online' ? '在线' : '离线'}设备
+          </h2>
+          <p className="text-text-muted">
+            {filter === 'online' ? '当前没有设备在线' : '所有设备都在线'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col items-center justify-center h-full">
       <div className="glass-card p-12 text-center max-w-md">
@@ -70,8 +167,8 @@ function EmptyState({ isLoading }: { isLoading: boolean }) {
           </>
         ) : (
           <>
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-bg-light flex items-center justify-center">
-              <span className="text-4xl opacity-50">📱</span>
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-bg-light flex items-center justify-center text-text-muted">
+              <IPhoneIcon size={40} />
             </div>
             <h2 className="text-lg font-semibold text-text-primary mb-2">
               暂无在线设备
@@ -82,7 +179,7 @@ function EmptyState({ isLoading }: { isLoading: boolean }) {
             <div className="text-left bg-bg-medium rounded-xl p-4 text-xs font-mono text-text-secondary overflow-x-auto">
               <p className="text-text-muted mb-2">// 在 AppDelegate 中初始化</p>
               <p><span className="text-purple-400">let</span> config = <span className="text-primary">DebugProbe.Configuration</span>(</p>
-              <p className="pl-4">hubURL: <span className="text-green-400">"ws://{'<'}host{'>'}:8081/debug-bridge"</span></p>
+              <p className="pl-4">hubURL: <span className="text-green-400">"ws://{'<'}host{'>'}:{'<'}port{'>'}/debug-bridge"</span></p>
               <p>)</p>
               <p className="mt-1"><span className="text-primary">DebugProbe</span>.shared.start(configuration: config)</p>
             </div>

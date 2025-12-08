@@ -18,6 +18,14 @@ import {
     extractDomain,
 } from '@/utils/format'
 import clsx from 'clsx'
+import {
+    ChevronDownIcon,
+    ChevronRightIcon,
+    StarIcon,
+    TagIcon,
+    MockIcon,
+    GlobeIcon
+} from './icons'
 
 // 分组模式
 export type GroupMode = 'none' | 'domain' | 'path'
@@ -297,7 +305,9 @@ export function GroupedHTTPEventList({
             className="flex items-center px-4 py-2 bg-bg-light border-b border-border cursor-pointer hover:bg-bg-lighter"
             onClick={() => toggleGroup(group.key)}
         >
-            <span className="text-lg mr-2">{group.expanded ? '▼' : '▶'}</span>
+            <span className="mr-2 text-text-secondary">
+                {group.expanded ? <ChevronDownIcon size={16} /> : <ChevronRightIcon size={16} />}
+            </span>
             <span className="font-medium text-text-primary flex-1 truncate">{group.label}</span>
             <div className="flex items-center gap-3 text-xs">
                 <span className="px-2 py-1 bg-bg-medium rounded text-text-secondary">
@@ -339,7 +349,7 @@ export function GroupedHTTPEventList({
                 className={clsx(
                     'flex items-center cursor-pointer transition-all duration-150 group border-b border-border-light pl-8',
                     isError && !isSelected && !isHighlighted && 'bg-red-500/5 hover:bg-red-500/10',
-                    isSelected && 'bg-primary text-bg-darkest shadow-sm shadow-primary/20',
+                    isSelected && 'bg-accent-blue/15 border-l-2 border-l-accent-blue',
                     isChecked && !isSelected && 'bg-primary/15',
                     isHighlighted && !isSelected && 'bg-yellow-500/10 hover:bg-yellow-500/20 border-l-4 border-l-yellow-500',
                     isMarked && !isSelected && !isHighlighted && 'border-l-4',
@@ -349,8 +359,8 @@ export function GroupedHTTPEventList({
                 {/* 标记图标 */}
                 {(isHighlighted || isMarked) && !isSelected && (
                     <div className="w-6 flex-shrink-0 flex items-center justify-center -ml-6">
-                        {isHighlighted && <span className="text-yellow-500 text-xs">⭐</span>}
-                        {isMarked && !isHighlighted && <span className="text-xs" style={{ color: ruleColor || 'currentColor' }}>🏷️</span>}
+                        {isHighlighted && <StarIcon size={12} filled className="text-yellow-500" />}
+                        {isMarked && !isHighlighted && <TagIcon size={12} style={{ color: ruleColor || 'currentColor' }} />}
                     </div>
                 )}
 
@@ -369,7 +379,7 @@ export function GroupedHTTPEventList({
                 {/* Time */}
                 <div className={clsx(
                     'px-3 py-3.5 w-[90px] flex-shrink-0',
-                    isSelected ? 'text-bg-darkest/80' : 'text-text-muted'
+                    isSelected ? 'text-accent-blue' : 'text-text-muted'
                 )}>
                     <span className="text-sm font-mono">{formatSmartTime(event.startTime)}</span>
                 </div>
@@ -379,7 +389,7 @@ export function GroupedHTTPEventList({
                     <span
                         className={clsx(
                             'inline-flex items-center justify-center px-2 py-1 rounded-lg text-xs font-mono font-bold min-w-[50px] shadow-sm',
-                            isSelected ? 'bg-bg-darkest/20 text-bg-darkest' : getMethodClass(event.method)
+                            getMethodClass(event.method)
                         )}
                     >
                         {event.method}
@@ -391,7 +401,7 @@ export function GroupedHTTPEventList({
                     <span
                         className={clsx(
                             'inline-flex items-center justify-center px-2 py-1 rounded-lg text-xs font-mono font-semibold min-w-[40px] shadow-sm',
-                            isSelected ? 'bg-bg-darkest/20 text-bg-darkest' : getStatusClass(event.statusCode)
+                            getStatusClass(event.statusCode)
                         )}
                     >
                         {event.statusCode ?? 'ERR'}
@@ -402,7 +412,7 @@ export function GroupedHTTPEventList({
                 <div className="px-3 py-3.5 flex-1 min-w-0 overflow-hidden">
                     <span className={clsx(
                         'text-sm truncate',
-                        isSelected ? 'text-bg-darkest' : 'text-text-primary'
+                        isSelected ? 'text-accent-blue font-medium' : 'text-text-primary'
                     )} title={event.url}>
                         {(() => {
                             try {
@@ -418,7 +428,7 @@ export function GroupedHTTPEventList({
                 <div className="px-3 py-3.5 w-[80px] flex-shrink-0">
                     <span className={clsx(
                         'text-sm font-mono font-medium',
-                        isSelected ? 'text-bg-darkest' : getDurationClass(event.duration)
+                        getDurationClass(event.duration)
                     )}>
                         {formatDuration(event.duration)}
                     </span>
@@ -427,10 +437,10 @@ export function GroupedHTTPEventList({
                 {/* Tags */}
                 <div className="px-3 py-3.5 w-[60px] flex-shrink-0 flex items-center justify-center gap-1">
                     {event.isMocked && (
-                        <span className="text-sm" title="已 Mock">🎭</span>
+                        <span title="已 Mock"><MockIcon size={14} /></span>
                     )}
                     {event.isFavorite && (
-                        <span className="text-sm text-accent-yellow" title="已收藏">★</span>
+                        <span title="已收藏"><StarIcon size={14} filled className="text-accent-yellow" /></span>
                     )}
                 </div>
             </div>
@@ -490,8 +500,8 @@ export function GroupedHTTPEventList({
                     </div>
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-text-muted py-20">
-                        <div className="w-16 h-16 rounded-lg bg-bg-light flex items-center justify-center mb-4 border border-border">
-                            <span className="text-3xl opacity-60">🌐</span>
+                        <div className="w-16 h-16 rounded-2xl bg-bg-light/50 flex items-center justify-center mb-4">
+                            <GlobeIcon size={32} className="opacity-60" />
                         </div>
                         <p className="text-sm font-medium text-text-secondary mb-1">暂无 HTTP 请求</p>
                         <p className="text-xs text-text-muted">等待网络请求被捕获...</p>

@@ -27,7 +27,12 @@ async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`)
   }
 
-  return response.json()
+  // 处理空响应体（如 DELETE 返回 204 No Content）
+  const text = await response.text()
+  if (!text) {
+    return undefined as T
+  }
+  return JSON.parse(text) as T
 }
 
 export const api = {
@@ -60,17 +65,36 @@ export async function getDevice(deviceId: string): Promise<DeviceDetail> {
 export async function toggleCapture(
   deviceId: string,
   network: boolean,
-  log: boolean
+  log: boolean,
+  websocket: boolean,
+  database: boolean
 ): Promise<void> {
   await fetch(`${API_BASE}/devices/${deviceId}/control/toggle-capture`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ network, log }),
+    body: JSON.stringify({ network, log, websocket, database }),
   })
 }
 
 export async function clearDeviceData(deviceId: string): Promise<void> {
   await fetch(`${API_BASE}/devices/${deviceId}/data`, { method: 'DELETE' })
+}
+
+// 移除设备（仅限离线设备）
+export async function removeDevice(deviceId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/devices/${deviceId}`, { method: 'DELETE' })
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(error || 'Failed to remove device')
+  }
+}
+
+// 移除所有离线设备
+export async function removeAllOfflineDevices(): Promise<void> {
+  const response = await fetch(`${API_BASE}/devices/offline`, { method: 'DELETE' })
+  if (!response.ok) {
+    throw new Error('Failed to remove offline devices')
+  }
 }
 
 // 设备会话历史
@@ -205,6 +229,19 @@ export async function truncateAllData(): Promise<void> {
   await fetch(`${API_BASE}/cleanup/truncate`, { method: 'POST' })
 }
 
+// Token 验证 API
+export interface TokenVerifyResponse {
+  valid: boolean
+  message: string
+}
+
+export async function verifyToken(token: string): Promise<TokenVerifyResponse> {
+  return fetchJSON(`${API_BASE}/auth/verify`, {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+}
+
 // ============================================================================
 // 日志事件 API
 // ============================================================================
@@ -250,6 +287,17 @@ export async function getLogSubsystems(deviceId: string): Promise<string[]> {
 
 export async function getLogCategories(deviceId: string): Promise<string[]> {
   return fetchJSON(`${API_BASE}/devices/${deviceId}/logs/categories`)
+}
+
+export async function batchDeleteLogs(
+  deviceId: string,
+  ids: string[]
+): Promise<void> {
+  await fetch(`${API_BASE}/devices/${deviceId}/logs/batch-delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
 }
 
 // ============================================================================

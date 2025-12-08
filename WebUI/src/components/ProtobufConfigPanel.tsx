@@ -6,6 +6,7 @@
 import { useState, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import { useProtobufStore } from '@/stores/protobufStore'
+import { TrashIcon, FolderIcon, PackageIcon } from './icons'
 import type { ColumnProtobufConfig } from '@/utils/protobufDescriptor'
 
 interface ProtobufConfigPanelProps {
@@ -97,7 +98,7 @@ export function ProtobufConfigPanel({
             {/* 标题栏 */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <div className="flex items-center gap-2">
-                    <span className="text-purple-400">📦</span>
+                    <PackageIcon size={16} className="text-purple-400" />
                     <h3 className="font-medium text-text-primary text-sm">Protobuf 配置</h3>
                 </div>
                 <button
@@ -151,9 +152,9 @@ export function ProtobufConfigPanel({
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={loading}
-                                className="w-full px-4 py-2 bg-primary/20 text-primary rounded-lg text-sm font-medium hover:bg-primary/30 disabled:opacity-50 transition-colors"
+                                className="w-full px-4 py-2 bg-primary/20 text-primary rounded-lg text-sm font-medium hover:bg-primary/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                             >
-                                {loading ? '加载中...' : '📁 上传 .desc 文件'}
+                                {loading ? '加载中...' : <><FolderIcon size={16} /> 上传 .desc 文件</>}
                             </button>
                             <p className="text-xs text-text-muted mt-2">
                                 使用 <code className="bg-bg-light px-1 rounded">protoc --descriptor_set_out</code> 生成
@@ -192,7 +193,7 @@ export function ProtobufConfigPanel({
                                                 className="p-1 rounded text-red-400 hover:bg-red-500/10 transition-colors"
                                                 title="删除"
                                             >
-                                                🗑️
+                                                <TrashIcon size={14} />
                                             </button>
                                         </div>
 

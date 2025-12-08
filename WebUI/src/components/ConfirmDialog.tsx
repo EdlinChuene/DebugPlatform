@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { WarningIcon, LightningIcon, InfoIcon } from './icons'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -27,21 +28,21 @@ export function ConfirmDialog({
 
   const typeConfig = {
     danger: {
-      icon: '⚠️',
+      icon: <WarningIcon size={20} />,
       iconBg: 'bg-red-500/20',
       headerBg: 'bg-red-500/5',
       titleColor: 'text-red-400',
       confirmBg: 'bg-red-500 hover:bg-red-600',
     },
     warning: {
-      icon: '⚡',
+      icon: <LightningIcon size={20} />,
       iconBg: 'bg-yellow-500/20',
       headerBg: 'bg-yellow-500/5',
       titleColor: 'text-yellow-400',
       confirmBg: 'bg-yellow-500 hover:bg-yellow-600',
     },
     info: {
-      icon: 'ℹ️',
+      icon: <InfoIcon size={20} />,
       iconBg: 'bg-blue-500/20',
       headerBg: 'bg-blue-500/5',
       titleColor: 'text-blue-400',

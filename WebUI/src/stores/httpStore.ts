@@ -78,7 +78,7 @@ interface HTTPState {
   selectAll: () => void
   clearSelectedIds: () => void
   batchDelete: (deviceId: string) => Promise<void>
-  batchFavorite: (deviceId: string, isFavorite: boolean) => Promise<void>
+  batchFavorite: (deviceId: string, isFavorite: boolean) => Promise<number | void>
 }
 
 // 过滤逻辑 - 现在只处理 HTTP 事件，不再包含会话分隔符
@@ -328,9 +328,12 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
 
   selectAll: () => {
     set((state) => {
-      const allIds = new Set(state.events.map((e) => e.id))
-      const allSelected = state.selectedIds.size === state.events.length
-      return { selectedIds: allSelected ? new Set() : allIds }
+      // 使用过滤后的列表，而不是全部事件
+      const filteredEvents = state.filteredItems.filter((item) => !isSessionDivider(item)) as HTTPEventSummary[]
+      const filteredIds = new Set(filteredEvents.map((e) => e.id))
+      const allSelected = state.selectedIds.size === filteredIds.size &&
+        [...state.selectedIds].every(id => filteredIds.has(id))
+      return { selectedIds: allSelected ? new Set() : filteredIds }
     })
   },
 
@@ -355,17 +358,29 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
   },
 
   batchFavorite: async (deviceId: string, isFavorite: boolean) => {
-    const { selectedIds, events } = get()
+    const { selectedIds, events, listItems, filters } = get()
     if (selectedIds.size === 0) return
 
     try {
       await api.batchFavoriteHTTPEvents(deviceId, Array.from(selectedIds), isFavorite)
+      // 更新 events 和 listItems
+      const newEvents = events.map((e) => (selectedIds.has(e.id) ? { ...e, isFavorite } : e))
+      const newListItems = listItems.map((item) =>
+        !isSessionDivider(item) && selectedIds.has(item.id)
+          ? { ...item, isFavorite }
+          : item
+      )
+      const filteredItems = filterItems(newListItems, filters)
       set({
-        events: events.map((e) => (selectedIds.has(e.id) ? { ...e, isFavorite } : e)),
-        selectedIds: new Set(),
+        events: newEvents,
+        listItems: newListItems,
+        filteredItems,
       })
+      // 返回成功数量供调用方使用
+      return selectedIds.size
     } catch (error) {
       console.error('Failed to batch favorite:', error)
+      throw error
     }
   },
 }))

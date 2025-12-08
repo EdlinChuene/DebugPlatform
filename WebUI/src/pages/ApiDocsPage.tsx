@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { IPhoneIcon, HttpIcon, LogIcon, WebSocketIcon, MockIcon, BreakpointIcon, ChaosIcon, ExportIcon, LinkIcon, TrashIcon, CheckIcon, SearchIcon, RocketIcon } from '@/components/icons'
 
 interface Endpoint {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'WS'
@@ -7,14 +8,14 @@ interface Endpoint {
 }
 
 interface EndpointSection {
-  icon: string
+  icon: React.ReactNode
   title: string
   endpoints: Endpoint[]
 }
 
 const apiSections: EndpointSection[] = [
   {
-    icon: '📱',
+    icon: <IPhoneIcon size={20} />,
     title: '设备管理',
     endpoints: [
       { method: 'GET', path: '/api/devices', description: '获取在线设备列表' },
@@ -24,7 +25,7 @@ const apiSections: EndpointSection[] = [
     ],
   },
   {
-    icon: '🌐',
+    icon: <HttpIcon size={20} />,
     title: 'HTTP 事件',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/http-events', description: '获取 HTTP 事件列表' },
@@ -34,14 +35,14 @@ const apiSections: EndpointSection[] = [
     ],
   },
   {
-    icon: '📝',
+    icon: <LogIcon size={20} />,
     title: '日志事件',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/log-events', description: '获取日志事件列表' },
     ],
   },
   {
-    icon: '🔌',
+    icon: <WebSocketIcon size={20} />,
     title: 'WebSocket 会话',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/ws-sessions', description: '获取 WebSocket 会话列表' },
@@ -49,7 +50,7 @@ const apiSections: EndpointSection[] = [
     ],
   },
   {
-    icon: '🎭',
+    icon: <MockIcon size={20} />,
     title: 'Mock 规则',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/mock-rules', description: '获取 Mock 规则列表' },
@@ -59,7 +60,7 @@ const apiSections: EndpointSection[] = [
     ],
   },
   {
-    icon: '⏸️',
+    icon: <BreakpointIcon size={20} />,
     title: '断点调试',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/breakpoints', description: '获取断点规则列表' },
@@ -67,7 +68,7 @@ const apiSections: EndpointSection[] = [
     ],
   },
   {
-    icon: '💥',
+    icon: <ChaosIcon size={20} />,
     title: '故障注入',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/chaos-rules', description: '获取故障注入规则' },
@@ -75,7 +76,7 @@ const apiSections: EndpointSection[] = [
     ],
   },
   {
-    icon: '📤',
+    icon: <ExportIcon size={20} />,
     title: '数据导出',
     endpoints: [
       { method: 'GET', path: '/api/export/har/:deviceId', description: '导出 HAR 文件' },
@@ -83,7 +84,7 @@ const apiSections: EndpointSection[] = [
     ],
   },
   {
-    icon: '🔗',
+    icon: <LinkIcon size={20} />,
     title: 'WebSocket 连接',
     endpoints: [
       { method: 'WS', path: '/debug-bridge', description: 'iOS 设备连接端点' },
@@ -91,7 +92,7 @@ const apiSections: EndpointSection[] = [
     ],
   },
   {
-    icon: '🧹',
+    icon: <TrashIcon size={20} />,
     title: '数据管理',
     endpoints: [
       { method: 'GET', path: '/api/cleanup/config', description: '获取清理配置' },
@@ -101,7 +102,7 @@ const apiSections: EndpointSection[] = [
     ],
   },
   {
-    icon: '💚',
+    icon: <CheckIcon size={20} />,
     title: '系统状态',
     endpoints: [
       { method: 'GET', path: '/api/health', description: '健康检查' },
@@ -123,20 +124,24 @@ export function ApiDocsPage() {
       <div className="max-w-5xl mx-auto px-6 py-12">
         {/* Header */}
         <header className="text-center mb-16">
-          <div className="text-6xl mb-4">🔍</div>
+          <div className="flex justify-center mb-4 text-primary">
+            <SearchIcon size={64} />
+          </div>
           <h1 className="text-4xl font-bold mb-2 text-text-primary">
             Debug Hub API
           </h1>
           <p className="text-text-secondary text-lg mb-4">网络和日志一体化调试平台</p>
           <span className="inline-block px-4 py-1 bg-bg-light rounded text-sm text-primary border border-border">
-            v1.0.0
+            1.0.0
           </span>
           <nav className="flex justify-center gap-4 mt-6">
-            <Link to="/" className="text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded hover:bg-bg-light">
-              📱 设备列表
+            <Link to="/" className="flex items-center text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded hover:bg-bg-light">
+              <IPhoneIcon size={16} className="mr-2" />
+              设备列表
             </Link>
-            <Link to="/health" className="text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded hover:bg-bg-light">
-              💚 健康检查
+            <Link to="/health" className="flex items-center text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded hover:bg-bg-light">
+              <CheckIcon size={16} className="mr-2" />
+              健康检查
             </Link>
           </nav>
         </header>
@@ -174,7 +179,7 @@ export function ApiDocsPage() {
         {/* Quick Start */}
         <section className="mt-8 bg-bg-dark border border-border rounded-xl overflow-hidden">
           <div className="px-6 py-4 bg-bg-medium border-b border-border flex items-center gap-3">
-            <span className="text-2xl">🚀</span>
+            <span className="text-2xl"><RocketIcon size={20} /></span>
             <h2 className="text-lg font-semibold">快速开始</h2>
           </div>
           <div className="p-6 space-y-4">

@@ -1,6 +1,7 @@
 import type { MockRule, MockTargetType } from '@/types'
 import { formatSmartTime } from '@/utils/format'
 import clsx from 'clsx'
+import { MockIcon, SparklesIcon, ArrowRightIcon, PencilIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon, UploadIcon, DownloadIcon } from './icons'
 
 interface MockRuleListProps {
   rules: MockRule[]
@@ -11,11 +12,11 @@ interface MockRuleListProps {
   onCreateNew: () => void
 }
 
-const targetTypeConfig: Record<MockTargetType, { label: string; icon: string; color: string }> = {
-  httpRequest: { label: 'HTTP 请求', icon: '📤', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
-  httpResponse: { label: 'HTTP 响应', icon: '📥', color: 'text-green-400 bg-green-500/10 border-green-500/20' },
-  wsOutgoing: { label: 'WS 发送', icon: '↑', color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' },
-  wsIncoming: { label: 'WS 接收', icon: '↓', color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
+const targetTypeConfig: Record<MockTargetType, { label: string; icon: React.ReactNode; color: string }> = {
+  httpRequest: { label: 'HTTP 请求', icon: <UploadIcon size={12} />, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
+  httpResponse: { label: 'HTTP 响应', icon: <DownloadIcon size={12} />, color: 'text-green-400 bg-green-500/10 border-green-500/20' },
+  wsOutgoing: { label: 'WS 发送', icon: <ArrowUpIcon size={12} />, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' },
+  wsIncoming: { label: 'WS 接收', icon: <ArrowDownIcon size={12} />, color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
 }
 
 export function MockRuleList({
@@ -29,11 +30,11 @@ export function MockRuleList({
   if (rules.length === 0 && !loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-muted py-12">
-        <span className="text-5xl mb-4 opacity-50">🎭</span>
+        <MockIcon size={48} className="mb-4 opacity-50" />
         <p className="text-lg font-medium mb-2">暂无 Mock 规则</p>
         <p className="text-sm mb-6">创建规则来模拟 API 响应或修改请求</p>
-        <button onClick={onCreateNew} className="btn bg-primary text-white hover:bg-primary-dark">
-          ✨ 创建第一条规则
+        <button onClick={onCreateNew} className="btn bg-primary text-white hover:bg-primary-dark flex items-center gap-2">
+          <SparklesIcon size={16} /> 创建第一条规则
         </button>
       </div>
     )
@@ -133,8 +134,8 @@ function RuleItem({
           </div>
 
           {/* 动作摘要 */}
-          <div className="text-xs text-text-muted">
-            <span className="text-primary">→</span> {actionSummary}
+          <div className="text-xs text-text-muted flex items-center gap-1">
+            <span className="text-primary"><ArrowRightIcon size={12} /></span> {actionSummary}
           </div>
 
           {/* 元信息 */}
@@ -151,7 +152,7 @@ function RuleItem({
             className="p-2 rounded-lg hover:bg-bg-light text-text-muted hover:text-text-primary transition-all"
             title="编辑"
           >
-            ✏️
+            <PencilIcon size={16} />
           </button>
           <button
             onClick={() => {
@@ -162,7 +163,7 @@ function RuleItem({
             className="p-2 rounded-lg hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-all"
             title="删除"
           >
-            🗑️
+            <TrashIcon size={16} />
           </button>
         </div>
       </div>

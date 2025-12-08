@@ -20,6 +20,7 @@ import {
     extractDomain,
 } from '@/utils/format'
 import clsx from 'clsx'
+import { MockIcon, StarIcon, HttpIcon, TagIcon } from './icons'
 
 // 行高度（像素）
 const ROW_HEIGHT = 56
@@ -143,9 +144,14 @@ export function VirtualHTTPEventTable({
             e.preventDefault()
             onToggleSelect(event.id)
         } else {
-            onSelect(event.id)
+            // 如果已选中，再次点击则取消选中
+            if (selectedId === event.id) {
+                onSelect('')
+            } else {
+                onSelect(event.id)
+            }
         }
-    }, [isSelectMode, onToggleSelect, onSelect])
+    }, [isSelectMode, onToggleSelect, onSelect, selectedId])
 
     const renderEventRow = (event: HTTPEventSummary, style: React.CSSProperties) => {
         const isError = !event.statusCode || event.statusCode >= 400
@@ -172,8 +178,8 @@ export function VirtualHTTPEventTable({
                     'flex items-center cursor-pointer transition-all duration-150 group border-b border-border-light',
                     // 错误状态
                     isError && !isSelected && !isHighlighted && 'bg-red-500/5 hover:bg-red-500/10',
-                    // 选中状态
-                    isSelected && 'bg-primary text-bg-darkest shadow-sm shadow-primary/20',
+                    // 选中状态 - 使用更浅的蓝色背景
+                    isSelected && 'bg-accent-blue/15 border-l-2 border-l-accent-blue',
                     // 批量选中
                     isChecked && !isSelected && 'bg-primary/15',
                     // 高亮规则
@@ -187,8 +193,8 @@ export function VirtualHTTPEventTable({
                 {/* 标记图标 */}
                 {(isHighlighted || isMarked) && !isSelected && (
                     <div className="w-6 flex-shrink-0 flex items-center justify-center">
-                        {isHighlighted && <span className="text-yellow-500 text-xs">⭐</span>}
-                        {isMarked && !isHighlighted && <span className="text-xs" style={{ color: ruleColor || 'currentColor' }}>🏷️</span>}
+                        {isHighlighted && <StarIcon size={12} filled className="text-yellow-500" />}
+                        {isMarked && !isHighlighted && <TagIcon size={12} style={{ color: ruleColor || 'currentColor' }} />}
                     </div>
                 )}
 
@@ -207,7 +213,7 @@ export function VirtualHTTPEventTable({
                 {/* Time */}
                 <div className={clsx(
                     'px-4 py-3.5 w-[100px] flex-shrink-0',
-                    isSelected ? 'text-bg-darkest/80' : 'text-text-muted'
+                    isSelected ? 'text-accent-blue' : 'text-text-muted'
                 )}>
                     <span className="text-sm font-mono">{formatSmartTime(event.startTime)}</span>
                 </div>
@@ -217,7 +223,7 @@ export function VirtualHTTPEventTable({
                     <span
                         className={clsx(
                             'inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-mono font-bold min-w-[60px] shadow-sm',
-                            isSelected ? 'bg-bg-darkest/20 text-bg-darkest' : getMethodClass(event.method)
+                            getMethodClass(event.method)
                         )}
                     >
                         {event.method}
@@ -229,7 +235,7 @@ export function VirtualHTTPEventTable({
                     <span
                         className={clsx(
                             'inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-mono font-semibold min-w-[44px] shadow-sm',
-                            isSelected ? 'bg-bg-darkest/20 text-bg-darkest' : getStatusClass(event.statusCode)
+                            getStatusClass(event.statusCode)
                         )}
                     >
                         {event.statusCode ?? 'ERR'}
@@ -241,13 +247,13 @@ export function VirtualHTTPEventTable({
                     <div className="flex flex-col gap-0.5">
                         <span className={clsx(
                             'text-sm truncate transition-colors',
-                            isSelected ? 'text-bg-darkest' : 'text-text-primary group-hover:text-primary'
+                            isSelected ? 'text-accent-blue font-medium' : 'text-text-primary group-hover:text-primary'
                         )} title={event.url}>
                             {truncateUrl(event.url)}
                         </span>
                         <span className={clsx(
                             'text-xs truncate font-mono',
-                            isSelected ? 'text-bg-darkest/70' : 'text-text-muted opacity-70'
+                            isSelected ? 'text-accent-blue/70' : 'text-text-muted opacity-70'
                         )}>
                             {extractDomain(event.url)}
                         </span>
@@ -258,7 +264,7 @@ export function VirtualHTTPEventTable({
                 <div className="px-4 py-3.5 w-[90px] flex-shrink-0">
                     <span className={clsx(
                         'text-sm font-mono font-medium',
-                        isSelected ? 'text-bg-darkest' : getDurationClass(event.duration)
+                        getDurationClass(event.duration)
                     )}>
                         {formatDuration(event.duration)}
                     </span>
@@ -268,12 +274,12 @@ export function VirtualHTTPEventTable({
                 <div className="px-4 py-3.5 w-[80px] flex-shrink-0 flex items-center justify-center gap-2">
                     {event.isMocked && (
                         <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/15 text-purple-400 shadow-sm shadow-purple-500/10" title="已 Mock">
-                            🎭
+                            <MockIcon size={14} />
                         </span>
                     )}
                     {event.isFavorite && (
                         <span className="badge-favorite text-base" title="已收藏">
-                            ★
+                            <StarIcon size={14} filled />
                         </span>
                     )}
                     {!event.isMocked && !event.isFavorite && (
@@ -289,16 +295,16 @@ export function VirtualHTTPEventTable({
             {/* Header */}
             <div className="flex items-center bg-bg-medium border-b border-border text-text-secondary sticky top-0 z-10">
                 {isSelectMode && (
-                    <div className="px-3 py-3.5 w-10 flex-shrink-0">
+                    <div className="px-3 py-2 w-10 flex-shrink-0">
                         <span className="sr-only">选择</span>
                     </div>
                 )}
-                <div className="px-4 py-3.5 w-[100px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">时间</div>
-                <div className="px-4 py-3.5 w-[90px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">方法</div>
-                <div className="px-4 py-3.5 w-[80px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">状态</div>
-                <div className="px-4 py-3.5 flex-1 font-semibold text-xs uppercase tracking-wider">URL / 域名</div>
-                <div className="px-4 py-3.5 w-[90px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">耗时</div>
-                <div className="px-4 py-3.5 w-[80px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider text-center">标记</div>
+                <div className="px-4 py-2 w-[100px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">时间</div>
+                <div className="px-4 py-2 w-[90px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">方法</div>
+                <div className="px-4 py-2 w-[80px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">状态</div>
+                <div className="px-4 py-2 flex-1 font-semibold text-xs uppercase tracking-wider">URL / 域名</div>
+                <div className="px-4 py-2 w-[90px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">耗时</div>
+                <div className="px-4 py-2 w-[80px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider text-center">标记</div>
             </div>
 
             {/* Virtual List */}
@@ -326,7 +332,7 @@ export function VirtualHTTPEventTable({
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-text-muted py-20">
                         <div className="w-16 h-16 rounded-lg bg-bg-light flex items-center justify-center mb-4 border border-border">
-                            <span className="text-3xl opacity-60">🌐</span>
+                            <HttpIcon size={32} className="opacity-60" />
                         </div>
                         <p className="text-sm font-medium text-text-secondary mb-1">暂无 HTTP 请求</p>
                         <p className="text-xs text-text-muted">等待网络请求被捕获...</p>

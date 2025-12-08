@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { useHTTPStore } from '@/stores/httpStore'
 import { useWSStore } from '@/stores/wsStore'
 import { useRuleStore } from '@/stores/ruleStore'
-import { getPlatformIcon, SIMULATOR_ICON } from '@/utils/deviceIcons'
+import { getPlatformIcon } from '@/utils/deviceIcons'
+import { HttpIcon, WebSocketIcon, LogIcon, SearchIcon, IPhoneIcon, StarIcon, ClearIcon, MoreIcon, ChevronDownIcon, DebugHubLogo, BookIcon, CheckIcon, PackageIcon } from '@/components/icons'
 import { ServerStatsPanel } from './ServerStatsPanel'
+import { ThemeToggle } from './ThemeToggle'
 import clsx from 'clsx'
 
 export function Sidebar() {
@@ -23,8 +25,8 @@ export function Sidebar() {
   // WebSocket Store (for Host List) - 保持单选
   const { sessions: wsSessions, setFilter: setWsFilter, filters: wsFilters } = useWSStore()
 
-  // Rule Store
-  const { getDomainRule, createOrUpdateRule, deleteRule } = useRuleStore()
+  // Rule Store - for domain highlighting/hiding
+  const { getDomainRule, createOrUpdateRule, deleteRule, fetchRules } = useRuleStore()
 
   // Show all devices toggle
   const [showAllDevices, setShowAllDevices] = useState(false)
@@ -44,7 +46,7 @@ export function Sidebar() {
 
   useEffect(() => {
     fetchDevices()
-    // Note: fetchRules() disabled - traffic rules API not implemented
+    fetchRules() // Load traffic rules for domain filtering
   }, [])
 
   // Extract Domains/Hosts from Events based on current tab
@@ -218,36 +220,47 @@ export function Sidebar() {
 
   return (
     <aside className="w-72 bg-bg-dark border-r border-border flex flex-col h-full">
-      {/* Header */}
-      <div className="p-5 border-b border-border flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <span className="text-xl">🔍</span>
-          </div>
-          <div>
-            <h1 className="font-semibold text-text-primary text-lg">Debug Hub</h1>
-            <p className="text-2xs text-text-muted">Network Inspector</p>
-          </div>
+      {/* Header - 可点击跳转首页 */}
+      <Link to="/" className="p-5 border-b border-border flex items-center gap-3 hover:bg-bg-light/50 transition-colors">
+        <DebugHubLogo size={40} />
+        <div>
+          <h1 className="font-semibold text-text-primary text-lg">Debug Hub</h1>
+          <p className="text-2xs text-text-muted">iOS 调试平台</p>
         </div>
-        {/* Rules Management Link */}
-        <Link
-          to="/rules"
-          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-light text-text-secondary hover:text-primary hover:bg-bg-lighter transition-colors"
-          title="管理流量规则"
-        >
-          <span>⚙️</span>
-          Rules
-        </Link>
-      </div>
+      </Link>
 
       <div className="flex-1 overflow-y-auto">
+        {/* Quick Links - API & 健康 */}
+        <div className="px-4 py-2 border-b border-border flex items-center gap-2">
+          <Link
+            to="/api-docs"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-primary hover:bg-bg-light rounded transition-colors"
+            title="API 文档"
+          >
+            <BookIcon size={12} />
+            <span>API</span>
+          </Link>
+          <Link
+            to="/health"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-green-400 hover:bg-bg-light rounded transition-colors"
+            title="健康检查"
+          >
+            <CheckIcon size={12} />
+            <span>健康</span>
+          </Link>
+        </div>
+
         {/* Device List Section */}
         <div className="px-3 py-4">
           <div className="px-2 mb-3 text-xs font-semibold text-text-secondary uppercase tracking-wider flex justify-between items-center">
-            <span className="flex items-center gap-2">
-              <span className="text-sm">📱</span>
-              Devices
-            </span>
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 hover:text-primary transition-colors"
+              title="查看设备列表"
+            >
+              <IPhoneIcon size={14} />
+              设备列表
+            </button>
             <div className="flex items-center gap-2">
               {hiddenDevicesCount > 0 && !showAllDevices && (
                 <button
@@ -271,59 +284,80 @@ export function Sidebar() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {displayedDevices.map(device => {
               const isFavorite = favoriteDeviceIds.has(device.deviceId)
               const isSelected = currentDeviceId === device.deviceId
+              const isOffline = !device.isOnline
               return (
                 <div
                   key={device.deviceId}
                   onClick={() => handleDeviceClick(device.deviceId)}
                   className={clsx(
-                    "group flex items-center gap-3 px-3 py-3 rounded-lg cursor-pointer transition-colors",
+                    "group relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors",
                     isSelected
-                      ? "bg-primary text-bg-darkest"
-                      : "text-text-secondary hover:bg-bg-light hover:text-text-primary"
+                      ? "bg-primary/15"
+                      : isOffline
+                        ? "text-text-muted hover:bg-bg-light/50"
+                        : "text-text-secondary hover:bg-bg-light hover:text-text-primary"
                   )}
                 >
+                  {/* 选中指示条 - 无圆角，宽度 3px */}
+                  {isSelected && (
+                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary" />
+                  )}
                   <div className="relative flex-shrink-0">
                     <div className={clsx(
-                      "w-10 h-10 rounded-lg flex items-center justify-center",
+                      "w-9 h-9 rounded-lg flex items-center justify-center",
                       isSelected
-                        ? "bg-bg-dark/30"
-                        : "bg-bg-medium"
+                        ? "bg-primary/20"
+                        : isOffline
+                          ? "bg-bg-medium/50"
+                          : "bg-bg-medium"
                     )}>
-                      <span className="text-xl">{getPlatformIcon(device.platform)}</span>
+                      {getPlatformIcon(device.platform, 18)}
                     </div>
-                    {device.isOnline && (
-                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-bg-dark rounded-full" />
+                    {device.isOnline ? (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-bg-dark rounded-full" />
+                    ) : (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-gray-500 border-2 border-bg-dark rounded-full" />
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate text-sm flex items-center gap-1.5">
+                  <div className={clsx("min-w-0 flex-1", isOffline && "opacity-60")}>
+                    <div className={clsx(
+                      "font-medium truncate text-xs flex items-center gap-1.5",
+                      isSelected ? "text-primary" : "text-text-primary"
+                    )}>
                       {device.deviceName}
                       {device.isSimulator && (
-                        <span className={clsx(
-                          "text-2xs px-1.5 py-0.5 rounded",
-                          isSelected
-                            ? "bg-bg-darkest/20 text-bg-darkest"
-                            : "bg-purple-500/20 text-purple-400"
-                        )} title="模拟器">
-                          {SIMULATOR_ICON}
-                        </span>
+                        <span className="text-2xs px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium">模拟器</span>
                       )}
                     </div>
                     <div className={clsx(
-                      "text-2xs truncate mt-0.5",
-                      isSelected ? "text-bg-darkest/80" : "text-text-muted"
-                    )}>
-                      {device.appName} <span className={isSelected ? "text-bg-darkest/60" : "opacity-60"}>{device.appVersion} ({device.buildNumber})</span>
+                      "text-2xs truncate",
+                      isSelected ? "text-accent-blue/70" : "text-text-muted"
+                    )} title={device.deviceModel}>
+                      {device.deviceModel} · {device.platform} <span className="opacity-60">{device.systemVersion}</span>
                     </div>
+                    {/* App 信息 - 与设备信息用分割线隔开 */}
                     <div className={clsx(
-                      "text-2xs truncate mt-0.5",
-                      isSelected ? "text-bg-darkest/80" : "text-text-muted"
+                      "text-2xs truncate mt-1 pt-1 border-t border-border flex items-center gap-1",
+                      isSelected ? "text-accent-blue/70" : "text-text-muted"
                     )}>
-                      {device.platform} <span className={isSelected ? "text-bg-darkest/60" : "opacity-60"}>{device.systemVersion}</span>
+                      {/* App 图标 */}
+                      <div className="w-3.5 h-3.5 rounded overflow-hidden bg-bg-light flex items-center justify-center flex-shrink-0">
+                        {device.appIcon ? (
+                          <img
+                            src={`data:image/png;base64,${device.appIcon}`}
+                            alt={device.appName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <PackageIcon size={8} className="text-text-muted" />
+                        )}
+                      </div>
+                      <span className="truncate">{device.appName}</span>
+                      <span className="opacity-60 flex-shrink-0">{device.appVersion}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -333,18 +367,13 @@ export function Sidebar() {
                         "p-1.5 rounded transition-all",
                         isFavorite
                           ? "text-yellow-400 hover:text-yellow-300"
-                          : isSelected
-                            ? "text-bg-darkest/50 opacity-0 group-hover:opacity-100 hover:text-yellow-400"
-                            : "text-text-muted opacity-0 group-hover:opacity-100 hover:text-yellow-400"
+                          : "text-text-muted opacity-0 group-hover:opacity-100 hover:text-yellow-400"
                       )}
                       title={isFavorite ? "取消收藏" : "收藏设备"}
                     >
-                      {isFavorite ? "⭐" : "☆"}
+                      <StarIcon size={14} filled={isFavorite} />
                     </button>
-                    <span className={clsx(
-                      "opacity-0 group-hover:opacity-100 transition-opacity text-sm",
-                      isSelected ? "text-bg-darkest/70" : "text-text-muted"
-                    )}>→</span>
+                    <ChevronDownIcon size={14} className="opacity-0 group-hover:opacity-100 transition-opacity -rotate-90 text-text-muted" />
                   </div>
                 </div>
               )
@@ -363,7 +392,7 @@ export function Sidebar() {
 
             {devices.length === 0 && !isServerOnline && (
               <div className="px-4 py-6 text-center text-xs text-text-muted bg-bg-light/20 rounded-lg border border-dashed border-border">
-                <span className="text-2xl block mb-2 opacity-50">📡</span>
+                <HttpIcon size={32} className="block mb-2 opacity-50 mx-auto" />
                 等待服务连接...
               </div>
             )}
@@ -380,7 +409,7 @@ export function Sidebar() {
           <div className="px-3 py-3">
             <div className="px-2 mb-3 text-xs font-semibold text-text-secondary uppercase tracking-wider flex justify-between items-center">
               <span className="flex items-center gap-2">
-                <span className="text-sm">{currentTab === 'websocket' ? '🔌' : '🌐'}</span>
+                {currentTab === 'websocket' ? <WebSocketIcon size={14} /> : <HttpIcon size={14} />}
                 {currentTab === 'websocket' ? 'WS Hosts' : 'Domains'}
               </span>
               <span className="bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded-full text-2xs font-bold">{domainStats.length}</span>
@@ -389,7 +418,7 @@ export function Sidebar() {
             {/* Domain Search */}
             <div className="px-1 mb-3">
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">🔍</span>
+                <SearchIcon size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input
                   type="text"
                   value={domainSearch}
@@ -407,12 +436,12 @@ export function Sidebar() {
                 className={clsx(
                   "flex items-center justify-between px-3 py-2 rounded cursor-pointer text-xs transition-colors group",
                   isAllDomainsSelected()
-                    ? "bg-primary text-bg-darkest font-medium"
+                    ? "bg-accent-blue text-white font-medium"
                     : "text-text-secondary hover:bg-bg-light"
                 )}
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm">📋</span>
+                  <LogIcon size={14} />
                   <span className="font-medium">
                     {currentTab === 'websocket' ? '全部主机' : '全部域名'}
                   </span>
@@ -420,7 +449,7 @@ export function Sidebar() {
                 <span className={clsx(
                   "font-mono text-2xs px-1.5 py-0.5 rounded",
                   isAllDomainsSelected()
-                    ? "text-bg-darkest font-bold bg-bg-darkest/20"
+                    ? "text-white font-bold bg-white/20"
                     : "opacity-60 bg-bg-medium"
                 )}>
                   {domainStats.reduce((sum, { count }) => sum + count, 0)}
@@ -462,8 +491,8 @@ export function Sidebar() {
                           className="w-4 h-4 min-w-4 min-h-4 flex-shrink-0 rounded border-border cursor-pointer accent-primary"
                         />
                       )}
-                      {isWhitelist && <span className="text-yellow-500 text-xs" title="Highlighted">★</span>}
-                      {isBlacklist && <span className="text-red-400 text-xs" title="Hidden">⛔</span>}
+                      {isWhitelist && <StarIcon size={12} filled className="text-yellow-500" />}
+                      {isBlacklist && <ClearIcon size={12} className="text-red-400" />}
                       <span className={clsx(
                         "truncate font-mono",
                         isBlacklist && "opacity-50 line-through"
@@ -486,7 +515,7 @@ export function Sidebar() {
                         className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-bg-medium rounded transition-colors text-text-muted hover:text-text-primary"
                         title="Toggle Rule (None -> Highlight -> Hide)"
                       >
-                        ⋮
+                        <MoreIcon size={14} />
                       </button>
                     </div>
                   </div>
@@ -495,14 +524,14 @@ export function Sidebar() {
 
               {filteredDomainStats.length === 0 && domainSearch && (
                 <div className="px-4 py-4 text-center text-xs text-text-muted bg-bg-light/20 rounded border border-dashed border-border">
-                  <span className="text-lg block mb-1 opacity-50">🔍</span>
+                  <SearchIcon size={24} className="block mb-1 opacity-50 mx-auto" />
                   {currentTab === 'websocket' ? '未找到匹配的主机' : '未找到匹配的域名'}
                 </div>
               )}
 
               {domainStats.length === 0 && !domainSearch && (
                 <div className="px-4 py-4 text-center text-xs text-text-muted bg-bg-light/20 rounded border border-dashed border-border">
-                  <span className="text-lg block mb-1 opacity-50">{currentTab === 'websocket' ? '🔌' : '🌐'}</span>
+                  {currentTab === 'websocket' ? <WebSocketIcon size={24} className="block mb-1 opacity-50 mx-auto" /> : <HttpIcon size={24} className="block mb-1 opacity-50 mx-auto" />}
                   {currentTab === 'websocket' ? '暂无 WebSocket 主机' : '暂无域名记录'}
                 </div>
               )}
@@ -514,16 +543,20 @@ export function Sidebar() {
       {/* Server Stats Panel */}
       <ServerStatsPanel />
 
-      {/* Footer Status */}
-      <div className="p-4 bg-bg-darker border-t border-border text-xs text-text-muted flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div className={clsx(
-            "w-2 h-2 rounded-full",
-            isServerOnline ? "bg-green-500" : "bg-red-500"
-          )} />
-          <span className="font-medium">{isServerOnline ? "Online" : "Offline"}</span>
+      {/* Footer Status - 主题切换、在线状态、版本 */}
+      <div className="px-4 py-2 bg-bg-darker border-t border-border text-xs text-text-muted flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <div className="h-4 w-px bg-border" />
+          <div className="flex items-center gap-1.5">
+            <div className={clsx(
+              "w-2 h-2 rounded-full",
+              isServerOnline ? "bg-green-500" : "bg-red-500"
+            )} />
+            <span className="font-medium">{isServerOnline ? "在线" : "离线"}</span>
+          </div>
         </div>
-        <span className="text-text-muted/50">v1.0</span>
+        <span className="text-text-muted/50">1.0.0</span>
       </div>
     </aside>
   )

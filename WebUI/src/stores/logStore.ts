@@ -74,6 +74,10 @@ interface LogState {
   isLoading: boolean
   autoScroll: boolean
 
+  // 批量选择
+  selectedIds: Set<string>
+  isSelectMode: boolean
+
   // Filter options
   subsystems: string[]
   categories: string[]
@@ -91,6 +95,13 @@ interface LogState {
   setSearchQuery: (query: string) => void
   setAutoScroll: (value: boolean) => void
   applyFilters: () => void
+
+  // 批量选择
+  toggleSelectMode: () => void
+  toggleSelectId: (id: string) => void
+  selectAll: () => void
+  clearSelectedIds: () => void
+  batchDelete: (deviceId: string) => Promise<void>
 }
 
 export const useLogStore = create<LogState>((set, get) => ({
@@ -101,6 +112,8 @@ export const useLogStore = create<LogState>((set, get) => ({
   pageSize: 500,
   isLoading: false,
   autoScroll: true,
+  selectedIds: new Set(),
+  isSelectMode: false,
 
   subsystems: [],
   categories: [],
@@ -194,6 +207,57 @@ export const useLogStore = create<LogState>((set, get) => ({
 
   setAutoScroll: (value: boolean) => {
     set({ autoScroll: value })
+  },
+
+  toggleSelectMode: () => {
+    set((state) => ({
+      isSelectMode: !state.isSelectMode,
+      selectedIds: state.isSelectMode ? new Set() : state.selectedIds,
+    }))
+  },
+
+  toggleSelectId: (id: string) => {
+    set((state) => {
+      const newSelectedIds = new Set(state.selectedIds)
+      if (newSelectedIds.has(id)) {
+        newSelectedIds.delete(id)
+      } else {
+        newSelectedIds.add(id)
+      }
+      return { selectedIds: newSelectedIds }
+    })
+  },
+
+  selectAll: () => {
+    set((state) => {
+      const filteredIds = new Set(state.filteredEvents.map((e) => e.id))
+      const allSelected = state.selectedIds.size === filteredIds.size &&
+        [...state.selectedIds].every(id => filteredIds.has(id))
+      return { selectedIds: allSelected ? new Set() : filteredIds }
+    })
+  },
+
+  clearSelectedIds: () => {
+    set({ selectedIds: new Set() })
+  },
+
+  batchDelete: async (deviceId: string) => {
+    const { selectedIds, events, filters } = get()
+    if (selectedIds.size === 0) return
+
+    try {
+      await api.batchDeleteLogs(deviceId, Array.from(selectedIds))
+      const newEvents = events.filter((e) => !selectedIds.has(e.id))
+      set({
+        events: newEvents,
+        filteredEvents: filterEvents(newEvents, filters),
+        selectedIds: new Set(),
+        total: get().total - selectedIds.size,
+      })
+    } catch (error) {
+      console.error('Failed to batch delete logs:', error)
+      throw error
+    }
   },
 }))
 

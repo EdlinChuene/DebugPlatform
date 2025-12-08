@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import clsx from 'clsx'
+import { WarningIcon } from './icons'
 
 interface DangerConfirmDialogProps {
     isOpen: boolean
@@ -58,7 +59,7 @@ export function DangerConfirmDialog({
                 <div className="px-6 py-4 border-b border-border bg-red-500/5">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-red-500/15">
-                            <span className="text-xl">⚠️</span>
+                            <WarningIcon size={24} className="text-red-500" />
                         </div>
                         <h3 className="text-lg font-bold text-red-400">{title}</h3>
                     </div>

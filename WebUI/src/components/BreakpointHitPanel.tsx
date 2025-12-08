@@ -1,6 +1,14 @@
 import { useState, useMemo } from 'react'
 import type { BreakpointHit, BreakpointAction, BreakpointRequestSnapshot, BreakpointResponseSnapshot } from '@/types'
 import clsx from 'clsx'
+import {
+    CheckIcon,
+    PauseIcon,
+    EditIcon,
+    PlayIcon,
+    MockIcon,
+    StopIcon
+} from './icons'
 
 interface BreakpointHitPanelProps {
     hits: BreakpointHit[]
@@ -18,7 +26,7 @@ export function BreakpointHitPanel({ hits, onResume, loading }: BreakpointHitPan
     if (hits.length === 0) {
         return (
             <div className="h-full flex flex-col items-center justify-center text-text-muted">
-                <span className="text-4xl mb-3 opacity-50">✅</span>
+                <CheckIcon size={36} className="mb-3 opacity-50" />
                 <p className="text-sm">暂无等待处理的断点</p>
                 <p className="text-xs mt-1">当请求命中断点规则时会在这里显示</p>
             </div>
@@ -29,7 +37,7 @@ export function BreakpointHitPanel({ hits, onResume, loading }: BreakpointHitPan
         <div className="h-full flex flex-col">
             {/* Header with badge */}
             <div className="px-4 py-3 border-b border-border bg-orange-500/10 flex items-center gap-3">
-                <span className="text-xl animate-pulse">⏸️</span>
+                <PauseIcon size={24} className="text-orange-400 animate-pulse" />
                 <div className="flex-1">
                     <h3 className="font-medium text-orange-400">
                         {hits.length} 个断点等待处理
@@ -197,11 +205,12 @@ function BreakpointHitDetail({ hit, onResume, loading }: BreakpointHitDetailProp
                 <button
                     onClick={() => setEditMode(!editMode)}
                     className={clsx(
-                        'px-4 py-2 text-sm transition-colors',
+                        'px-4 py-2 text-sm transition-colors flex items-center gap-1.5',
                         editMode ? 'text-primary' : 'text-text-muted hover:text-text-primary'
                     )}
                 >
-                    {editMode ? '✏️ 编辑中' : '✏️ 编辑'}
+                    <EditIcon size={14} />
+                    {editMode ? '编辑中' : '编辑'}
                 </button>
             </div>
 
@@ -233,18 +242,18 @@ function BreakpointHitDetail({ hit, onResume, loading }: BreakpointHitDetailProp
                 <button
                     onClick={handleResume}
                     disabled={loading}
-                    className="btn btn-primary flex-1"
+                    className="btn btn-primary flex-1 flex items-center justify-center gap-2"
                 >
-                    ▶️ 继续
+                    <PlayIcon size={16} /> 继续
                 </button>
 
                 {editMode && (
                     <button
                         onClick={handleModify}
                         disabled={loading}
-                        className="btn bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 flex-1"
+                        className="btn bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 flex-1 flex items-center justify-center gap-2"
                     >
-                        ✏️ 修改后继续
+                        <EditIcon size={16} /> 修改后继续
                     </button>
                 )}
 
@@ -252,18 +261,18 @@ function BreakpointHitDetail({ hit, onResume, loading }: BreakpointHitDetailProp
                     <button
                         onClick={handleMockResponse}
                         disabled={loading}
-                        className="btn bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 flex-1"
+                        className="btn bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 flex-1 flex items-center justify-center gap-2"
                     >
-                        🎭 返回 Mock 响应
+                        <MockIcon size={16} /> 返回 Mock 响应
                     </button>
                 )}
 
                 <button
                     onClick={handleAbort}
                     disabled={loading}
-                    className="btn btn-danger"
+                    className="btn btn-danger flex items-center justify-center gap-2"
                 >
-                    ⛔ 中止
+                    <StopIcon size={16} /> 中止
                 </button>
             </div>
         </div>

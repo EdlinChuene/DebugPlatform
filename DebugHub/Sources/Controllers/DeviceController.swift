@@ -18,6 +18,8 @@ struct DeviceController: RouteCollection {
         devices.post(":deviceId", "control", "toggle-capture", use: toggleCapture)
         devices.post(":deviceId", "control", "update-mock-rules", use: updateMockRules)
         devices.delete(":deviceId", "data", use: clearDeviceData)
+        devices.delete(":deviceId", use: removeDevice)
+        devices.delete("offline", use: removeAllOfflineDevices)
     }
 
     // MARK: - 获取设备会话历史
@@ -62,21 +64,34 @@ struct DeviceController: RouteCollection {
             )
         }
 
-        // API 请求返回 JSON
-        let sessions = DeviceRegistry.shared.getAllSessions()
-        let devices = sessions.map { session in
-            DeviceListItemDTO(
-                deviceId: session.deviceInfo.deviceId,
-                deviceName: session.deviceInfo.deviceName,
-                appName: session.deviceInfo.appName,
-                appVersion: session.deviceInfo.appVersion,
-                buildNumber: session.deviceInfo.buildNumber,
-                platform: session.deviceInfo.platform,
-                systemVersion: session.deviceInfo.systemVersion,
-                isSimulator: session.deviceInfo.isSimulator,
-                isOnline: true,
-                lastSeenAt: session.lastSeenAt,
-                connectedAt: session.connectedAt
+        // API 请求返回 JSON - 从数据库获取所有设备（包括离线的）
+        let onlineSessions = DeviceRegistry.shared.getAllSessions()
+        let onlineDeviceIds = Set(onlineSessions.map { $0.deviceInfo.deviceId })
+
+        // 从数据库获取所有未移除的设备
+        let allDevices = try await DeviceModel.query(on: req.db)
+            .filter(\.$isRemoved == false)
+            .sort(\.$lastSeenAt, .descending)
+            .all()
+
+        let devices = allDevices.map { device in
+            let isOnline = onlineDeviceIds.contains(device.deviceId)
+            let onlineSession = onlineSessions.first { $0.deviceInfo.deviceId == device.deviceId }
+
+            return DeviceListItemDTO(
+                deviceId: device.deviceId,
+                deviceName: device.deviceName,
+                deviceModel: device.deviceModel,
+                appName: device.appName,
+                appVersion: device.appVersion,
+                buildNumber: device.buildNumber,
+                platform: device.platform,
+                systemVersion: device.systemVersion,
+                isSimulator: device.isSimulator,
+                isOnline: isOnline,
+                lastSeenAt: isOnline ? (onlineSession?.lastSeenAt ?? device.lastSeenAt) : device.lastSeenAt,
+                connectedAt: onlineSession?.connectedAt,
+                appIcon: device.appIcon
             )
         }
         return try await devices.encodeResponse(for: req)
@@ -130,7 +145,9 @@ struct DeviceController: RouteCollection {
 
         let message = BridgeMessageDTO.toggleCapture(
             network: payload.network,
-            log: payload.log
+            log: payload.log,
+            websocket: payload.websocket,
+            database: payload.database
         )
 
         DeviceRegistry.shared.sendMessage(to: deviceId, message: message)
@@ -194,6 +211,7 @@ struct DeviceController: RouteCollection {
 struct DeviceListItemDTO: Content {
     let deviceId: String
     let deviceName: String
+    let deviceModel: String
     let appName: String
     let appVersion: String
     let buildNumber: String
@@ -202,7 +220,8 @@ struct DeviceListItemDTO: Content {
     let isSimulator: Bool
     let isOnline: Bool
     let lastSeenAt: Date
-    let connectedAt: Date
+    let connectedAt: Date? // 离线设备可能没有 connectedAt
+    let appIcon: String?
 }
 
 struct DeviceDetailDTO: Content {
@@ -222,6 +241,8 @@ struct DeviceStatsDTO: Content {
 struct ToggleCaptureRequest: Content {
     let network: Bool
     let log: Bool
+    let websocket: Bool
+    let database: Bool
 }
 
 struct DeviceSessionDTO: Content {
@@ -232,4 +253,50 @@ struct DeviceSessionDTO: Content {
     let connectedAt: Date
     let disconnectedAt: Date?
     let isNormalClose: Bool
+}
+
+// MARK: - 移除设备（软删除）
+
+extension DeviceController {
+    func removeDevice(req: Request) async throws -> HTTPStatus {
+        guard let deviceId = req.parameters.get("deviceId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId")
+        }
+
+        // 检查设备是否在线，在线设备不能移除
+        if DeviceRegistry.shared.getSession(deviceId: deviceId) != nil {
+            throw Abort(.conflict, reason: "Cannot remove online device")
+        }
+
+        // 软删除设备
+        guard let device = try await DeviceModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .first()
+        else {
+            throw Abort(.notFound, reason: "Device not found")
+        }
+
+        device.isRemoved = true
+        try await device.save(on: req.db)
+
+        return .ok
+    }
+
+    func removeAllOfflineDevices(req: Request) async throws -> HTTPStatus {
+        // 获取所有在线设备 ID
+        let onlineDeviceIds = Set(DeviceRegistry.shared.getAllSessions().map { $0.deviceInfo.deviceId })
+
+        // 软删除所有离线设备
+        let offlineDevices = try await DeviceModel.query(on: req.db)
+            .filter(\.$isRemoved == false)
+            .all()
+            .filter { !onlineDeviceIds.contains($0.deviceId) }
+
+        for device in offlineDevices {
+            device.isRemoved = true
+            try await device.save(on: req.db)
+        }
+
+        return .ok
+    }
 }

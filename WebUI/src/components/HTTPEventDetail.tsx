@@ -12,6 +12,7 @@ import { TimingWaterfall } from './TimingWaterfall'
 import { ImagePreview, isImageContentType } from './ImagePreview'
 import { ProtobufViewer, isProtobufContentType } from './ProtobufViewer'
 import clsx from 'clsx'
+import { MockIcon, ClipboardIcon, CheckIcon, ArrowPathIcon } from './icons'
 
 interface Props {
   event: HTTPEventDetailType | null
@@ -150,8 +151,8 @@ export function HTTPEventDetail({
           </span>
           <span className="text-text-muted">{formatDuration(event.duration)}</span>
           {event.isMocked && (
-            <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-              🎭 Mocked
+            <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 flex items-center">
+              <MockIcon size={12} className="mr-1" /> Mocked
             </span>
           )}
           {event.timing?.protocolName && (
@@ -171,16 +172,16 @@ export function HTTPEventDetail({
           <button
             onClick={handleCopyCurl}
             disabled={curlLoading}
-            className="px-3 py-1.5 bg-bg-light border border-border-subtle rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 bg-bg-light border border-border-subtle rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50 flex items-center"
           >
-            {curlLoading ? '生成中...' : curlCopied ? '✓ 已复制' : '📋 复制 cURL'}
+            {curlLoading ? '生成中...' : curlCopied ? <><CheckIcon size={12} className="mr-1" /> 已复制</> : <><ClipboardIcon size={12} className="mr-1" /> 复制 cURL</>}
           </button>
           <button
             onClick={handleReplay}
             disabled={replayStatus !== null}
-            className="px-3 py-1.5 bg-bg-light border border-border-subtle rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 bg-bg-light border border-border-subtle rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50 flex items-center"
           >
-            {replayStatus || '🔄 重放请求'}
+            {replayStatus || <><ArrowPathIcon size={12} className="mr-1" /> 重放请求</>}
           </button>
         </div>
 

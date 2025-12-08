@@ -9,6 +9,7 @@
 
 import { useState, useMemo } from 'react'
 import clsx from 'clsx'
+import { PackageIcon } from './icons'
 
 // Protobuf wire types
 enum WireType {
@@ -370,7 +371,9 @@ export function ProtobufViewer({ base64Data, contentType, className }: ProtobufV
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-bg-darker border-b border-border">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-purple-400">📦 Protobuf</span>
+          <span className="text-xs font-medium text-purple-400 flex items-center gap-1">
+            <PackageIcon size={14} /> Protobuf
+          </span>
           {contentType && <span className="text-xs text-text-muted">{contentType}</span>}
           <span className="text-xs text-text-muted">({rawBytes.length} bytes)</span>
         </div>

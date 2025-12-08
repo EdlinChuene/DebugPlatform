@@ -2,6 +2,7 @@
 export interface DeviceInfo {
   deviceId: string
   deviceName: string
+  deviceModel: string
   systemName: string
   systemVersion: string
   appName: string
@@ -11,11 +12,15 @@ export interface DeviceInfo {
   isSimulator: boolean
   captureEnabled: boolean
   logCaptureEnabled: boolean
+  wsCaptureEnabled: boolean
+  dbInspectorEnabled: boolean
+  appIcon?: string
 }
 
 export interface DeviceListItem {
   deviceId: string
   deviceName: string
+  deviceModel: string
   appName: string
   appVersion: string
   buildNumber: string
@@ -24,7 +29,8 @@ export interface DeviceListItem {
   isSimulator: boolean
   isOnline: boolean
   lastSeenAt: string
-  connectedAt: string
+  connectedAt?: string // 离线设备可能没有 connectedAt
+  appIcon?: string
 }
 
 export interface DeviceDetail {

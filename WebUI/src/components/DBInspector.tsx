@@ -11,6 +11,7 @@ import { useDBStore } from '@/stores/dbStore'
 import { useProtobufStore } from '@/stores/protobufStore'
 import { ProtobufConfigPanel } from './ProtobufConfigPanel'
 import { BlobCell, isBase64Blob } from './BlobCell'
+import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, BackIcon, EditIcon, ClipboardIcon, PackageIcon } from './icons'
 
 interface DBInspectorProps {
     deviceId: string
@@ -128,9 +129,9 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
     // 获取数据库类型图标
     const getDbKindIcon = (kind: string) => {
         switch (kind) {
-            case 'log': return '📋'
-            case 'cache': return '⚡'
-            default: return '📁'
+            case 'log': return <LogIcon size={16} />
+            case 'cache': return <LightningIcon size={16} />
+            default: return <DatabaseIcon size={16} />
         }
     }
 
@@ -145,7 +146,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
     if (dbError) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-text-muted">
-                <span className="text-4xl mb-3 opacity-50">⚠️</span>
+                <WarningIcon size={36} className="mb-3 opacity-50" />
                 <p className="text-sm mb-3">{dbError}</p>
                 <button
                     onClick={() => loadDatabases(deviceId)}
@@ -160,7 +161,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
     if (databases.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-text-muted">
-                <span className="text-4xl mb-3 opacity-50">🗃️</span>
+                <DatabaseIcon size={36} className="mb-3 opacity-50" />
                 <p className="text-sm">没有注册的数据库</p>
                 <p className="text-xs mt-2 text-text-muted">
                     在 iOS App 中使用 DatabaseRegistry.shared.register() 注册数据库
@@ -196,7 +197,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                 className="p-1 rounded hover:bg-bg-light text-text-muted hover:text-text-secondary transition-colors"
                                 title={dbSortAscending ? '升序' : '降序'}
                             >
-                                <span className="text-xs">{dbSortAscending ? '↑' : '↓'}</span>
+                                {dbSortAscending ? <ArrowUpIcon size={12} /> : <ArrowDownIcon size={12} />}
                             </button>
                         </div>
                     </div>
@@ -224,7 +225,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                         </div>
                                     </div>
                                     {db.descriptor.isSensitive && (
-                                        <span className="text-yellow-500" title="敏感数据">🔒</span>
+                                        <span className="text-yellow-500" title="敏感数据"><LockIcon size={12} /></span>
                                     )}
                                 </div>
                             </button>
@@ -380,8 +381,8 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                 </table>
                             ) : (
                                 <div className="flex items-center justify-center h-full text-text-muted">
-                                    <div className="text-center">
-                                        <span className="text-4xl mb-3 block opacity-50">📝</span>
+                                    <div className="text-center flex flex-col items-center">
+                                        <EditIcon size={36} className="mb-3 opacity-50" />
                                         <p className="text-sm">输入 SQL 查询语句并执行</p>
                                     </div>
                                 </div>
@@ -413,18 +414,18 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                     )}
                                     title="Protobuf 配置"
                                 >
-                                    📦 Protobuf {descriptorMeta.length > 0 && `(${descriptorMeta.length})`}
+                                    <PackageIcon size={12} /> Protobuf {descriptorMeta.length > 0 && `(${descriptorMeta.length})`}
                                 </button>
                                 <button
                                     onClick={() => setShowSchema(!showSchema)}
                                     className={clsx(
-                                        'px-3 py-1.5 rounded text-xs transition-colors',
+                                        'px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1',
                                         showSchema
                                             ? 'bg-primary/20 text-primary'
                                             : 'bg-bg-light text-text-secondary hover:bg-bg-lighter'
                                     )}
                                 >
-                                    📋 Schema
+                                    <ClipboardIcon size={12} /> Schema
                                 </button>
                                 <button
                                     onClick={() => selectedDb && selectedTable && loadTableData(deviceId, selectedDb, selectedTable)}
@@ -498,7 +499,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                                         </span>
                                                         {orderBy === col.name && (
                                                             <span className="text-primary">
-                                                                {ascending ? '↑' : '↓'}
+                                                                {ascending ? <ArrowUpIcon size={12} /> : <ArrowDownIcon size={12} />}
                                                             </span>
                                                         )}
                                                     </div>
@@ -546,7 +547,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                 </table>
                             ) : dataError ? (
                                 <div className="flex flex-col items-center justify-center h-full text-text-muted">
-                                    <span className="text-4xl mb-3 opacity-50">⚠️</span>
+                                    <WarningIcon size={36} className="mb-3 opacity-50" />
                                     <p className="text-sm text-red-400 mb-2">{dataError}</p>
                                     <button
                                         onClick={() => selectedDb && selectedTable && loadTableData(deviceId, selectedDb, selectedTable)}
@@ -589,8 +590,8 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                     </>
                 ) : (
                     <div className="flex items-center justify-center h-full text-text-muted">
-                        <div className="text-center">
-                            <span className="text-4xl mb-3 block opacity-50">👈</span>
+                        <div className="text-center flex flex-col items-center">
+                            <BackIcon size={36} className="mb-3 opacity-50" />
                             <p className="text-sm">
                                 {selectedDb ? '选择一个表查看数据' : '选择一个数据库'}
                             </p>

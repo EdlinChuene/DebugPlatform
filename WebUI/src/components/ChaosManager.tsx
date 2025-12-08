@@ -7,6 +7,17 @@ import {
     deleteChaosRule,
 } from '@/services/api'
 import clsx from 'clsx'
+import {
+    ChaosIcon,
+    TimerIcon,
+    ClockIcon,
+    PlugIcon,
+    DiceIcon,
+    BombIcon,
+    SnailIcon,
+    TrashIcon,
+    EditIcon
+} from './icons'
 
 interface ChaosManagerProps {
     deviceId: string
@@ -95,7 +106,7 @@ export function ChaosManager({ deviceId }: ChaosManagerProps) {
             {/* Header */}
             <div className="px-4 py-3 border-b border-border bg-bg-dark/50 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <span className="text-xl">🎲</span>
+                    <ChaosIcon size={24} className="text-text-primary" />
                     <div>
                         <h3 className="font-medium text-text-primary">故障注入规则</h3>
                         <p className="text-xs text-text-muted">注入网络故障来测试应用的健壮性</p>
@@ -112,7 +123,7 @@ export function ChaosManager({ deviceId }: ChaosManagerProps) {
                     <div className="flex items-center justify-center h-full text-text-muted">加载中...</div>
                 ) : rules.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-text-muted">
-                        <span className="text-4xl mb-3 opacity-50">🎲</span>
+                        <ChaosIcon size={48} className="mb-3 opacity-50" />
                         <p className="text-sm mb-3">暂无故障注入规则</p>
                         <button onClick={handleCreate} className="btn btn-primary text-sm">
                             + 新建规则
@@ -149,14 +160,14 @@ export function ChaosManager({ deviceId }: ChaosManagerProps) {
     )
 }
 
-const chaosTypeConfig: Record<ChaosTypeKind, { label: string; color: string; icon: string; description: string }> = {
-    latency: { label: '延迟', color: 'bg-yellow-500/20 text-yellow-400', icon: '⏱️', description: '增加网络延迟' },
-    timeout: { label: '超时', color: 'bg-orange-500/20 text-orange-400', icon: '⏰', description: '请求超时' },
-    connectionReset: { label: '连接重置', color: 'bg-red-500/20 text-red-400', icon: '🔌', description: '模拟连接重置' },
-    randomError: { label: '随机错误', color: 'bg-pink-500/20 text-pink-400', icon: '🎰', description: '返回随机错误码' },
-    corruptResponse: { label: '数据损坏', color: 'bg-purple-500/20 text-purple-400', icon: '💥', description: '损坏响应数据' },
-    slowNetwork: { label: '慢速网络', color: 'bg-blue-500/20 text-blue-400', icon: '🐌', description: '限制网络带宽' },
-    dropRequest: { label: '丢弃请求', color: 'bg-gray-500/20 text-gray-400', icon: '🗑️', description: '直接丢弃请求' },
+const chaosTypeConfig: Record<ChaosTypeKind, { label: string; color: string; icon: React.ReactNode; description: string }> = {
+    latency: { label: '延迟', color: 'bg-yellow-500/20 text-yellow-400', icon: <TimerIcon size={16} />, description: '增加网络延迟' },
+    timeout: { label: '超时', color: 'bg-orange-500/20 text-orange-400', icon: <ClockIcon size={16} />, description: '请求超时' },
+    connectionReset: { label: '连接重置', color: 'bg-red-500/20 text-red-400', icon: <PlugIcon size={16} />, description: '模拟连接重置' },
+    randomError: { label: '随机错误', color: 'bg-pink-500/20 text-pink-400', icon: <DiceIcon size={16} />, description: '返回随机错误码' },
+    corruptResponse: { label: '数据损坏', color: 'bg-purple-500/20 text-purple-400', icon: <BombIcon size={16} />, description: '损坏响应数据' },
+    slowNetwork: { label: '慢速网络', color: 'bg-blue-500/20 text-blue-400', icon: <SnailIcon size={16} />, description: '限制网络带宽' },
+    dropRequest: { label: '丢弃请求', color: 'bg-gray-500/20 text-gray-400', icon: <TrashIcon size={16} />, description: '直接丢弃请求' },
 }
 
 function ChaosRuleCard({
@@ -239,13 +250,13 @@ function ChaosRuleCard({
                         onClick={onEdit}
                         className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-light rounded-lg transition-colors"
                     >
-                        ✏️
+                        <EditIcon size={16} />
                     </button>
                     <button
                         onClick={onDelete}
                         className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                     >
-                        🗑️
+                        <TrashIcon size={16} />
                     </button>
                 </div>
             </div>

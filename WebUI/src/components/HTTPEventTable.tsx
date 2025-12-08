@@ -11,6 +11,7 @@ import {
   extractDomain,
 } from '@/utils/format'
 import clsx from 'clsx'
+import { MockIcon, StarIcon, HttpIcon } from './icons'
 
 interface Props {
   items: ListItem[]
@@ -72,7 +73,7 @@ export function HTTPEventTable({
         className={clsx(
           'cursor-pointer transition-all duration-150 group',
           isError && !isSelected && 'bg-red-500/5 hover:bg-red-500/10',
-          isSelected && 'bg-primary text-bg-darkest shadow-sm shadow-primary/20',
+          isSelected && 'bg-accent-blue/15 border-l-2 border-l-accent-blue',
           isChecked && !isSelected && 'bg-primary/15',
           !isSelected && !isChecked && !isError && 'hover:bg-bg-light/60'
         )}
@@ -91,7 +92,7 @@ export function HTTPEventTable({
         {/* Time */}
         <td className={clsx(
           'px-4 py-3.5 whitespace-nowrap',
-          isSelected ? 'text-bg-darkest/80' : 'text-text-muted'
+          isSelected ? 'text-accent-blue' : 'text-text-muted'
         )}>
           <span className="text-sm font-mono">{formatSmartTime(event.startTime)}</span>
         </td>
@@ -101,7 +102,7 @@ export function HTTPEventTable({
           <span
             className={clsx(
               'inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-mono font-bold min-w-[60px] shadow-sm',
-              isSelected ? 'bg-bg-darkest/20 text-bg-darkest' : getMethodClass(event.method)
+              getMethodClass(event.method)
             )}
           >
             {event.method}
@@ -114,7 +115,7 @@ export function HTTPEventTable({
             <span
               className={clsx(
                 'inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-mono font-semibold min-w-[44px] shadow-sm',
-                isSelected ? 'bg-bg-darkest/20 text-bg-darkest' : getStatusClass(event.statusCode)
+                getStatusClass(event.statusCode)
               )}
             >
               {event.statusCode ?? 'ERR'}
@@ -127,13 +128,13 @@ export function HTTPEventTable({
           <div className="flex flex-col gap-0.5">
             <span className={clsx(
               'text-sm truncate transition-colors',
-              isSelected ? 'text-bg-darkest' : 'text-text-primary group-hover:text-primary'
+              isSelected ? 'text-accent-blue font-medium' : 'text-text-primary group-hover:text-primary'
             )} title={event.url}>
               {truncateUrl(event.url)}
             </span>
             <span className={clsx(
               'text-xs truncate font-mono',
-              isSelected ? 'text-bg-darkest/70' : 'text-text-muted opacity-70'
+              isSelected ? 'text-accent-blue/70' : 'text-text-muted opacity-70'
             )}>
               {extractDomain(event.url)}
             </span>
@@ -144,7 +145,7 @@ export function HTTPEventTable({
         <td className="px-4 py-3.5 whitespace-nowrap">
           <span className={clsx(
             'text-sm font-mono font-medium',
-            isSelected ? 'text-bg-darkest' : getDurationClass(event.duration)
+            getDurationClass(event.duration)
           )}>
             {formatDuration(event.duration)}
           </span>
@@ -155,12 +156,12 @@ export function HTTPEventTable({
           <div className="flex items-center justify-center gap-2">
             {event.isMocked && (
               <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/15 text-purple-400 shadow-sm shadow-purple-500/10" title="已 Mock">
-                🎭
+                <MockIcon size={14} />
               </span>
             )}
             {event.isFavorite && (
               <span className="badge-favorite text-base" title="已收藏">
-                ★
+                <StarIcon size={14} />
               </span>
             )}
             {!event.isMocked && !event.isFavorite && (
@@ -198,7 +199,7 @@ export function HTTPEventTable({
       {httpEvents.length === 0 && (
         <div className="flex flex-col items-center justify-center h-full text-text-muted py-20">
           <div className="w-16 h-16 rounded-lg bg-bg-light flex items-center justify-center mb-4 border border-border">
-            <span className="text-3xl opacity-60">🌐</span>
+            <HttpIcon size={32} className="opacity-60" />
           </div>
           <p className="text-sm font-medium text-text-secondary mb-1">暂无 HTTP 请求</p>
           <p className="text-xs text-text-muted">等待网络请求被捕获...</p>

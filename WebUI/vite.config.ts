@@ -40,6 +40,13 @@ export default defineConfig({
           zustand: ['zustand'],
         },
       },
+      // 忽略 protobufjs 中 eval 的警告（这是库的内部实现，无法修改）
+      onwarn(warning, warn) {
+        if (warning.code === 'EVAL' && warning.id?.includes('@protobufjs')) {
+          return
+        }
+        warn(warning)
+      },
     },
   },
 })

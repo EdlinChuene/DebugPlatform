@@ -14,6 +14,7 @@ import Vapor
 struct DeviceInfoDTO: Content {
     let deviceId: String
     let deviceName: String
+    let deviceModel: String
     let systemName: String
     let systemVersion: String
     let appName: String
@@ -23,6 +24,37 @@ struct DeviceInfoDTO: Content {
     let isSimulator: Bool
     var captureEnabled: Bool
     var logCaptureEnabled: Bool
+    var wsCaptureEnabled: Bool
+    var dbInspectorEnabled: Bool
+    let appIcon: String?
+
+    // 自定义解码以支持旧版本客户端（缺少 wsCaptureEnabled/dbInspectorEnabled 字段）
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        deviceId = try container.decode(String.self, forKey: .deviceId)
+        deviceName = try container.decode(String.self, forKey: .deviceName)
+        deviceModel = try container.decodeIfPresent(String.self, forKey: .deviceModel) ?? "Unknown"
+        systemName = try container.decode(String.self, forKey: .systemName)
+        systemVersion = try container.decode(String.self, forKey: .systemVersion)
+        appName = try container.decode(String.self, forKey: .appName)
+        appVersion = try container.decode(String.self, forKey: .appVersion)
+        buildNumber = try container.decode(String.self, forKey: .buildNumber)
+        platform = try container.decode(String.self, forKey: .platform)
+        isSimulator = try container.decodeIfPresent(Bool.self, forKey: .isSimulator) ?? false
+        captureEnabled = try container.decodeIfPresent(Bool.self, forKey: .captureEnabled) ?? true
+        logCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .logCaptureEnabled) ?? true
+        wsCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .wsCaptureEnabled) ?? true
+        dbInspectorEnabled = try container.decodeIfPresent(Bool.self, forKey: .dbInspectorEnabled) ?? true
+        appIcon = try container.decodeIfPresent(String.self, forKey: .appIcon)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case deviceId, deviceName, deviceModel, systemName, systemVersion
+        case appName, appVersion, buildNumber, platform
+        case isSimulator, captureEnabled, logCaptureEnabled
+        case wsCaptureEnabled, dbInspectorEnabled
+        case appIcon
+    }
 }
 
 // MARK: - Device Session
@@ -66,6 +98,9 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
     /// 断开事件回调
     var onDeviceDisconnected: ((String) -> Void)?
 
+    /// 重连事件回调
+    var onDeviceReconnected: ((String, String, String) -> Void)? // deviceId, deviceName, sessionId
+
     private init() {}
 
     // MARK: - LifecycleHandler
@@ -77,16 +112,16 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
             item.cancel()
         }
         pendingDisconnects.removeAll()
-        
+
         let currentSessions = Array(sessions.values)
         sessions.removeAll()
         lock.unlock()
-        
+
         // 非阻塞关闭所有 WebSocket 连接
         for session in currentSessions {
             session.webSocket.close(code: .goingAway, promise: nil)
         }
-        
+
         print("[DeviceRegistry] Shutdown complete")
     }
 
@@ -96,9 +131,11 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
         lock.lock()
 
         // 取消待处理的断开任务（设备快速重连）
+        var isQuickReconnect = false
         if let pendingTask = pendingDisconnects[deviceInfo.deviceId] {
             pendingTask.cancel()
             pendingDisconnects.removeValue(forKey: deviceInfo.deviceId)
+            isQuickReconnect = true
             print("[DeviceRegistry] Cancelled pending disconnect for \(deviceInfo.deviceId) - quick reconnect")
         }
 
@@ -106,6 +143,11 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
         let isNewConnection = sessions[deviceInfo.deviceId] == nil
         sessions[deviceInfo.deviceId] = session
         lock.unlock()
+
+        // 快速重连：广播重连事件
+        if isQuickReconnect {
+            onDeviceReconnected?(deviceInfo.deviceId, deviceInfo.deviceName, sessionId)
+        }
 
         // 只有新连接（非快速重连）才记录到数据库
         if isNewConnection {
@@ -161,7 +203,47 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
     private func recordSessionStart(deviceInfo: DeviceInfoDTO, sessionId: String) async {
         guard let db = database else { return }
 
-        let model = DeviceSessionModel(
+        // 1. 保存或更新设备信息
+        do {
+            if let existingDevice = try await DeviceModel.query(on: db)
+                .filter(\.$deviceId == deviceInfo.deviceId)
+                .first() {
+                // 更新现有设备信息
+                existingDevice.deviceName = deviceInfo.deviceName
+                existingDevice.deviceModel = deviceInfo.deviceModel
+                existingDevice.systemVersion = deviceInfo.systemVersion
+                existingDevice.appName = deviceInfo.appName
+                existingDevice.appVersion = deviceInfo.appVersion
+                existingDevice.buildNumber = deviceInfo.buildNumber
+                existingDevice.appIcon = deviceInfo.appIcon
+                existingDevice.lastSeenAt = Date()
+                existingDevice.isRemoved = false // 重新上线时恢复
+                try await existingDevice.save(on: db)
+                print("[DeviceRegistry] Device updated: \(deviceInfo.deviceId)")
+            } else {
+                // 创建新设备记录
+                let device = DeviceModel(
+                    deviceId: deviceInfo.deviceId,
+                    deviceName: deviceInfo.deviceName,
+                    deviceModel: deviceInfo.deviceModel,
+                    systemName: deviceInfo.systemName,
+                    systemVersion: deviceInfo.systemVersion,
+                    appName: deviceInfo.appName,
+                    appVersion: deviceInfo.appVersion,
+                    buildNumber: deviceInfo.buildNumber,
+                    platform: deviceInfo.platform,
+                    isSimulator: deviceInfo.isSimulator,
+                    appIcon: deviceInfo.appIcon
+                )
+                try await device.save(on: db)
+                print("[DeviceRegistry] New device recorded: \(deviceInfo.deviceId)")
+            }
+        } catch {
+            print("[DeviceRegistry] Failed to save device: \(error)")
+        }
+
+        // 2. 记录会话
+        let sessionModel = DeviceSessionModel(
             deviceId: deviceInfo.deviceId,
             deviceName: deviceInfo.deviceName,
             sessionId: sessionId,
@@ -169,7 +251,7 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
         )
 
         do {
-            try await model.save(on: db)
+            try await sessionModel.save(on: db)
             print("[DeviceRegistry] Session recorded: \(sessionId)")
         } catch {
             print("[DeviceRegistry] Failed to record session: \(error)")
@@ -187,6 +269,14 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
                 session.disconnectedAt = Date()
                 try await session.save(on: db)
                 print("[DeviceRegistry] Session end recorded: \(sessionId)")
+            }
+
+            // 更新设备最后活动时间
+            if let device = try await DeviceModel.query(on: db)
+                .filter(\.$deviceId == deviceId)
+                .first() {
+                device.lastSeenAt = Date()
+                try await device.save(on: db)
             }
         } catch {
             print("[DeviceRegistry] Failed to record session end: \(error)")
@@ -266,7 +356,7 @@ enum BridgeMessageDTO: Codable {
     case heartbeat
     case events([DebugEventDTO])
     case registered(sessionId: String)
-    case toggleCapture(network: Bool, log: Bool)
+    case toggleCapture(network: Bool, log: Bool, websocket: Bool, database: Bool)
     case updateMockRules([MockRuleDTO])
     case requestExport(timeFrom: Date, timeTo: Date, types: [String])
     case replayRequest(ReplayRequestPayload)
@@ -322,7 +412,12 @@ enum BridgeMessageDTO: Codable {
             self = .registered(sessionId: payload.sessionId)
         case .toggleCapture:
             let payload = try container.decode(ToggleCapturePayload.self, forKey: .payload)
-            self = .toggleCapture(network: payload.network, log: payload.log)
+            self = .toggleCapture(
+                network: payload.network,
+                log: payload.log,
+                websocket: payload.websocket,
+                database: payload.database
+            )
         case .updateMockRules:
             let rules = try container.decode([MockRuleDTO].self, forKey: .payload)
             self = .updateMockRules(rules)
@@ -371,9 +466,12 @@ enum BridgeMessageDTO: Codable {
         case let .registered(sessionId):
             try container.encode(MessageType.registered, forKey: .type)
             try container.encode(RegisteredPayload(sessionId: sessionId), forKey: .payload)
-        case let .toggleCapture(network, log):
+        case let .toggleCapture(network, log, websocket, database):
             try container.encode(MessageType.toggleCapture, forKey: .type)
-            try container.encode(ToggleCapturePayload(network: network, log: log), forKey: .payload)
+            try container.encode(
+                ToggleCapturePayload(network: network, log: log, websocket: websocket, database: database),
+                forKey: .payload
+            )
         case let .updateMockRules(rules):
             try container.encode(MessageType.updateMockRules, forKey: .type)
             try container.encode(rules, forKey: .payload)
@@ -421,6 +519,8 @@ private struct RegisteredPayload: Codable {
 private struct ToggleCapturePayload: Codable {
     let network: Bool
     let log: Bool
+    let websocket: Bool
+    let database: Bool
 }
 
 private struct ExportPayload: Codable {
@@ -479,23 +579,33 @@ struct BreakpointResponseSnapshotDTO: Content {
 struct BreakpointResumeDTO: Content {
     let breakpointId: String
     let requestId: String
-    let action: String  // "continue", "abort", "modify", "mockResponse"
+    let action: String // "continue", "abort", "modify", "mockResponse"
     let modifiedRequest: ModifiedRequestDTO?
-    let modifiedResponse: ModifiedResponseDTO?  // 添加响应修改支持
-    
-    init(breakpointId: String = "", requestId: String, action: String, modifiedRequest: ModifiedRequestDTO? = nil, modifiedResponse: ModifiedResponseDTO? = nil) {
+    let modifiedResponse: ModifiedResponseDTO? // 添加响应修改支持
+
+    init(
+        breakpointId: String = "",
+        requestId: String,
+        action: String,
+        modifiedRequest: ModifiedRequestDTO? = nil,
+        modifiedResponse: ModifiedResponseDTO? = nil
+    ) {
         self.breakpointId = breakpointId
         self.requestId = requestId
         self.action = action
         self.modifiedRequest = modifiedRequest
         self.modifiedResponse = modifiedResponse
     }
-    
+
     /// 从 BreakpointActionDTO 创建 BreakpointResumeDTO
-    static func from(requestId: String, breakpointId: String = "", actionDTO: BreakpointActionDTO) -> BreakpointResumeDTO {
+    static func from(
+        requestId: String,
+        breakpointId: String = "",
+        actionDTO: BreakpointActionDTO
+    ) -> BreakpointResumeDTO {
         var modifiedRequest: ModifiedRequestDTO? = nil
         var modifiedResponse: ModifiedResponseDTO? = nil
-        
+
         // 处理请求修改
         if let modification = actionDTO.modification?.request {
             modifiedRequest = ModifiedRequestDTO(
@@ -505,7 +615,7 @@ struct BreakpointResumeDTO: Content {
                 body: modification.body
             )
         }
-        
+
         // 处理响应修改（包括 mockResponse）
         if let modification = actionDTO.modification?.response {
             modifiedResponse = ModifiedResponseDTO(
@@ -520,7 +630,7 @@ struct BreakpointResumeDTO: Content {
                 body: mock.body
             )
         }
-        
+
         return BreakpointResumeDTO(
             breakpointId: breakpointId,
             requestId: requestId,
@@ -535,13 +645,13 @@ struct ModifiedRequestDTO: Content {
     let method: String?
     let url: String?
     let headers: [String: String]?
-    let body: String?  // base64 encoded
+    let body: String? // base64 encoded
 }
 
 struct ModifiedResponseDTO: Content {
     let statusCode: Int?
     let headers: [String: String]?
-    let body: String?  // base64 encoded
+    let body: String? // base64 encoded
 }
 
 struct BreakpointActionDTO: Content {

@@ -11,6 +11,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import clsx from 'clsx'
 import { useProtobufStore } from '@/stores/protobufStore'
+import { WarningIcon, PackageIcon } from './icons'
 import { tryAutoDecode, formatDecodedMessage } from '@/utils/protobufDescriptor'
 
 interface BlobCellProps {
@@ -110,7 +111,7 @@ export function BlobCell({
                 className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
                 title="点击展开"
             >
-                <span className="opacity-70">📦</span>
+                <PackageIcon size={14} className="opacity-70" />
                 <span className="font-mono">
                     {config ? `[${config.messageType.split('.').pop()}]` : `[BLOB ${blobSize}B]`}
                 </span>
@@ -132,7 +133,7 @@ export function BlobCell({
                 {/* 头部 */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                     <div className="flex items-center gap-2">
-                        <span className="text-purple-400">📦</span>
+                        <PackageIcon size={16} className="text-purple-400" />
                         <span className="font-mono text-sm text-text-primary">{columnName}</span>
                         <span className="text-xs text-text-muted">({blobSize} bytes)</span>
                         {config && (
@@ -199,7 +200,7 @@ export function BlobCell({
                             </pre>
                         ) : decodeError ? (
                             <div className="text-center py-8">
-                                <div className="text-yellow-400 mb-2">⚠️</div>
+                                <div className="text-yellow-400 mb-2 flex justify-center"><WarningIcon size={24} /></div>
                                 <p className="text-sm text-text-muted">{decodeError}</p>
                                 {!config && (
                                     <p className="text-xs text-text-muted/50 mt-2">

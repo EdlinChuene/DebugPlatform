@@ -2,6 +2,7 @@ import { useEffect, useRef, memo } from 'react'
 import type { WSSessionSummary } from '@/types'
 import { formatSmartTime, extractDomain, formatDuration } from '@/utils/format'
 import clsx from 'clsx'
+import { WebSocketIcon } from './icons'
 
 interface WSSessionListProps {
   sessions: WSSessionSummary[]
@@ -42,7 +43,7 @@ export function WSSessionList({
   if (sessions.length === 0 && !loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-muted py-12">
-        <span className="text-4xl mb-3 opacity-50">🔌</span>
+        <WebSocketIcon size={36} className="mb-3 opacity-50" />
         <p className="text-sm">暂无 WebSocket 会话</p>
         <p className="text-xs mt-1 text-text-muted">当设备建立 WebSocket 连接时会显示在这里</p>
       </div>
@@ -111,7 +112,7 @@ const SessionItem = memo(function SessionItem({
         'px-4 py-3 cursor-pointer transition-all',
         'hover:bg-bg-light/50',
         isSelected && !isSelectMode
-          ? 'bg-primary text-bg-darkest shadow-sm shadow-primary/20'
+          ? 'bg-accent-blue/15 border-l-2 border-l-accent-blue'
           : '',
         !isSelected && 'border-l-2 border-l-transparent',
         isSelectMode && isChecked && 'bg-primary/15'
@@ -132,13 +133,13 @@ const SessionItem = memo(function SessionItem({
         )}
         <span className={clsx(
           'font-mono text-sm truncate flex-1',
-          isSelected && !isSelectMode ? 'text-inherit' : 'text-text-primary'
+          isSelected && !isSelectMode ? 'text-accent-blue font-medium' : 'text-text-primary'
         )}>
           {extractDomain(session.url)}
         </span>
         <span className={clsx(
           'text-xs',
-          isSelected && !isSelectMode ? 'text-bg-darkest/70' : 'text-text-muted'
+          isSelected && !isSelectMode ? 'text-accent-blue/70' : 'text-text-muted'
         )}>
           {formatSmartTime(session.connectTime)}
         </span>
@@ -147,7 +148,7 @@ const SessionItem = memo(function SessionItem({
       {/* 第二行：完整 URL */}
       <div className={clsx(
         'text-xs truncate font-mono ml-5',
-        isSelected && !isSelectMode ? 'text-bg-darkest/70' : 'text-text-muted'
+        isSelected && !isSelectMode ? 'text-accent-blue/70' : 'text-text-muted'
       )}>
         {session.url}
       </div>
@@ -157,11 +158,11 @@ const SessionItem = memo(function SessionItem({
         {session.isOpen ? (
           <span className={clsx(
             'inline-flex items-center gap-1 text-xs',
-            isSelected && !isSelectMode ? 'text-green-700' : 'text-green-400'
+            isSelected && !isSelectMode ? 'text-green-500' : 'text-green-400'
           )}>
             <span className={clsx(
               'w-1.5 h-1.5 rounded-full animate-pulse',
-              isSelected && !isSelectMode ? 'bg-green-700' : 'bg-green-400'
+              isSelected && !isSelectMode ? 'bg-green-500' : 'bg-green-400'
             )} />
             连接中
           </span>
@@ -169,14 +170,14 @@ const SessionItem = memo(function SessionItem({
           <>
             <span className={clsx(
               'text-xs',
-              isSelected && !isSelectMode ? 'text-bg-darkest/70' : 'text-text-muted'
+              isSelected && !isSelectMode ? 'text-accent-blue/70' : 'text-text-muted'
             )}>
               已关闭{session.closeCode ? ` (${session.closeCode})` : ''}
             </span>
             {duration && (
               <span className={clsx(
                 'text-xs',
-                isSelected && !isSelectMode ? 'text-bg-darkest/70' : 'text-text-muted'
+                isSelected && !isSelectMode ? 'text-accent-blue/70' : 'text-text-muted'
               )}>
                 持续 {duration}
               </span>
@@ -194,11 +195,9 @@ function StatusIndicator({ isOpen, isSelectedRow }: { isOpen: boolean; isSelecte
       className={clsx(
         'w-3 h-3 rounded-full flex-shrink-0',
         isOpen
-          ? isSelectedRow
-            ? 'bg-green-300 shadow-green-300/50 shadow-sm'
-            : 'bg-green-500 shadow-green-500/50 shadow-sm'
+          ? 'bg-green-500 shadow-green-500/50 shadow-sm'
           : isSelectedRow
-            ? 'bg-gray-300'
+            ? 'bg-gray-400'
             : 'bg-gray-500'
       )}
     />

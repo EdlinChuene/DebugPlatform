@@ -37,9 +37,9 @@
   --color-text-muted: #6e7681;
 
   /* Borders - Much more subtle for dark theme */
-  --color-border: rgba(48, 54, 61, 0.35);
+  --color-border: rgba(72, 79, 88, 0.5);
   --color-border-light: rgba(48, 54, 61, 0.15);
-  --color-border-subtle: rgba(48, 54, 61, 0.2);
+  --color-border-subtle: rgba(139, 148, 158, 0.2);
   --color-border-active: rgba(0, 212, 170, 0.3);
   --color-primary-rgb: 0, 212, 170;
 
@@ -90,6 +90,7 @@
 
   --color-border: rgba(208, 215, 222, 0.6);
   --color-border-light: rgba(208, 215, 222, 0.3);
+  --color-border-subtle: rgba(87, 96, 106, 0.2);
   --color-border-active: rgba(0, 160, 133, 0.5);
 
   --color-scrollbar-track: #f6f8fa;
@@ -340,6 +341,23 @@ input[type='checkbox'] {
   animation: slideInRight 0.3s ease-out;
 }
 
+/* Toast Slide In Up Animation */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.25s ease-out;
+}
+
 /* Image preview styles */
 .image-preview {
   max-width: 100%;
@@ -423,6 +441,7 @@ input[type='checkbox'] {
   transition: all 0.15s ease;
   cursor: pointer;
   border: none;
+  white-space: nowrap;
 }
 
 .btn-primary {

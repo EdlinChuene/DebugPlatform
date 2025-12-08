@@ -97,7 +97,7 @@ export function formatShortcut(shortcut: KeyboardShortcut): string {
 export const defaultShortcuts = {
   search: { key: 'k', ctrl: true, description: '搜索' },
   refresh: { key: 'r', ctrl: true, description: '刷新' },
-  clear: { key: 'l', ctrl: true, description: '清空列表' },
+  clear: { key: 'l', ctrl: true, description: '清屏' },
   export: { key: 'e', ctrl: true, description: '导出' },
   escape: { key: 'Escape', description: '取消/关闭' },
   selectAll: { key: 'a', ctrl: true, description: '全选' },

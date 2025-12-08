@@ -37,6 +37,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(CreateDeviceSession())
     app.migrations.add(CreateHTTPEventParam())
     app.migrations.add(CreateTrafficRule())
+    app.migrations.add(CreateDevice())
 
     // 运行迁移
     try app.autoMigrate().wait()
@@ -48,6 +49,15 @@ func configure(_ app: Application) throws {
     // 设置设备断开回调（延迟后触发）
     DeviceRegistry.shared.onDeviceDisconnected = { deviceId in
         RealtimeStreamHandler.shared.broadcastDeviceDisconnected(deviceId: deviceId)
+    }
+
+    // 设置设备重连回调（快速重连时触发）
+    DeviceRegistry.shared.onDeviceReconnected = { deviceId, deviceName, sessionId in
+        RealtimeStreamHandler.shared.broadcastDeviceReconnected(
+            deviceId: deviceId,
+            deviceName: deviceName,
+            sessionId: sessionId
+        )
     }
 
     // 注册数据清理服务（生命周期管理）
@@ -164,6 +174,18 @@ func routes(_ app: Application) throws {
     
     // 服务器统计 API
     try api.register(collection: StatsController())
+
+    // Token 验证 API
+    api.post("auth", "verify") { req async throws -> TokenVerifyResponse in
+        let input = try req.content.decode(TokenVerifyRequest.self)
+        let validToken = ProcessInfo.processInfo.environment["DEBUG_HUB_TOKEN"] ?? "debug-token-2025"
+        
+        if input.token == validToken {
+            return TokenVerifyResponse(valid: true, message: "Token 验证成功")
+        } else {
+            return TokenVerifyResponse(valid: false, message: "Token 无效")
+        }
+    }
 
     // Debug Bridge WebSocket 端点
     app.webSocket("debug-bridge", maxFrameSize: WebSocketMaxFrameSize(integerLiteral: 50 * 1024 * 1024)) { req, ws in
@@ -323,4 +345,13 @@ struct HealthResponse: Content {
     let timestamp: Date
     let uptimeSeconds: Int
     let startTime: Date
+}
+
+struct TokenVerifyRequest: Content {
+    let token: String
+}
+
+struct TokenVerifyResponse: Content {
+    let valid: Bool
+    let message: String
 }

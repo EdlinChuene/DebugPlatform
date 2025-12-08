@@ -10,6 +10,7 @@ import {
 } from '@/services/api'
 import { BreakpointHitPanel } from './BreakpointHitPanel'
 import clsx from 'clsx'
+import { PauseIcon, EditIcon, TrashIcon } from './icons'
 
 interface BreakpointManagerProps {
     deviceId: string
@@ -144,7 +145,7 @@ export function BreakpointManager({ deviceId, pendingHits: externalHits, onResum
             <div className="px-4 py-3 border-b border-border bg-bg-dark/50">
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                        <span className="text-xl">⏸️</span>
+                        <PauseIcon size={24} className="text-text-primary" />
                         <div>
                             <h3 className="font-medium text-text-primary">断点管理</h3>
                             <p className="text-xs text-text-muted">拦截请求/响应并等待手动操作</p>
@@ -198,7 +199,7 @@ export function BreakpointManager({ deviceId, pendingHits: externalHits, onResum
                             <div className="flex items-center justify-center h-full text-text-muted">加载中...</div>
                         ) : rules.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full text-text-muted">
-                                <span className="text-4xl mb-3 opacity-50">⏸️</span>
+                                <PauseIcon size={48} className="mb-3 opacity-50" />
                                 <p className="text-sm mb-3">暂无断点规则</p>
                                 <button onClick={handleCreate} className="btn btn-primary text-sm">
                                     + 新建规则
@@ -309,13 +310,13 @@ function BreakpointRuleCard({
                         onClick={onEdit}
                         className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-light rounded-lg transition-colors"
                     >
-                        ✏️
+                        <EditIcon size={16} />
                     </button>
                     <button
                         onClick={onDelete}
                         className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                     >
-                        🗑️
+                        <TrashIcon size={16} />
                     </button>
                 </div>
             </div>

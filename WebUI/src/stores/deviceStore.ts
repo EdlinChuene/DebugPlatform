@@ -42,7 +42,11 @@ interface DeviceState {
   selectDevice: (deviceId: string) => Promise<void>
   clearSelection: () => void
   toggleCapture: (network: boolean, log: boolean) => Promise<void>
+  toggleWebSocketCapture: (websocket: boolean) => Promise<void>
+  toggleDatabaseInspector: (database: boolean) => Promise<void>
   clearDeviceData: () => Promise<void>
+  removeDevice: (deviceId: string) => Promise<void>
+  removeAllOfflineDevices: () => Promise<void>
   toggleFavorite: (deviceId: string) => void
   isFavorite: (deviceId: string) => boolean
 }
@@ -80,11 +84,51 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   },
 
   toggleCapture: async (network: boolean, log: boolean) => {
-    const { currentDeviceId } = get()
-    if (!currentDeviceId) return
+    const { currentDeviceId, currentDevice } = get()
+    if (!currentDeviceId || !currentDevice) return
 
     try {
-      await api.toggleCapture(currentDeviceId, network, log)
+      await api.toggleCapture(
+        currentDeviceId,
+        network,
+        log,
+        currentDevice.deviceInfo.wsCaptureEnabled,
+        currentDevice.deviceInfo.dbInspectorEnabled
+      )
+    } catch (error) {
+      set({ error: (error as Error).message })
+    }
+  },
+
+  toggleWebSocketCapture: async (websocket: boolean) => {
+    const { currentDeviceId, currentDevice } = get()
+    if (!currentDeviceId || !currentDevice) return
+
+    try {
+      await api.toggleCapture(
+        currentDeviceId,
+        currentDevice.deviceInfo.captureEnabled,
+        currentDevice.deviceInfo.logCaptureEnabled,
+        websocket,
+        currentDevice.deviceInfo.dbInspectorEnabled
+      )
+    } catch (error) {
+      set({ error: (error as Error).message })
+    }
+  },
+
+  toggleDatabaseInspector: async (database: boolean) => {
+    const { currentDeviceId, currentDevice } = get()
+    if (!currentDeviceId || !currentDevice) return
+
+    try {
+      await api.toggleCapture(
+        currentDeviceId,
+        currentDevice.deviceInfo.captureEnabled,
+        currentDevice.deviceInfo.logCaptureEnabled,
+        currentDevice.deviceInfo.wsCaptureEnabled,
+        database
+      )
     } catch (error) {
       set({ error: (error as Error).message })
     }
@@ -101,6 +145,32 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       useLogStore.getState().clearEvents()
     } catch (error) {
       set({ error: (error as Error).message })
+    }
+  },
+
+  removeDevice: async (deviceId: string) => {
+    try {
+      await api.removeDevice(deviceId)
+      // 从列表中移除
+      set(state => ({
+        devices: state.devices.filter(d => d.deviceId !== deviceId)
+      }))
+    } catch (error) {
+      set({ error: (error as Error).message })
+      throw error
+    }
+  },
+
+  removeAllOfflineDevices: async () => {
+    try {
+      await api.removeAllOfflineDevices()
+      // 从列表中移除所有离线设备
+      set(state => ({
+        devices: state.devices.filter(d => d.isOnline)
+      }))
+    } catch (error) {
+      set({ error: (error as Error).message })
+      throw error
     }
   },
 

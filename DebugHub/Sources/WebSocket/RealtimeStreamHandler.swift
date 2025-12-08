@@ -17,6 +17,7 @@ struct RealtimeMessage: Content {
         case stats
         case deviceConnected
         case deviceDisconnected
+        case deviceReconnected
         case breakpointHit
     }
 
@@ -145,6 +146,29 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         let message = RealtimeMessage(type: .deviceDisconnected, deviceId: deviceId, payload: payload)
         broadcastMessage(message)
         print("[RealtimeStream] Broadcasted device disconnected: \(deviceId)")
+    }
+
+    /// 广播设备重连事件
+    func broadcastDeviceReconnected(deviceId: String, deviceName: String, sessionId: String) {
+        let event = DeviceSessionEvent(
+            sessionId: sessionId,
+            deviceId: deviceId,
+            deviceName: deviceName,
+            timestamp: Date()
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        guard
+            let payloadData = try? encoder.encode(event),
+            let payload = String(data: payloadData, encoding: .utf8) else {
+            return
+        }
+
+        let message = RealtimeMessage(type: .deviceReconnected, deviceId: deviceId, payload: payload)
+        broadcastMessage(message)
+        print("[RealtimeStream] Broadcasted device reconnected: \(deviceName)")
     }
 
     /// 广播断点命中事件
