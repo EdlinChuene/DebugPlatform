@@ -115,7 +115,7 @@ cd DebugPlatform/DebugHub
 
 ### 2. iOS App 集成
 
-iOS SDK 已独立为 [DebugProbe](../DebugProbe) 仓库，请参阅该仓库的 README 获取详细集成文档。
+iOS SDK 已独立为 [DebugProbe](https://github.com/sunimp/DebugProbe) 仓库，请参阅该仓库的 README 获取详细集成文档。
 
 **快速开始：**
 
@@ -124,7 +124,7 @@ iOS SDK 已独立为 [DebugProbe](../DebugProbe) 仓库，请参阅该仓库的 
 dependencies: [
     .package(path: "../DebugProbe")  // 本地路径
     // 或使用远程仓库
-    // .package(url: "https://github.com/user/DebugProbe.git", from: "1.0.0")
+    // .package(url: "https://github.com/sunimp/DebugProbe.git", branch: "main")
 ]
 
 // 集成代码
@@ -142,7 +142,7 @@ func setupDebugProbe() {
 #endif
 ```
 
-SDK 默认自动拦截所有 HTTP 请求（Method Swizzling），无需额外配置。更多功能请参阅 [DebugProbe README](../DebugProbe/README.md)。
+SDK 默认自动拦截所有 HTTP 请求（Method Swizzling），无需额外配置。更多功能请参阅 [DebugProbe README](https://github.com/sunimp/DebugProbe/blob/main/README.md)。
 
 ### 3. 开发模式
 
