@@ -60,6 +60,7 @@ struct HTTPEventDTO: Content {
     let timing: Timing?
     let isMocked: Bool
     let mockRuleId: String?
+    let isReplay: Bool?
 }
 
 // MARK: - WebSocket Event DTO
@@ -159,7 +160,7 @@ struct MockRuleDTO: Content {
         var delayMilliseconds: Int?
     }
 
-    let id: String
+    var id: String? // 创建时为 nil，由服务器生成
     var name: String
     var targetType: String
     var condition: Condition

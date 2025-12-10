@@ -1,41 +1,123 @@
-import { useState, useEffect, useCallback } from 'react'
+// 断点调试前端插件
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import type { BreakpointRule, BreakpointPhase, BreakpointAction, BreakpointHit } from '@/types'
 import {
     getBreakpointRules,
     createBreakpointRule,
     updateBreakpointRule,
     deleteBreakpointRule,
-    getPendingBreakpoints,
-    resumeBreakpoint,
+    deleteAllBreakpointRules,
 } from '@/services/api'
-import { BreakpointHitPanel } from './BreakpointHitPanel'
+import { BreakpointHitPanel } from '@/components/BreakpointHitPanel'
 import clsx from 'clsx'
-import { PauseIcon, EditIcon, TrashIcon } from './icons'
+import { PauseIcon, EditIcon, TrashIcon, BreakpointIcon } from '@/components/icons'
+import { useBreakpointStore } from '@/stores/breakpointStore'
+import { useToastStore } from '@/stores/toastStore'
+import {
+    FrontendPlugin,
+    PluginContext,
+    PluginEvent,
+    PluginMetadata,
+    PluginRenderProps,
+    PluginState,
+    BuiltinPluginId,
+} from '../types'
 
-interface BreakpointManagerProps {
-    deviceId: string
-    pendingHits?: BreakpointHit[]
-    onResumeBreakpoint?: (requestId: string, action: BreakpointAction) => void
+// 插件实现类
+class BreakpointPluginImpl implements FrontendPlugin {
+    metadata: PluginMetadata = {
+        pluginId: BuiltinPluginId.BREAKPOINT,
+        displayName: 'Breakpoint',
+        version: '1.0.0',
+        description: '请求断点调试',
+        icon: <BreakpointIcon size={16} />,
+        dependencies: [BuiltinPluginId.NETWORK],
+    }
+
+    state: PluginState = 'uninitialized'
+    isEnabled = true
+
+    private pluginContext: PluginContext | null = null
+    private unsubscribe: (() => void) | null = null
+
+    async initialize(context: PluginContext): Promise<void> {
+        this.pluginContext = context
+        this.state = 'loading'
+
+        this.unsubscribe = context.subscribeToEvents(
+            ['breakpoint_hit', 'breakpoint_rule_change'],
+            (event) => this.handleEvent(event)
+        )
+
+        this.state = 'ready'
+    }
+
+    render(props: PluginRenderProps): React.ReactNode {
+        return <BreakpointPluginView {...props} />
+    }
+
+    onActivate(): void {
+        console.log('[BreakpointPlugin] Activated')
+    }
+
+    onDeactivate(): void {
+        console.log('[BreakpointPlugin] Deactivated')
+    }
+
+    onEvent(event: PluginEvent): void {
+        this.handleEvent(event)
+    }
+
+    destroy(): void {
+        this.unsubscribe?.()
+        this.pluginContext = null
+        this.state = 'uninitialized'
+    }
+
+    get context(): PluginContext | null {
+        return this.pluginContext
+    }
+
+    private handleEvent(event: PluginEvent): void {
+        if (event.eventType === 'breakpoint_hit' && event.payload) {
+            const hit = event.payload as BreakpointHit
+            useBreakpointStore.getState().addHit(hit)
+        } else if (event.eventType === 'breakpoint_rule_change') {
+            const deviceId = this.pluginContext?.deviceId
+            if (deviceId) {
+                useBreakpointStore.getState().fetchPendingHits(deviceId)
+            }
+        }
+    }
 }
 
-export function BreakpointManager({ deviceId, pendingHits: externalHits, onResumeBreakpoint }: BreakpointManagerProps) {
+// 插件视图组件
+function BreakpointPluginView({ context, isActive }: PluginRenderProps) {
+    const deviceId = context.deviceId
+    const { pendingHits, fetchPendingHits, resumeBreakpoint: storeResumeBreakpoint } = useBreakpointStore()
+    const toast = useToastStore()
+
     const [rules, setRules] = useState<BreakpointRule[]>([])
     const [loading, setLoading] = useState(false)
     const [editingRule, setEditingRule] = useState<Partial<BreakpointRule> | null>(null)
     const [showEditor, setShowEditor] = useState(false)
     const [activeTab, setActiveTab] = useState<'rules' | 'pending'>('rules')
-
-    // 内部管理的 pending hits（如果外部没有提供）
-    const [internalHits, setInternalHits] = useState<BreakpointHit[]>([])
     const [resuming, setResuming] = useState(false)
 
-    const pendingHits = externalHits ?? internalHits
-
     const fetchRules = useCallback(async () => {
+        if (!deviceId) return
         setLoading(true)
         try {
             const data = await getBreakpointRules(deviceId)
-            setRules(data)
+            // 按创建时间倒序排序（最新创建的在前）
+            const sortedData = [...data].sort((a, b) => {
+                if (!a.createdAt && !b.createdAt) return 0
+                if (!a.createdAt) return 1
+                if (!b.createdAt) return -1
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            })
+            setRules(sortedData)
         } catch (error) {
             console.error('Failed to fetch breakpoint rules:', error)
         } finally {
@@ -43,24 +125,20 @@ export function BreakpointManager({ deviceId, pendingHits: externalHits, onResum
         }
     }, [deviceId])
 
-    const fetchPendingHits = useCallback(async () => {
-        if (externalHits !== undefined) return // 使用外部管理的 hits
-        try {
-            const data = await getPendingBreakpoints(deviceId)
-            setInternalHits(data)
-        } catch (error) {
-            console.error('Failed to fetch pending breakpoints:', error)
-        }
-    }, [deviceId, externalHits])
-
+    // 初始加载
     useEffect(() => {
-        fetchRules()
-        fetchPendingHits()
+        if (isActive && deviceId) {
+            fetchRules()
+            fetchPendingHits(deviceId)
+        }
+    }, [isActive, deviceId, fetchRules, fetchPendingHits])
 
-        // 定期轮询 pending hits
-        const interval = setInterval(fetchPendingHits, 2000)
+    // 定期轮询 pending hits
+    useEffect(() => {
+        if (!isActive || !deviceId) return
+        const interval = setInterval(() => fetchPendingHits(deviceId), 2000)
         return () => clearInterval(interval)
-    }, [fetchRules, fetchPendingHits])
+    }, [isActive, deviceId, fetchPendingHits])
 
     // 当有 pending hits 时自动切换到 pending tab
     useEffect(() => {
@@ -87,7 +165,7 @@ export function BreakpointManager({ deviceId, pendingHits: externalHits, onResum
     }
 
     const handleSave = async () => {
-        if (!editingRule) return
+        if (!editingRule || !deviceId) return
 
         try {
             if (editingRule.id) {
@@ -105,6 +183,7 @@ export function BreakpointManager({ deviceId, pendingHits: externalHits, onResum
 
     const handleDelete = async (id: string) => {
         if (!confirm('确定要删除这条断点规则吗？')) return
+        if (!deviceId) return
         try {
             await deleteBreakpointRule(deviceId, id)
             fetchRules()
@@ -113,7 +192,19 @@ export function BreakpointManager({ deviceId, pendingHits: externalHits, onResum
         }
     }
 
+    const handleClearAll = async () => {
+        if (!confirm('确定要清空所有断点规则吗？此操作不可恢复。')) return
+        if (!deviceId) return
+        try {
+            await deleteAllBreakpointRules(deviceId)
+            fetchRules()
+        } catch (error) {
+            console.error('Failed to clear all breakpoint rules:', error)
+        }
+    }
+
     const handleToggleEnabled = async (rule: BreakpointRule) => {
+        if (!deviceId) return
         try {
             await updateBreakpointRule(deviceId, rule.id, { enabled: !rule.enabled })
             fetchRules()
@@ -122,43 +213,79 @@ export function BreakpointManager({ deviceId, pendingHits: externalHits, onResum
         }
     }
 
-    const handleResumeBreakpoint = async (requestId: string, action: BreakpointAction) => {
+    const handleResumeBreakpoint = useCallback(async (requestId: string, action: BreakpointAction) => {
+        if (!deviceId) return
         setResuming(true)
         try {
-            if (onResumeBreakpoint) {
-                onResumeBreakpoint(requestId, action)
-            } else {
-                await resumeBreakpoint(deviceId, requestId, action)
-                // 移除已处理的 hit
-                setInternalHits(prev => prev.filter(h => h.requestId !== requestId))
-            }
+            await storeResumeBreakpoint(deviceId, requestId, action)
+            toast.show('success', '断点已处理')
         } catch (error) {
-            console.error('Failed to resume breakpoint:', error)
+            toast.show('error', '处理断点失败')
         } finally {
             setResuming(false)
         }
+    }, [deviceId, storeResumeBreakpoint, toast])
+
+    // 统计启用的规则数量
+    const enabledCount = useMemo(() => rules.filter(r => r.enabled).length, [rules])
+
+    if (!isActive || !deviceId) {
+        return null
     }
 
     return (
         <div className="h-full flex flex-col">
-            {/* Header with Tabs */}
-            <div className="px-4 py-3 border-b border-border bg-bg-dark/50">
-                <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                        <PauseIcon size={24} className="text-text-primary" />
-                        <div>
-                            <h3 className="font-medium text-text-primary">断点管理</h3>
-                            <p className="text-xs text-text-muted">拦截请求/响应并等待手动操作</p>
-                        </div>
-                    </div>
+            {/* 操作栏 */}
+            <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-bg-medium flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    {/* 刷新按钮 */}
+                    <button
+                        onClick={fetchRules}
+                        className="btn btn-secondary text-xs px-2.5 py-1.5"
+                        title="刷新规则列表"
+                        disabled={loading}
+                    >
+                        刷新
+                    </button>
+
+                    {/* 分隔线 */}
+                    <div className="w-px h-4 bg-border mx-1" />
+
+                    {/* 新建规则按钮 */}
                     {activeTab === 'rules' && (
-                        <button onClick={handleCreate} className="btn btn-primary text-sm">
-                            + 新建规则
+                        <button
+                            onClick={handleCreate}
+                            className="btn btn-primary text-sm"
+                        >
+                            新建规则
                         </button>
                     )}
                 </div>
 
-                {/* Tabs */}
+                {/* 右侧：清空规则 + 规则统计 */}
+                <div className="flex items-center gap-2 text-xs text-text-secondary">
+                    {/* 清空规则按钮 */}
+                    <button
+                        onClick={handleClearAll}
+                        className="btn text-xs px-2 py-1.5 flex-shrink-0 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
+                        title="清空所有规则"
+                        disabled={rules.length === 0}
+                    >
+                        清空规则
+                    </button>
+
+                    {/* 分隔线 */}
+                    <div className="w-px h-4 bg-border mx-1" />
+
+                    {/* 规则统计 */}
+                    <span>共 {rules.length} 条规则</span>
+                    <span className="text-text-muted">•</span>
+                    <span className="text-green-400">{enabledCount} 条启用</span>
+                </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-bg-medium">
                 <div className="flex gap-1">
                     <button
                         onClick={() => setActiveTab('rules')}
@@ -335,9 +462,29 @@ function BreakpointRuleEditor({
     onSave: () => void
     onCancel: () => void
 }) {
+    // ESC 键关闭弹窗（输入框激活时不响应，与 Mock 弹窗行为一致）
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                const target = e.target as HTMLElement
+                const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+                if (!isInput) {
+                    e.stopPropagation()
+                    onCancel()
+                }
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown, true)
+        return () => window.removeEventListener('keydown', handleKeyDown, true)
+    }, [onCancel])
+
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-bg-dark border border-border rounded-2xl w-full max-w-lg p-6">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+
+            {/* Modal */}
+            <div className="relative bg-bg-dark border border-border rounded-2xl w-full max-w-lg p-6">
                 <h3 className="text-lg font-medium text-text-primary mb-4">
                     {rule.id ? '编辑断点规则' : '新建断点规则'}
                 </h3>
@@ -420,3 +567,5 @@ function BreakpointRuleEditor({
         </div>
     )
 }
+
+export const BreakpointPlugin = new BreakpointPluginImpl()

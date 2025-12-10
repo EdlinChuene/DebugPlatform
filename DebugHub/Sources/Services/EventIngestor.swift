@@ -96,7 +96,8 @@ final class EventIngestor: @unchecked Sendable {
             isMocked: event.isMocked,
             mockRuleId: event.mockRuleId,
             traceId: event.request.traceId,
-            timingJSON: timingJSON
+            timingJSON: timingJSON,
+            isReplay: event.isReplay ?? false
         )
 
         try await model.save(on: db)

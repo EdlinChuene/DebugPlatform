@@ -71,7 +71,14 @@ export const useMockStore = create<MockStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const rules = await getMockRules(deviceId)
-      set({ rules, loading: false })
+      // 按创建时间倒序排序（最新创建的在前）
+      const sortedRules = [...rules].sort((a, b) => {
+        if (!a.createdAt && !b.createdAt) return 0
+        if (!a.createdAt) return 1
+        if (!b.createdAt) return -1
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      })
+      set({ rules: sortedRules, loading: false })
     } catch (error) {
       set({
         loading: false,
@@ -139,7 +146,15 @@ export const useMockStore = create<MockStore>((set, get) => ({
     if (!rule) return
 
     try {
-      await updateMockRule(deviceId, ruleId, { enabled: !rule.enabled })
+      // 发送完整的规则数据，只修改 enabled 字段
+      await updateMockRule(deviceId, ruleId, {
+        name: rule.name,
+        targetType: rule.targetType,
+        condition: rule.condition,
+        action: rule.action,
+        priority: rule.priority,
+        enabled: !rule.enabled,
+      })
       set((state) => ({
         rules: state.rules.map((r) => (r.id === ruleId ? { ...r, enabled: !r.enabled } : r)),
       }))

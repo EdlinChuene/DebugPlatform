@@ -40,6 +40,7 @@ interface DeviceState {
   // Actions
   fetchDevices: () => Promise<void>
   selectDevice: (deviceId: string) => Promise<void>
+  refreshDevice: () => Promise<void>
   clearSelection: () => void
   toggleCapture: (network: boolean, log: boolean) => Promise<void>
   toggleWebSocketCapture: (websocket: boolean) => Promise<void>
@@ -76,6 +77,17 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       set({ currentDevice: detail, isLoading: false })
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
+    }
+  },
+
+  refreshDevice: async () => {
+    const { currentDeviceId } = get()
+    if (!currentDeviceId) return
+    try {
+      const detail = await api.getDevice(currentDeviceId)
+      set({ currentDevice: detail })
+    } catch (error) {
+      console.error('Failed to refresh device:', error)
     }
   },
 

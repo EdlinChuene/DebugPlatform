@@ -38,6 +38,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(CreateHTTPEventParam())
     app.migrations.add(CreateTrafficRule())
     app.migrations.add(CreateDevice())
+    app.migrations.add(AddHTTPEventReplay())
 
     // 运行迁移
     try app.autoMigrate().wait()
@@ -66,6 +67,14 @@ func configure(_ app: Application) throws {
     // 注册实时流处理器（生命周期管理，用于优雅关闭连接）
     app.lifecycle.use(RealtimeStreamHandler.shared)
 
+    // 注册并启动插件系统
+    registerBuiltinPlugins()
+    // 同步启动插件（在注册路由之前必须完成）
+    try app.eventLoopGroup.next().makeFutureWithTask {
+        try await BackendPluginRegistry.shared.bootAll(app: app)
+    }.wait()
+    app.lifecycle.use(BackendPluginRegistry.shared)
+
     // 配置静态文件服务（Web UI）
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
 
@@ -82,6 +91,11 @@ func configure(_ app: Application) throws {
 }
 
 func routes(_ app: Application) throws {
+    // 忽略 Chrome DevTools 的 well-known 请求
+    app.get(".well-known", "**") { _ async throws -> Response in
+        Response(status: .notFound)
+    }
+
     // 根路径 - 返回 index.html
     app.get { req async throws -> Response in
         try await req.fileio.asyncStreamFile(at: app.directory.publicDirectory + "index.html")
@@ -139,26 +153,9 @@ func routes(_ app: Application) throws {
     // 设备相关 API
     try api.register(collection: DeviceController())
 
-    // HTTP 事件 API
-    try api.register(collection: HTTPEventController())
-
-    // WebSocket 事件 API
-    try api.register(collection: WSEventController())
-
-    // 日志事件 API
-    try api.register(collection: LogEventController())
-
-    // Mock 规则 API
-    try api.register(collection: MockRuleController())
-
-    // 断点 API
-    try api.register(collection: BreakpointController())
-
-    // 故障注入 API
-    try api.register(collection: ChaosController())
-
-    // 数据库检查 API
-    try api.register(collection: DatabaseController())
+    // 插件化 API（由 BackendPluginRegistry 统一注册）
+    // 包括：HTTP 事件、WebSocket 事件、日志事件、Mock 规则、断点、故障注入、数据库检查
+    try BackendPluginRegistry.shared.registerAllRoutes(on: api)
 
     // 导出 API
     try api.register(collection: ExportController())
@@ -354,4 +351,24 @@ struct TokenVerifyRequest: Content {
 struct TokenVerifyResponse: Content {
     let valid: Bool
     let message: String
+}
+
+// MARK: - Plugin Registration
+
+/// 注册所有内置后端插件
+private func registerBuiltinPlugins() {
+    let registry = BackendPluginRegistry.shared
+
+    // 核心监控插件
+    try? registry.register(plugin: NetworkBackendPlugin())
+    try? registry.register(plugin: LogBackendPlugin())
+    try? registry.register(plugin: WebSocketBackendPlugin())
+    try? registry.register(plugin: DatabaseBackendPlugin())
+
+    // 调试工具插件
+    try? registry.register(plugin: MockBackendPlugin())
+    try? registry.register(plugin: BreakpointBackendPlugin())
+    try? registry.register(plugin: ChaosBackendPlugin())
+
+    print("[PluginRegistry] \(registry.getAllPlugins().count) builtin plugins registered")
 }

@@ -183,6 +183,48 @@ input[type='checkbox'] {
   cursor: pointer;
 }
 
+/* 自定义复选框样式 */
+.checkbox-custom {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 4px;
+  background-color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.checkbox-custom:hover {
+  border-color: var(--color-text-secondary);
+  background-color: var(--color-text-secondary);
+}
+
+.checkbox-custom:checked {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.checkbox-custom:checked::after {
+  content: '';
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-custom:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Card Effect */
 .glass-card {
   background: var(--color-bg-medium);

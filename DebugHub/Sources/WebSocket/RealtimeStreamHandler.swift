@@ -291,4 +291,60 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
             }
         }
     }
+
+    // MARK: - Plugin Support
+
+    /// 广播原始 JSON 数据给所有订阅者
+    /// 用于插件系统发送自定义消息
+    /// - Parameters:
+    ///   - json: JSON 字符串
+    ///   - deviceId: 可选的设备 ID 过滤
+    func broadcastRaw(_ json: String, deviceId: String? = nil) {
+        lock.lock()
+        let currentSubscribers = Array(subscribers.values)
+        lock.unlock()
+
+        for subscriber in currentSubscribers {
+            // 检查设备过滤
+            if let targetDeviceId = deviceId,
+               let subscriberDeviceId = subscriber.deviceId,
+               subscriberDeviceId != targetDeviceId {
+                continue
+            }
+
+            subscriber.webSocket.send(json)
+        }
+    }
+
+    /// 广播插件事件给所有相关订阅者
+    /// - Parameters:
+    ///   - event: 插件事件 DTO
+    ///   - deviceId: 设备 ID
+    func broadcastPluginEvent(_ event: PluginEventDTO, deviceId: String) {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        guard
+            let payloadData = try? encoder.encode(event),
+            let payload = String(data: payloadData, encoding: .utf8) else {
+            print("[RealtimeStream] Failed to encode plugin event")
+            return
+        }
+
+        // 包装为统一消息格式
+        let wrapper: [String: Any] = [
+            "type": "pluginEvent",
+            "deviceId": deviceId,
+            "payload": payload,
+        ]
+
+        guard
+            let wrapperData = try? JSONSerialization.data(withJSONObject: wrapper),
+            let json = String(data: wrapperData, encoding: .utf8) else {
+            print("[RealtimeStream] Failed to wrap plugin event")
+            return
+        }
+
+        broadcastRaw(json, deviceId: deviceId)
+    }
 }

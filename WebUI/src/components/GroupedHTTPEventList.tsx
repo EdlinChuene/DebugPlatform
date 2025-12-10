@@ -9,7 +9,6 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { HTTPEventSummary, TrafficRule } from '@/types'
 import { useRuleStore } from '@/stores/ruleStore'
-import { useMockStore } from '@/stores/mockStore'
 import {
     formatSmartTime,
     formatDuration,
@@ -26,8 +25,10 @@ import {
     TagIcon,
     MockIcon,
     GlobeIcon,
-    HighlightIcon
+    HighlightIcon,
+    RefreshIcon
 } from './icons'
+import { Checkbox } from './Checkbox'
 
 // 分组模式
 export type GroupMode = 'none' | 'domain' | 'path'
@@ -222,9 +223,6 @@ export function GroupedHTTPEventList({
     // 获取规则
     const { deviceRules, rules, fetchDeviceRules, fetchRules } = useRuleStore()
 
-    // 获取 Mock 规则（用于判断 Mock 图标是否显示）
-    const { rules: mockRules } = useMockStore()
-
     // 加载规则
     useEffect(() => {
         if (deviceId) {
@@ -395,8 +393,8 @@ export function GroupedHTTPEventList({
         const isSelected = event.id === selectedId
         const isChecked = selectedIds.has(event.id)
 
-        // 检查 Mock 规则是否仍然存在（规则被删除后不显示图标）
-        const isMocked = event.isMocked && event.mockRuleId && mockRules.some(rule => rule.id === event.mockRuleId)
+        // 直接使用 event.isMocked 状态，不需要检查规则是否仍然存在
+        const isMocked = event.isMocked
 
         // 检查是否匹配规则（用于高亮/标记）
         const matchedRule = matchEventRule(event, applicableRules)
@@ -433,12 +431,10 @@ export function GroupedHTTPEventList({
 
                 {/* Checkbox */}
                 {isSelectMode && (
-                    <div className="px-3 py-3.5 w-10 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <input
-                            type="checkbox"
+                    <div className="px-3 py-3.5 w-10 flex-shrink-0 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
                             checked={isChecked}
                             onChange={() => onToggleSelect?.(event.id)}
-                            className="w-4 h-4 rounded border-border cursor-pointer accent-primary"
                         />
                     </div>
                 )}
@@ -503,8 +499,11 @@ export function GroupedHTTPEventList({
 
                 {/* Tags */}
                 <div className="px-3 py-3.5 w-[60px] flex-shrink-0 flex items-center justify-center gap-1">
+                    {event.isReplay && (
+                        <span className="text-blue-400" title="重放请求"><RefreshIcon size={14} /></span>
+                    )}
                     {isMocked && (
-                        <span title="已 Mock"><MockIcon size={14} /></span>
+                        <span className="text-purple-400" title="已 Mock"><MockIcon size={14} /></span>
                     )}
                     {event.isFavorite && (
                         <span title="已收藏"><StarIcon size={14} filled className="text-accent-yellow" /></span>

@@ -3,6 +3,7 @@ import type { WSSessionSummary } from '@/types'
 import { formatSmartTime, extractDomain, formatDuration } from '@/utils/format'
 import clsx from 'clsx'
 import { WebSocketIcon, ChevronDownIcon, ChevronRightIcon } from './icons'
+import { Checkbox } from './Checkbox'
 
 // 分组数据结构
 interface SessionGroup {
@@ -126,7 +127,7 @@ export function WSSessionList({
   return (
     <div ref={containerRef} className="overflow-auto h-full">
       {/* 分组会话列表 */}
-      <div className="divide-y divide-border/50">
+      <div>
         {groups.map((group) => (
           <SessionGroupItem
             key={group.url}
@@ -178,20 +179,22 @@ const SessionGroupItem = memo(function SessionGroupItem({
   // 如果只有一个 session，直接显示完整信息
   if (!isMultiple) {
     return (
-      <SessionItem
-        session={group.sessions[0]}
-        isSelected={selectedId === group.sessions[0].id}
-        isChecked={selectedIds.has(group.sessions[0].id)}
-        isSelectMode={isSelectMode}
-        onSelect={onSelect}
-        onToggleSelect={onToggleSelect}
-        isGrouped={false}
-      />
+      <div className="border-b border-border">
+        <SessionItem
+          session={group.sessions[0]}
+          isSelected={selectedId === group.sessions[0].id}
+          isChecked={selectedIds.has(group.sessions[0].id)}
+          isSelectMode={isSelectMode}
+          onSelect={onSelect}
+          onToggleSelect={onToggleSelect}
+          isGrouped={false}
+        />
+      </div>
     )
   }
 
   return (
-    <div>
+    <div className="border-b border-border">
       {/* 组头部 */}
       <div
         onClick={onToggleExpand}
@@ -279,19 +282,18 @@ const SessionItem = memo(function SessionItem({
         // 默认悬停
         !isSelected && !isChecked && 'hover:bg-bg-light/50',
         // 分组内的边框
-        isGrouped && 'border-b border-border/30 last:border-0'
+        isGrouped && 'border-b border-border last:border-0'
       )}
     >
       {/* 第一行：选择框/状态、时间、连接状态 */}
       <div className="flex items-center gap-2 mb-1">
         {isSelectMode ? (
-          <input
-            type="checkbox"
-            checked={isChecked}
-            onChange={() => onToggleSelect?.(session.id)}
-            onClick={(e) => e.stopPropagation()}
-            className="w-4 h-4 rounded border-border bg-bg-light text-primary focus:ring-primary/50 cursor-pointer"
-          />
+          <div onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={isChecked}
+              onChange={() => onToggleSelect?.(session.id)}
+            />
+          </div>
         ) : (
           <StatusIndicator isOpen={session.isOpen} isSelectedRow={isSelected && !isSelectMode} />
         )}

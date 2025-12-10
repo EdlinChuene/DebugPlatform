@@ -12,7 +12,7 @@ import { useProtobufStore } from '@/stores/protobufStore'
 import { ProtobufConfigPanel } from './ProtobufConfigPanel'
 import { BlobCell, isBase64Blob } from './BlobCell'
 import { ListLoadingOverlay } from './ListLoadingOverlay'
-import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, BackIcon, EditIcon, ClipboardIcon, PackageIcon, RefreshIcon } from './icons'
+import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, EditIcon, ClipboardIcon, PackageIcon } from './icons'
 
 interface DBInspectorProps {
     deviceId: string
@@ -186,10 +186,10 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                             <button
                                 onClick={() => loadDatabases(deviceId)}
                                 disabled={dbLoading}
-                                className="p-1 rounded hover:bg-bg-light text-text-muted hover:text-text-secondary transition-colors disabled:opacity-50"
+                                className="px-2 py-1 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
                                 title="刷新所有数据库"
                             >
-                                <RefreshIcon size={12} className={dbLoading ? 'animate-spin' : ''} />
+                                刷新
                             </button>
                             <select
                                 value={dbSortOrder}
@@ -254,22 +254,22 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                     <button
                                         onClick={() => selectedDb && loadTables(deviceId, selectedDb)}
                                         disabled={tablesLoading}
-                                        className="p-1 rounded hover:bg-bg-light text-text-muted hover:text-text-secondary transition-colors disabled:opacity-50"
+                                        className="px-2 py-1 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
                                         title="刷新当前数据库的所有表"
                                     >
-                                        <RefreshIcon size={12} className={tablesLoading ? 'animate-spin' : ''} />
+                                        刷新
                                     </button>
                                     <button
                                         onClick={() => setQueryMode(!queryMode)}
                                         className={clsx(
-                                            'px-2 py-1 rounded text-xs transition-colors',
+                                            'px-2 py-1 bg-bg-light rounded text-xs transition-colors',
                                             queryMode
                                                 ? 'bg-accent-blue/20 text-accent-blue'
-                                                : 'text-text-muted hover:text-text-secondary hover:bg-bg-light'
+                                                : 'text-text-secondary hover:bg-bg-lighter'
                                         )}
                                         title="SQL 查询"
                                     >
-                                        {'</>'}
+                                        {'SQL 查询'}
                                     </button>
                                 </>
                             )}
@@ -319,9 +319,18 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                     <>
                         {/* 查询输入区 */}
                         <div className="p-4 border-b border-border bg-bg-dark/50">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="text-xs text-text-muted">SQL 查询</span>
-                                <span className="text-xs text-text-muted/50">（仅支持 SELECT）</span>
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-text-muted">SQL 查询</span>
+                                    <span className="text-xs text-text-muted/50">（仅支持 SELECT）</span>
+                                </div>
+                                <button
+                                    onClick={() => setQueryMode(false)}
+                                    className="px-2 py-1 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors"
+                                    title="关闭 SQL 查询"
+                                >
+                                    关闭
+                                </button>
                             </div>
                             <textarea
                                 value={queryInput}
@@ -381,7 +390,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                         {queryResult.rows.map((row, idx) => (
                                             <tr
                                                 key={idx}
-                                                className="border-b border-border/30 hover:bg-bg-light/30 transition-colors"
+                                                className="border-b border-border hover:bg-bg-light/30 transition-colors"
                                             >
                                                 {queryResult.columns.map((col) => (
                                                     <td
@@ -449,11 +458,21 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                     <ClipboardIcon size={12} /> Schema
                                 </button>
                                 <button
+                                    onClick={() => {
+                                        setQueryInput(`SELECT * FROM ${selectedTable} LIMIT 100`)
+                                        setQueryMode(true)
+                                    }}
+                                    className="px-3 py-1.5 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors flex items-center gap-1"
+                                    title="查询当前表"
+                                >
+                                    SQL 查询
+                                </button>
+                                <button
                                     onClick={() => selectedDb && selectedTable && loadTableData(deviceId, selectedDb, selectedTable)}
                                     disabled={dataLoading}
-                                    className="px-3 py-1.5 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50 flex items-center gap-1"
+                                    className="px-3 py-1.5 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
                                 >
-                                    <RefreshIcon size={12} className={dataLoading ? 'animate-spin' : ''} /> 刷新
+                                    刷新
                                 </button>
                             </div>
                         </div>
@@ -485,7 +504,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                     </thead>
                                     <tbody className="font-mono">
                                         {schema.map((col) => (
-                                            <tr key={col.name} className="border-t border-border/30">
+                                            <tr key={col.name} className="border-t border-border">
                                                 <td className="py-1.5 text-primary">{col.name}</td>
                                                 <td className="py-1.5 text-text-secondary">{col.type || '-'}</td>
                                                 <td className="py-1.5">{col.primaryKey ? '✓' : ''}</td>
@@ -531,7 +550,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                         {tableData.rows.map((row, idx) => (
                                             <tr
                                                 key={idx}
-                                                className="border-b border-border/30 hover:bg-bg-light/30 transition-colors"
+                                                className="border-b border-border hover:bg-bg-light/30 transition-colors"
                                             >
                                                 {tableData.columns.map((col) => {
                                                     const cellValue = row.values[col.name]
@@ -611,7 +630,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                 ) : (
                     <div className="flex items-center justify-center h-full text-text-muted">
                         <div className="text-center flex flex-col items-center">
-                            <BackIcon size={36} className="mb-3 opacity-50" />
+                            <span className="text-4xl mb-3 opacity-50">👈</span>
                             <p className="text-sm">
                                 {selectedDb ? '选择一个表查看数据' : '选择一个数据库'}
                             </p>

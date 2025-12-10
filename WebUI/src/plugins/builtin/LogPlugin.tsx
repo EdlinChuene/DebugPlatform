@@ -1,0 +1,376 @@
+// 日志监控前端插件
+// 使用 VirtualLogList 组件和 logStore
+
+import React, { useEffect, useCallback, useState } from 'react'
+import {
+    FrontendPlugin,
+    PluginContext,
+    PluginEvent,
+    PluginMetadata,
+    PluginRenderProps,
+    PluginState,
+    BuiltinPluginId,
+} from '../types'
+import { LogIcon, TrashIcon, FilterIcon, ArrowUpIcon, ArrowDownIcon } from '@/components/icons'
+import { useLogStore } from '@/stores/logStore'
+import { useConnectionStore } from '@/stores/connectionStore'
+import { useToastStore } from '@/stores/toastStore'
+import { VirtualLogList, type LogScrollControls } from '@/components/VirtualLogList'
+import { LogFilters } from '@/components/LogFilters'
+import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
+import { Toggle } from '@/components/Toggle'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import clsx from 'clsx'
+
+// 插件实现类
+class LogPluginImpl implements FrontendPlugin {
+    metadata: PluginMetadata = {
+        pluginId: BuiltinPluginId.LOG,
+        displayName: 'Log',
+        version: '1.0.0',
+        description: '应用日志监控',
+        icon: <LogIcon size={16} />,
+    }
+
+    state: PluginState = 'uninitialized'
+    isEnabled = true
+
+    private pluginContext: PluginContext | null = null
+    private unsubscribe: (() => void) | null = null
+
+    async initialize(context: PluginContext): Promise<void> {
+        this.pluginContext = context
+        this.state = 'loading'
+
+        // 注意：日志事件由 DevicePluginView 统一处理并添加到 logStore
+        // 不需要在这里重复订阅，避免重复添加事件
+
+        this.state = 'ready'
+    }
+
+    render(props: PluginRenderProps): React.ReactNode {
+        return <LogPluginView {...props} />
+    }
+
+    onActivate(): void {
+        console.log('[LogPlugin] Activated')
+    }
+
+    onDeactivate(): void {
+        console.log('[LogPlugin] Deactivated')
+    }
+
+    onEvent(_event: PluginEvent): void {
+        // 事件由 DevicePluginView 统一处理
+    }
+
+    destroy(): void {
+        this.unsubscribe?.()
+        this.pluginContext = null
+        this.state = 'uninitialized'
+    }
+
+    get context(): PluginContext | null {
+        return this.pluginContext
+    }
+}
+
+// 插件视图组件
+function LogPluginView({ context, isActive }: PluginRenderProps) {
+    const deviceId = context.deviceId
+
+    // 从 logStore 获取状态
+    const {
+        events,
+        filteredEvents,
+        total,
+        isLoading,
+        autoScroll,
+        selectedId,
+        selectedIds,
+        isSelectMode,
+        filters,
+        subsystems,
+        categories,
+        fetchEvents,
+        fetchFilterOptions,
+        clearEvents,
+        setAutoScroll,
+        setFilter,
+        setMinLevel,
+        setSearchQuery,
+        selectEvent,
+        toggleSelectMode,
+        toggleSelectId,
+        selectAll,
+        clearSelectedIds,
+        batchDelete,
+        loadMore,
+        hasMore,
+    } = useLogStore()
+
+    const { isConnected } = useConnectionStore()
+    const toast = useToastStore()
+
+    // 确认对话框状态
+    const [showClearConfirm, setShowClearConfirm] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [showFilters, setShowFilters] = useState(false)
+    const [scrollControls, setScrollControls] = useState<LogScrollControls | null>(null)
+
+    // 初始加载
+    useEffect(() => {
+        if (isActive && deviceId) {
+            fetchEvents(deviceId)
+            fetchFilterOptions(deviceId)
+        }
+    }, [isActive, deviceId, fetchEvents, fetchFilterOptions])
+
+    // 刷新
+    const handleRefresh = useCallback(() => {
+        if (!deviceId) return
+        fetchEvents(deviceId)
+    }, [deviceId, fetchEvents])
+
+    // 清空
+    const handleClear = useCallback(() => {
+        clearEvents()
+        toast.show('success', '已清空日志')
+    }, [clearEvents, toast])
+
+    // 批量删除
+    const handleBatchDelete = useCallback(async () => {
+        if (!deviceId || selectedIds.size === 0) return
+        await batchDelete(deviceId)
+        setShowDeleteConfirm(false)
+        toggleSelectMode()
+        toast.show('success', `已删除 ${selectedIds.size} 条日志`)
+    }, [deviceId, selectedIds.size, batchDelete, toggleSelectMode, toast])
+
+    // 处理选择
+    const handleSelect = useCallback((id: string | null) => {
+        selectEvent(id)
+    }, [selectEvent])
+
+    if (!isActive) {
+        return null
+    }
+
+    return (
+        <div className="h-full flex flex-col">
+            {/* 工具栏 */}
+            <div className="flex-shrink-0 px-3 py-2 border-b border-border bg-bg-medium flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    {/* 刷新按钮 */}
+                    <button
+                        onClick={handleRefresh}
+                        className="btn btn-secondary text-xs px-2.5 py-1.5"
+                        title="刷新"
+                        disabled={isLoading}
+                    >
+                        刷新
+                    </button>
+
+                    <div className="h-5 w-px bg-border flex-shrink-0" />
+
+                    {/* 批量选择按钮 */}
+                    <button
+                        onClick={toggleSelectMode}
+                        className={clsx(
+                            'btn text-xs px-2.5 py-1.5 flex-shrink-0',
+                            isSelectMode ? 'btn-primary' : 'btn-secondary'
+                        )}
+                        title={isSelectMode ? '退出选择' : '批量选择'}
+                    >
+                        {isSelectMode ? '取消选择' : '批量选择'}
+                    </button>
+
+                    {/* 搜索输入框 */}
+                    <input
+                        type="text"
+                        value={filters.searchQuery || ''}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="搜索日志..."
+                        className="input text-xs py-1.5 px-2.5 w-40 flex-shrink-0"
+                    />
+
+                    {/* 过滤器按钮 */}
+                    <button
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={clsx(
+                            'flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium border transition-colors flex-shrink-0',
+                            (showFilters || filters.minLevel !== 'verbose' || filters.subsystem || filters.category || filters.text)
+                                ? 'bg-primary/15 text-primary border-primary hover:bg-primary/20'
+                                : 'bg-bg-light text-text-secondary border-border hover:text-text-primary hover:border-text-muted'
+                        )}
+                        title="过滤器"
+                    >
+                        <FilterIcon size={14} />
+                        过滤器
+                    </button>
+
+                    {isSelectMode && (
+                        <>
+                            <button
+                                onClick={selectAll}
+                                className="btn btn-secondary text-xs px-2 py-1.5"
+                            >
+                                全选
+                            </button>
+                            <button
+                                onClick={clearSelectedIds}
+                                className="btn btn-secondary text-xs px-2 py-1.5"
+                            >
+                                清除选择
+                            </button>
+                            {selectedIds.size > 0 && (
+                                <button
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    className="btn text-xs px-2 py-1.5 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 flex items-center gap-1"
+                                >
+                                    <TrashIcon size={12} />
+                                    删除 ({selectedIds.size})
+                                </button>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-text-secondary">
+                    {/* 清屏按钮 */}
+                    <button
+                        onClick={handleClear}
+                        className="btn text-xs px-2 py-1.5 flex-shrink-0 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
+                        title="清空当前列表"
+                        disabled={filteredEvents.length === 0}
+                    >
+                        清屏
+                    </button>
+
+                    <div className="h-5 w-px bg-border flex-shrink-0" />
+
+                    {/* 自动滚动 */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-xs text-text-muted">自动滚动</span>
+                        <Toggle
+                            checked={autoScroll}
+                            onChange={(checked) => setAutoScroll(checked)}
+                        />
+                    </div>
+
+                    <div className="h-5 w-px bg-border flex-shrink-0" />
+
+                    {/* 连接状态 */}
+                    <span className={clsx(
+                        'px-2 py-0.5 rounded text-xs',
+                        isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                    )}>
+                        {isConnected ? '已连接' : '已断开'}
+                    </span>
+
+                    {/* 日志计数 */}
+                    <span className="text-xs text-text-secondary">
+                        共 {total} 条
+                        {events.length < total && (
+                            <span className="text-text-muted">（已加载 {events.length}）</span>
+                        )}
+                    </span>
+                </div>
+            </div>
+
+            {/* 过滤器面板 */}
+            {showFilters && (
+                <LogFilters
+                    minLevel={filters.minLevel}
+                    subsystems={subsystems}
+                    categories={categories}
+                    selectedSubsystem={filters.subsystem}
+                    selectedCategory={filters.category}
+                    searchText={filters.text}
+                    searchQuery={filters.searchQuery}
+                    onMinLevelChange={setMinLevel}
+                    onSubsystemChange={(value) => setFilter('subsystem', value)}
+                    onCategoryChange={(value) => setFilter('category', value)}
+                    onSearchChange={(value) => setFilter('text', value)}
+                    onSearchQueryChange={setSearchQuery}
+                />
+            )}
+
+            {/* 日志列表 */}
+            <div className="flex-1 overflow-hidden relative">
+                <VirtualLogList
+                    events={filteredEvents}
+                    autoScroll={autoScroll}
+                    selectedId={selectedId}
+                    onSelect={handleSelect}
+                    isSelectMode={isSelectMode}
+                    selectedIds={selectedIds}
+                    onToggleSelect={toggleSelectId}
+                    onLoadMore={() => deviceId && loadMore(deviceId)}
+                    hasMore={hasMore()}
+                    isLoading={isLoading}
+                    loadedCount={events.length}
+                    totalCount={total}
+                    onScrollControlsReady={setScrollControls}
+                />
+                <ListLoadingOverlay isLoading={isLoading} />
+
+                {/* 悬浮滚动按钮 */}
+                {scrollControls && (
+                    <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-10">
+                        <button
+                            onClick={() => scrollControls.scrollToTop()}
+                            disabled={scrollControls.isAtTop}
+                            className={clsx(
+                                "w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-lg",
+                                scrollControls.isAtTop
+                                    ? "bg-bg-dark/50 text-text-muted/30 cursor-not-allowed"
+                                    : "bg-primary/90 text-white hover:bg-primary border border-primary"
+                            )}
+                            title="滚动到顶部"
+                        >
+                            <ArrowUpIcon size={16} />
+                        </button>
+                        <button
+                            onClick={() => scrollControls.scrollToBottom()}
+                            disabled={scrollControls.isAtBottom}
+                            className={clsx(
+                                "w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-lg",
+                                scrollControls.isAtBottom
+                                    ? "bg-bg-dark/50 text-text-muted/30 cursor-not-allowed"
+                                    : "bg-primary/90 text-white hover:bg-primary border border-primary"
+                            )}
+                            title="滚动到底部"
+                        >
+                            <ArrowDownIcon size={16} />
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* 清空确认对话框 */}
+            <ConfirmDialog
+                isOpen={showClearConfirm}
+                onClose={() => setShowClearConfirm(false)}
+                onConfirm={handleClear}
+                title="清空日志"
+                message="确定要清空所有日志吗？此操作无法撤销。"
+                confirmText="清空"
+                type="danger"
+            />
+
+            {/* 删除确认对话框 */}
+            <ConfirmDialog
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onConfirm={handleBatchDelete}
+                title="删除选中日志"
+                message={`确定要删除选中的 ${selectedIds.size} 条日志吗？此操作无法撤销。`}
+                confirmText="删除"
+                type="danger"
+            />
+        </div>
+    )
+}
+
+export const LogPlugin = new LogPluginImpl()

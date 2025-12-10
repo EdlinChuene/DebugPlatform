@@ -298,3 +298,19 @@ struct CreateDomainPolicy: AsyncMigration {
         try await database.schema("domain_policies").delete()
     }
 }
+
+// MARK: - Add HTTP Event Replay Flag Migration
+
+struct AddHTTPEventReplay: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("http_events")
+            .field("is_replay", .bool, .required, .sql(.default(false)))
+            .update()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("http_events")
+            .deleteField("is_replay")
+            .update()
+    }
+}

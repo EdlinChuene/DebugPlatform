@@ -11,25 +11,25 @@ import Vapor
 
 // MARK: - Device Info DTO
 
-struct DeviceInfoDTO: Content {
-    let deviceId: String
-    let deviceName: String
-    let deviceModel: String
-    let systemName: String
-    let systemVersion: String
-    let appName: String
-    let appVersion: String
-    let buildNumber: String
-    let platform: String
-    let isSimulator: Bool
-    var captureEnabled: Bool
-    var logCaptureEnabled: Bool
-    var wsCaptureEnabled: Bool
-    var dbInspectorEnabled: Bool
-    let appIcon: String?
+public struct DeviceInfoDTO: Content {
+    public let deviceId: String
+    public let deviceName: String
+    public let deviceModel: String
+    public let systemName: String
+    public let systemVersion: String
+    public let appName: String
+    public let appVersion: String
+    public let buildNumber: String
+    public let platform: String
+    public let isSimulator: Bool
+    public var captureEnabled: Bool
+    public var logCaptureEnabled: Bool
+    public var wsCaptureEnabled: Bool
+    public var dbInspectorEnabled: Bool
+    public let appIcon: String?
 
     // 自定义解码以支持旧版本客户端（缺少 wsCaptureEnabled/dbInspectorEnabled 字段）
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         deviceId = try container.decode(String.self, forKey: .deviceId)
         deviceName = try container.decode(String.self, forKey: .deviceName)
@@ -415,6 +415,9 @@ enum BridgeMessageDTO: Codable {
     // 数据库检查相关
     case dbCommand(DBCommandDTO)
     case dbResponse(DBResponseDTO)
+    // 插件命令
+    case pluginCommand(PluginCommandDTO)
+    case pluginEvent(PluginEventDTO)
     case error(code: Int, message: String)
 
     private enum CodingKeys: String, CodingKey {
@@ -437,6 +440,8 @@ enum BridgeMessageDTO: Codable {
         case updateChaosRules
         case dbCommand
         case dbResponse
+        case pluginCommand
+        case pluginEvent
         case error
     }
 
@@ -491,6 +496,12 @@ enum BridgeMessageDTO: Codable {
         case .dbResponse:
             let response = try container.decode(DBResponseDTO.self, forKey: .payload)
             self = .dbResponse(response)
+        case .pluginCommand:
+            let command = try container.decode(PluginCommandDTO.self, forKey: .payload)
+            self = .pluginCommand(command)
+        case .pluginEvent:
+            let event = try container.decode(PluginEventDTO.self, forKey: .payload)
+            self = .pluginEvent(event)
         case .error:
             let payload = try container.decode(ErrorPayload.self, forKey: .payload)
             self = .error(code: payload.code, message: payload.message)
@@ -545,6 +556,12 @@ enum BridgeMessageDTO: Codable {
         case let .dbResponse(response):
             try container.encode(MessageType.dbResponse, forKey: .type)
             try container.encode(response, forKey: .payload)
+        case let .pluginCommand(command):
+            try container.encode(MessageType.pluginCommand, forKey: .type)
+            try container.encode(command, forKey: .payload)
+        case let .pluginEvent(event):
+            try container.encode(MessageType.pluginEvent, forKey: .type)
+            try container.encode(event, forKey: .payload)
         case let .error(code, message):
             try container.encode(MessageType.error, forKey: .type)
             try container.encode(ErrorPayload(code: code, message: message), forKey: .payload)
@@ -598,6 +615,7 @@ struct BreakpointRuleDTO: Content {
     var phase: String // "request", "response", "both"
     var enabled: Bool
     var priority: Int
+    var createdAt: Date?
 }
 
 struct BreakpointHitDTO: Content {
@@ -722,6 +740,7 @@ struct ChaosRuleDTO: Content {
     var chaos: ChaosTypeDTO
     var enabled: Bool
     var priority: Int
+    var createdAt: Date?
 }
 
 struct ChaosTypeDTO: Content {

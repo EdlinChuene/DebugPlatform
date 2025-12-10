@@ -1,0 +1,366 @@
+// WebSocket 监控前端插件
+// 使用 WSSessionList 和 WSSessionDetail 组件
+
+import React, { useEffect, useCallback, useState } from 'react'
+import {
+    FrontendPlugin,
+    PluginContext,
+    PluginEvent,
+    PluginMetadata,
+    PluginRenderProps,
+    PluginState,
+    BuiltinPluginId,
+} from '../types'
+import { WebSocketIcon, TrashIcon } from '@/components/icons'
+import { useWSStore } from '@/stores/wsStore'
+import { useConnectionStore } from '@/stores/connectionStore'
+import { useToastStore } from '@/stores/toastStore'
+import { WSSessionList } from '@/components/WSSessionList'
+import { WSSessionDetail } from '@/components/WSSessionDetail'
+import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
+import { Toggle } from '@/components/Toggle'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { parseWSEvent } from '@/services/realtime'
+import clsx from 'clsx'
+
+// 插件实现类
+class WebSocketPluginImpl implements FrontendPlugin {
+    metadata: PluginMetadata = {
+        pluginId: BuiltinPluginId.WEBSOCKET,
+        displayName: 'WebSocket',
+        version: '1.0.0',
+        description: 'WebSocket 连接监控',
+        icon: <WebSocketIcon size={16} />,
+    }
+
+    state: PluginState = 'uninitialized'
+    isEnabled = true
+
+    private pluginContext: PluginContext | null = null
+    private unsubscribe: (() => void) | null = null
+
+    async initialize(context: PluginContext): Promise<void> {
+        this.pluginContext = context
+        this.state = 'loading'
+
+        // 订阅 WebSocket 事件
+        this.unsubscribe = context.subscribeToEvents(
+            ['ws_connection', 'ws_message', 'ws_frame'],
+            (event) => this.handleEvent(event)
+        )
+
+        this.state = 'ready'
+    }
+
+    render(props: PluginRenderProps): React.ReactNode {
+        return <WebSocketPluginView {...props} />
+    }
+
+    onActivate(): void {
+        console.log('[WebSocketPlugin] Activated')
+    }
+
+    onDeactivate(): void {
+        console.log('[WebSocketPlugin] Deactivated')
+    }
+
+    onEvent(event: PluginEvent): void {
+        this.handleEvent(event)
+    }
+
+    destroy(): void {
+        this.unsubscribe?.()
+        this.pluginContext = null
+        this.state = 'uninitialized'
+    }
+
+    get context(): PluginContext | null {
+        return this.pluginContext
+    }
+
+    private handleEvent(event: PluginEvent): void {
+        if (!event.payload) return
+
+        const wsStore = useWSStore.getState()
+        const payloadStr = typeof event.payload === 'string'
+            ? event.payload
+            : JSON.stringify(event.payload)
+        const wsEvent = parseWSEvent(payloadStr)
+
+        if (wsEvent) {
+            if (wsEvent.type === 'sessionCreated') {
+                const session = wsEvent.data as { id: string; url: string; connectTime: string }
+                wsStore.addRealtimeSession({
+                    id: session.id,
+                    url: session.url,
+                    connectTime: session.connectTime,
+                    disconnectTime: null,
+                    closeCode: null,
+                    closeReason: null,
+                    isOpen: true,
+                })
+            } else if (wsEvent.type === 'sessionClosed') {
+                const data = wsEvent.data as { id: string; closeCode?: number; closeReason?: string }
+                wsStore.updateSessionStatus(data.id, false, data.closeCode, data.closeReason)
+            } else if (wsEvent.type === 'frame') {
+                wsStore.addRealtimeFrame(wsEvent.data as Parameters<typeof wsStore.addRealtimeFrame>[0])
+            }
+        }
+    }
+}
+
+// 插件视图组件
+function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
+    const deviceId = context.deviceId
+
+    // 从 wsStore 获取状态
+    const {
+        sessions,
+        sessionsLoading,
+        totalSessions,
+        selectedSessionId,
+        selectedSession,
+        sessionLoading,
+        frames,
+        totalFrames,
+        framesLoading,
+        frameDirection,
+        autoScroll,
+        isSelectMode,
+        selectedIds,
+        fetchSessions,
+        selectSession,
+        loadMoreFrames,
+        clearSessions,
+        setAutoScroll,
+        setFrameDirection,
+        toggleSelectMode,
+        toggleSelectId,
+        selectAll,
+        clearSelectedIds,
+        batchDelete,
+    } = useWSStore()
+
+    const { isConnected } = useConnectionStore()
+    const toast = useToastStore()
+
+    // 确认对话框状态
+    const [showClearConfirm, setShowClearConfirm] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+    // 初始加载
+    useEffect(() => {
+        if (isActive && deviceId) {
+            fetchSessions(deviceId)
+        }
+    }, [isActive, deviceId, fetchSessions])
+
+    // 处理选择会话
+    const handleSelectSession = useCallback((sessionId: string) => {
+        if (!deviceId) return
+        if (isSelectMode) {
+            toggleSelectId(sessionId)
+        } else {
+            selectSession(deviceId, sessionId)
+        }
+    }, [deviceId, isSelectMode, selectSession, toggleSelectId])
+
+    // 刷新列表
+    const handleRefresh = useCallback(() => {
+        if (!deviceId) return
+        fetchSessions(deviceId)
+    }, [deviceId, fetchSessions])
+
+    // 清空所有会话
+    const handleClear = useCallback(() => {
+        clearSessions()
+        toast.show('success', '已清空 WebSocket 会话')
+    }, [clearSessions, toast])
+
+    // 批量删除
+    const handleBatchDelete = useCallback(async () => {
+        if (!deviceId || selectedIds.size === 0) return
+        await batchDelete(deviceId)
+        setShowDeleteConfirm(false)
+        toggleSelectMode()
+        toast.show('success', `已删除 ${selectedIds.size} 个会话`)
+    }, [deviceId, selectedIds.size, batchDelete, toggleSelectMode, toast])
+
+    // 加载更多帧
+    const handleLoadMoreFrames = useCallback(() => {
+        if (!deviceId || !selectedSessionId) return
+        loadMoreFrames(deviceId, selectedSessionId)
+    }, [deviceId, selectedSessionId, loadMoreFrames])
+
+    // 帧方向过滤变更
+    const handleFrameDirectionChange = useCallback((direction: string) => {
+        setFrameDirection(direction)
+        // 重新加载帧
+        if (deviceId && selectedSessionId) {
+            const wsStore = useWSStore.getState()
+            wsStore.fetchFrames(deviceId, selectedSessionId)
+        }
+    }, [deviceId, selectedSessionId, setFrameDirection])
+
+    if (!isActive) {
+        return null
+    }
+
+    return (
+        <div className="h-full flex flex-col">
+            {/* 工具栏 */}
+            <div className="flex-shrink-0 px-3 py-2 border-b border-border bg-bg-medium flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    {/* 刷新按钮 */}
+                    <button
+                        onClick={handleRefresh}
+                        className="btn btn-secondary text-xs px-2.5 py-1.5"
+                        title="刷新"
+                        disabled={sessionsLoading}
+                    >
+                        刷新
+                    </button>
+
+                    <div className="h-5 w-px bg-border flex-shrink-0" />
+
+                    {/* 批量选择按钮 */}
+                    <button
+                        onClick={toggleSelectMode}
+                        className={clsx(
+                            'btn text-xs px-2.5 py-1.5 flex-shrink-0',
+                            isSelectMode ? 'btn-primary' : 'btn-secondary'
+                        )}
+                        title={isSelectMode ? '退出选择' : '批量选择'}
+                    >
+                        {isSelectMode ? '取消选择' : '批量选择'}
+                    </button>
+
+                    {isSelectMode && (
+                        <>
+                            <button
+                                onClick={selectAll}
+                                className="btn btn-secondary text-xs px-2 py-1.5"
+                            >
+                                全选
+                            </button>
+                            <button
+                                onClick={clearSelectedIds}
+                                className="btn btn-secondary text-xs px-2 py-1.5"
+                            >
+                                清除选择
+                            </button>
+                            {selectedIds.size > 0 && (
+                                <button
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    className="btn text-xs px-2 py-1.5 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 flex items-center gap-1"
+                                >
+                                    <TrashIcon size={12} />
+                                    删除 ({selectedIds.size})
+                                </button>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-text-secondary">
+                    {/* 清屏按钮 */}
+                    <button
+                        onClick={handleClear}
+                        className="btn text-xs px-2 py-1.5 flex-shrink-0 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
+                        title="清空当前列表"
+                        disabled={sessions.length === 0}
+                    >
+                        清屏
+                    </button>
+
+                    <div className="h-5 w-px bg-border flex-shrink-0" />
+
+                    {/* 自动滚动 */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-xs text-text-muted">自动滚动</span>
+                        <Toggle
+                            checked={autoScroll}
+                            onChange={(checked) => setAutoScroll(checked)}
+                        />
+                    </div>
+
+                    <div className="h-5 w-px bg-border flex-shrink-0" />
+
+                    {/* 连接状态 */}
+                    <span className={clsx(
+                        'px-2 py-0.5 rounded text-xs',
+                        isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                    )}>
+                        {isConnected ? '已连接' : '已断开'}
+                    </span>
+
+                    {/* 会话计数 */}
+                    <span className="text-xs text-text-secondary">
+                        共 {totalSessions} 个会话
+                        {sessions.length < totalSessions && (
+                            <span className="text-text-muted">（已加载 {sessions.length}）</span>
+                        )}
+                    </span>
+                </div>
+            </div>
+
+            {/* 主内容区域 */}
+            <div className="flex-1 flex overflow-hidden">
+                {/* 左侧：会话列表 */}
+                <div className="w-80 border-r border-border flex flex-col relative">
+                    <WSSessionList
+                        sessions={sessions}
+                        selectedId={selectedSessionId}
+                        onSelect={handleSelectSession}
+                        loading={sessionsLoading}
+                        autoScroll={autoScroll}
+                        isSelectMode={isSelectMode}
+                        selectedIds={selectedIds}
+                        onToggleSelect={toggleSelectId}
+                    />
+                    <ListLoadingOverlay isLoading={sessionsLoading} />
+                </div>
+
+                {/* 右侧：会话详情 */}
+                <div className="flex-1 flex flex-col relative">
+                    {deviceId && (
+                        <WSSessionDetail
+                            deviceId={deviceId}
+                            session={selectedSession}
+                            frames={frames}
+                            loading={framesLoading || sessionLoading}
+                            onLoadMore={handleLoadMoreFrames}
+                            hasMore={frames.length < totalFrames}
+                            frameDirection={frameDirection}
+                            onFrameDirectionChange={handleFrameDirectionChange}
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* 清空确认对话框 */}
+            <ConfirmDialog
+                isOpen={showClearConfirm}
+                onClose={() => setShowClearConfirm(false)}
+                onConfirm={handleClear}
+                title="清空 WebSocket 会话"
+                message="确定要清空所有 WebSocket 会话吗？此操作无法撤销。"
+                confirmText="清空"
+                type="danger"
+            />
+
+            {/* 删除确认对话框 */}
+            <ConfirmDialog
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onConfirm={handleBatchDelete}
+                title="删除选中会话"
+                message={`确定要删除选中的 ${selectedIds.size} 个会话吗？此操作无法撤销。`}
+                confirmText="删除"
+                type="danger"
+            />
+        </div>
+    )
+}
+
+export const WebSocketPlugin = new WebSocketPluginImpl()

@@ -108,6 +108,10 @@ interface LogState {
   selectAll: () => void
   clearSelectedIds: () => void
   batchDelete: (deviceId: string) => Promise<void>
+
+  // 分页
+  loadMore: (deviceId: string) => Promise<void>
+  hasMore: () => boolean
 }
 
 export const useLogStore = create<LogState>((set, get) => ({
@@ -273,6 +277,38 @@ export const useLogStore = create<LogState>((set, get) => ({
       console.error('Failed to batch delete logs:', error)
       throw error
     }
+  },
+
+  loadMore: async (deviceId: string) => {
+    const { pageSize, page, total, events, filters, isLoading } = get()
+
+    // 如果正在加载或已经加载完所有数据，不再加载
+    if (isLoading || events.length >= total) return
+
+    const nextPage = page + 1
+    set({ isLoading: true })
+
+    try {
+      const response = await api.getLogEvents(deviceId, { page: nextPage, pageSize })
+      const newEvents = response.items
+      const allEvents = [...events, ...newEvents]
+      const filteredEvents = filterEvents(allEvents, filters)
+
+      set({
+        events: allEvents,
+        filteredEvents,
+        page: nextPage,
+        isLoading: false,
+      })
+    } catch (error) {
+      console.error('Failed to load more log events:', error)
+      set({ isLoading: false })
+    }
+  },
+
+  hasMore: () => {
+    const { events, total } = get()
+    return events.length < total
   },
 }))
 

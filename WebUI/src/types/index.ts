@@ -58,6 +58,7 @@ export interface HTTPEventSummary {
   errorDescription: string | null
   traceId: string | null
   isFavorite: boolean
+  isReplay: boolean
 }
 
 export interface HTTPTiming {
@@ -94,6 +95,7 @@ export interface HTTPEventDetail {
   traceId: string | null
   timing: HTTPTiming | null
   isFavorite: boolean
+  isReplay: boolean
 }
 
 export interface HTTPEventListResponse {
@@ -253,6 +255,7 @@ export interface BreakpointRule {
   phase: BreakpointPhase
   enabled: boolean
   priority: number
+  createdAt: string | null
 }
 
 export interface BreakpointRequestSnapshot {
@@ -305,6 +308,7 @@ export interface ChaosRule {
   chaos: ChaosType
   enabled: boolean
   priority: number
+  createdAt: string | null
 }
 
 // 域名策略

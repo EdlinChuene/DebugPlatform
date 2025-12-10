@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+// 混沌工程前端插件
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import type { ChaosRule, ChaosType } from '@/types'
 import {
     getChaosRules,
     createChaosRule,
     updateChaosRule,
     deleteChaosRule,
+    deleteAllChaosRules,
 } from '@/services/api'
 import clsx from 'clsx'
 import {
@@ -17,26 +20,102 @@ import {
     SnailIcon,
     TrashIcon,
     EditIcon
-} from './icons'
-
-interface ChaosManagerProps {
-    deviceId: string
-}
+} from '@/components/icons'
+import {
+    FrontendPlugin,
+    PluginContext,
+    PluginEvent,
+    PluginMetadata,
+    PluginRenderProps,
+    PluginState,
+    BuiltinPluginId,
+} from '../types'
 
 // ChaosType 的类型标识
 type ChaosTypeKind = ChaosType['type']
 
-export function ChaosManager({ deviceId }: ChaosManagerProps) {
+// 插件实现类
+class ChaosPluginImpl implements FrontendPlugin {
+    metadata: PluginMetadata = {
+        pluginId: BuiltinPluginId.CHAOS,
+        displayName: 'Chaos',
+        version: '1.0.0',
+        description: '混沌工程测试',
+        icon: <ChaosIcon size={16} />,
+        dependencies: [BuiltinPluginId.NETWORK],
+    }
+
+    state: PluginState = 'uninitialized'
+    isEnabled = true
+
+    private pluginContext: PluginContext | null = null
+    private unsubscribe: (() => void) | null = null
+
+    async initialize(context: PluginContext): Promise<void> {
+        this.pluginContext = context
+        this.state = 'loading'
+
+        this.unsubscribe = context.subscribeToEvents(
+            ['chaos_triggered', 'chaos_config_change'],
+            (event) => this.handleEvent(event)
+        )
+
+        this.state = 'ready'
+    }
+
+    render(props: PluginRenderProps): React.ReactNode {
+        return <ChaosPluginView {...props} />
+    }
+
+    onActivate(): void {
+        console.log('[ChaosPlugin] Activated')
+    }
+
+    onDeactivate(): void {
+        console.log('[ChaosPlugin] Deactivated')
+    }
+
+    onEvent(event: PluginEvent): void {
+        this.handleEvent(event)
+    }
+
+    destroy(): void {
+        this.unsubscribe?.()
+        this.pluginContext = null
+        this.state = 'uninitialized'
+    }
+
+    get context(): PluginContext | null {
+        return this.pluginContext
+    }
+
+    private handleEvent(event: PluginEvent): void {
+        console.log('[ChaosPlugin] Received event:', event.eventType)
+    }
+}
+
+// 插件视图组件
+function ChaosPluginView({ context, isActive }: PluginRenderProps) {
+    const deviceId = context.deviceId
+
     const [rules, setRules] = useState<ChaosRule[]>([])
     const [loading, setLoading] = useState(false)
     const [editingRule, setEditingRule] = useState<Partial<ChaosRule> | null>(null)
     const [showEditor, setShowEditor] = useState(false)
 
     const fetchRules = useCallback(async () => {
+        if (!deviceId) return
         setLoading(true)
         try {
             const data = await getChaosRules(deviceId)
-            setRules(data)
+            // 按创建时间倒序排序（最新创建的在前）
+            const sortedData = [...data].sort((a, b) => {
+                if (!a.createdAt && !b.createdAt) return 0
+                if (!a.createdAt) return 1
+                if (!b.createdAt) return -1
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            })
+            setRules(sortedData)
         } catch (error) {
             console.error('Failed to fetch chaos rules:', error)
         } finally {
@@ -45,8 +124,10 @@ export function ChaosManager({ deviceId }: ChaosManagerProps) {
     }, [deviceId])
 
     useEffect(() => {
-        fetchRules()
-    }, [fetchRules])
+        if (isActive && deviceId) {
+            fetchRules()
+        }
+    }, [isActive, deviceId, fetchRules])
 
     const handleCreate = () => {
         setEditingRule({
@@ -66,7 +147,7 @@ export function ChaosManager({ deviceId }: ChaosManagerProps) {
     }
 
     const handleSave = async () => {
-        if (!editingRule) return
+        if (!editingRule || !deviceId) return
 
         try {
             if (editingRule.id) {
@@ -84,6 +165,7 @@ export function ChaosManager({ deviceId }: ChaosManagerProps) {
 
     const handleDelete = async (id: string) => {
         if (!confirm('确定要删除这条故障注入规则吗？')) return
+        if (!deviceId) return
         try {
             await deleteChaosRule(deviceId, id)
             fetchRules()
@@ -92,7 +174,19 @@ export function ChaosManager({ deviceId }: ChaosManagerProps) {
         }
     }
 
+    const handleClearAll = async () => {
+        if (!confirm('确定要清空所有故障注入规则吗？此操作不可恢复。')) return
+        if (!deviceId) return
+        try {
+            await deleteAllChaosRules(deviceId)
+            fetchRules()
+        } catch (error) {
+            console.error('Failed to clear all chaos rules:', error)
+        }
+    }
+
     const handleToggleEnabled = async (rule: ChaosRule) => {
+        if (!deviceId) return
         try {
             await updateChaosRule(deviceId, rule.id, { enabled: !rule.enabled })
             fetchRules()
@@ -101,20 +195,63 @@ export function ChaosManager({ deviceId }: ChaosManagerProps) {
         }
     }
 
+    // 统计启用的规则数量
+    const enabledCount = useMemo(() => rules.filter(r => r.enabled).length, [rules])
+
+    if (!isActive || !deviceId) {
+        return null
+    }
+
     return (
         <div className="h-full flex flex-col">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-border bg-bg-dark/50 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <ChaosIcon size={24} className="text-text-primary" />
-                    <div>
-                        <h3 className="font-medium text-text-primary">故障注入规则</h3>
-                        <p className="text-xs text-text-muted">注入网络故障来测试应用的健壮性</p>
+            <div className="px-4 py-2 border-b border-border bg-bg-medium">
+                {/* 操作栏 */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        {/* 刷新按钮 */}
+                        <button
+                            onClick={fetchRules}
+                            className="btn btn-secondary text-xs px-2.5 py-1.5"
+                            title="刷新规则列表"
+                            disabled={loading}
+                        >
+                            刷新
+                        </button>
+
+                        {/* 分隔线 */}
+                        <div className="w-px h-4 bg-border mx-1" />
+
+                        {/* 新建规则按钮 */}
+                        <button
+                            onClick={handleCreate}
+                            className="btn btn-primary text-sm"
+                        >
+                            新建规则
+                        </button>
+                    </div>
+
+                    {/* 右侧：清空规则 + 规则统计 */}
+                    <div className="flex items-center gap-2 text-xs text-text-secondary">
+                        {/* 清空规则按钮 */}
+                        <button
+                            onClick={handleClearAll}
+                            className="btn text-xs px-2 py-1.5 flex-shrink-0 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
+                            title="清空所有规则"
+                            disabled={rules.length === 0}
+                        >
+                            清空规则
+                        </button>
+
+                        {/* 分隔线 */}
+                        <div className="w-px h-4 bg-border mx-1" />
+
+                        {/* 规则统计 */}
+                        <span>共 {rules.length} 条规则</span>
+                        <span className="text-text-muted">•</span>
+                        <span className="text-green-400">{enabledCount} 条启用</span>
                     </div>
                 </div>
-                <button onClick={handleCreate} className="btn btn-primary text-sm">
-                    + 新建规则
-                </button>
             </div>
 
             {/* Rule List */}
@@ -284,6 +421,22 @@ function ChaosRuleEditor({
 }) {
     const chaosType = rule.chaos?.type || 'latency'
 
+    // ESC 键关闭弹窗（输入框激活时不响应，与 Mock 弹窗行为一致）
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                const target = e.target as HTMLElement
+                const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+                if (!isInput) {
+                    e.stopPropagation()
+                    onCancel()
+                }
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown, true)
+        return () => window.removeEventListener('keydown', handleKeyDown, true)
+    }, [onCancel])
+
     const handleTypeChange = (newType: ChaosTypeKind) => {
         let newChaos: ChaosType
         switch (newType) {
@@ -320,8 +473,12 @@ function ChaosRuleEditor({
     }
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-bg-dark border border-border rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+
+            {/* Modal */}
+            <div className="relative bg-bg-dark border border-border rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-medium text-text-primary mb-4">
                     {rule.id ? '编辑故障注入规则' : '新建故障注入规则'}
                 </h3>
@@ -470,3 +627,5 @@ function ChaosRuleEditor({
         </div>
     )
 }
+
+export const ChaosPlugin = new ChaosPluginImpl()

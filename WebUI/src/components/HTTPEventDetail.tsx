@@ -14,7 +14,21 @@ import { ProtobufViewer, isProtobufContentType } from './ProtobufViewer'
 import { MockRulePopover } from './MockRulePopover'
 import { useFavoriteUrlStore } from '@/stores/favoriteUrlStore'
 import clsx from 'clsx'
-import { MockIcon, ClipboardIcon, CheckIcon, ArrowPathIcon } from './icons'
+import { MockIcon, ClipboardIcon, CheckIcon, ArrowPathIcon, RefreshIcon } from './icons'
+
+/** 解析 URL 获取域名和路径 */
+function parseUrlParts(url: string): { domain: string; path: string } {
+  try {
+    const urlObj = new URL(url)
+    return {
+      domain: urlObj.host,
+      path: urlObj.pathname + urlObj.search
+    }
+  } catch {
+    // 如果 URL 解析失败，返回原始 URL
+    return { domain: '', path: url }
+  }
+}
 
 interface Props {
   event: HTTPEventDetailType | null
@@ -43,6 +57,8 @@ export function HTTPEventDetail({
   const [curlLoading, setCurlLoading] = useState(false)
   const [curlCopied, setCurlCopied] = useState(false)
   const [replayStatus, setReplayStatus] = useState<string | null>(null)
+  const [domainCopied, setDomainCopied] = useState(false)
+  const [pathCopied, setPathCopied] = useState(false)
 
   // 使用 URL 级别的收藏状态
   const { isFavorite: isUrlFavorite, toggleFavorite: toggleUrlFavorite } = useFavoriteUrlStore()
@@ -92,13 +108,13 @@ export function HTTPEventDetail({
   }
 
   const handleReplay = async () => {
-    setReplayStatus('sending...')
+    setReplayStatus('发送中...')
     try {
       const response = await replayHTTPEvent(deviceId, event.id)
-      setReplayStatus(`✓ ${response.status}`)
+      setReplayStatus(response.success ? '✓ 已发送' : '✗ 失败')
       setTimeout(() => setReplayStatus(null), 3000)
     } catch {
-      setReplayStatus('✗ failed')
+      setReplayStatus('✗ 失败')
       setTimeout(() => setReplayStatus(null), 3000)
     }
   }
@@ -108,6 +124,27 @@ export function HTTPEventDetail({
     const newState = toggleUrlFavorite(deviceId, event.url)
     onFavoriteChange?.(event.id, newState)
   }
+
+  const handleCopyDomain = async () => {
+    const { domain } = parseUrlParts(event.url)
+    if (domain) {
+      await navigator.clipboard.writeText(domain)
+      setDomainCopied(true)
+      setTimeout(() => setDomainCopied(false), 2000)
+    }
+  }
+
+  const handleCopyPath = async () => {
+    const { path } = parseUrlParts(event.url)
+    if (path) {
+      await navigator.clipboard.writeText(path)
+      setPathCopied(true)
+      setTimeout(() => setPathCopied(false), 2000)
+    }
+  }
+
+  // 解析 URL 获取域名和路径
+  const urlParts = parseUrlParts(event.url)
 
   return (
     <div className="h-full overflow-auto">
@@ -132,6 +169,33 @@ export function HTTPEventDetail({
             )}
           </button>
         </div>
+
+        {/* Domain and Path with copy buttons */}
+        <div className="flex flex-col gap-1 mb-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-text-muted w-12">域名</span>
+            <span className="font-mono text-text-primary flex-1 truncate">{urlParts.domain}</span>
+            <button
+              onClick={handleCopyDomain}
+              className="px-2 py-1 bg-bg-light border border-border-subtle rounded hover:bg-bg-lighter transition-colors flex items-center"
+              title="复制域名"
+            >
+              {domainCopied ? <><CheckIcon size={12} className="mr-1" /> 已复制</> : <><ClipboardIcon size={12} className="mr-1" /> 复制</>}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-text-muted w-12">路径</span>
+            <span className="font-mono text-text-primary flex-1 truncate">{urlParts.path}</span>
+            <button
+              onClick={handleCopyPath}
+              className="px-2 py-1 bg-bg-light border border-border-subtle rounded hover:bg-bg-lighter transition-colors flex items-center"
+              title="复制路径"
+            >
+              {pathCopied ? <><CheckIcon size={12} className="mr-1" /> 已复制</> : <><ClipboardIcon size={12} className="mr-1" /> 复制</>}
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-2 text-xs mb-3">
           <span
             className={clsx(
@@ -161,6 +225,11 @@ export function HTTPEventDetail({
                 <MockIcon size={12} className="mr-1" /> Mocked
               </span>
             </MockRulePopover>
+          )}
+          {event.isReplay && (
+            <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 flex items-center">
+              <RefreshIcon size={12} className="mr-1" /> Replay
+            </span>
           )}
           {event.timing?.protocolName && (
             <span className="px-1.5 py-0.5 rounded bg-primary/20 text-primary">
@@ -371,7 +440,7 @@ function HeadersTable({ headers }: { headers: Record<string, string> }) {
     <table className="w-full text-xs font-mono">
       <tbody>
         {entries.map(([key, value]) => (
-          <tr key={key} className="border-b border-border/50 last:border-0">
+          <tr key={key} className="border-b border-border last:border-0">
             <td className="py-1.5 pr-4 text-primary align-top whitespace-nowrap">{key}</td>
             <td className="py-1.5 break-all">{value}</td>
           </tr>

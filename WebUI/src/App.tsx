@@ -7,12 +7,18 @@ import { ApiDocsPage } from '@/pages/ApiDocsPage'
 import { HealthPage } from '@/pages/HealthPage'
 import { RulesPage } from '@/pages/RulesPage'
 import { ToastContainer } from '@/components/ToastContainer'
+import { BreakpointHitNotification } from '@/components/BreakpointHitNotification'
 import { RefreshIndicator } from '@/components/RefreshIndicator'
 import { useThemeStore } from '@/stores/themeStore'
 import { startHealthCheck, stopHealthCheck } from '@/stores/connectionStore'
+import { registerBuiltinPlugins } from '@/plugins/builtin'
 
 // 不显示侧边栏的路由
 const noSidebarRoutes = ['/api-docs', '/health']
+
+// 立即初始化插件系统（在模块加载时执行）
+registerBuiltinPlugins()
+console.log('[App] Plugin system initialized')
 
 function AppContent() {
   const location = useLocation()
@@ -62,6 +68,7 @@ export function App() {
   return (
     <BrowserRouter>
       <AppContent />
+      <BreakpointHitNotification />
       <ToastContainer />
     </BrowserRouter>
   )

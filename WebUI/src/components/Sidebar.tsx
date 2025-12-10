@@ -9,6 +9,7 @@ import { getPlatformIcon } from '@/utils/deviceIcons'
 import { HttpIcon, WebSocketIcon, LogIcon, SearchIcon, IPhoneIcon, StarIcon, ClearIcon, ChevronDownIcon, DebugHubLogo, BookIcon, CheckIcon, PackageIcon, ColorfulTrafficLightIcon, HighlighterIcon } from '@/components/icons'
 import { ServerStatsPanel } from './ServerStatsPanel'
 import { ThemeToggle } from './ThemeToggle'
+import { Checkbox } from './Checkbox'
 import clsx from 'clsx'
 
 export function Sidebar() {
@@ -503,13 +504,12 @@ export function Sidebar() {
                     <div className="flex items-center gap-2 min-w-0">
                       {/* Checkbox indicator for multi-select (HTTP only) */}
                       {currentTab === 'http' && (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleDomainClick(domain)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-4 h-4 min-w-4 min-h-4 flex-shrink-0 rounded border-border cursor-pointer accent-primary"
-                        />
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isSelected}
+                            onChange={() => handleDomainClick(domain)}
+                          />
+                        </div>
                       )}
                       {isWhitelist && <HighlighterIcon size={12} />}
                       {isBlacklist && <ClearIcon size={12} className="text-red-400" />}

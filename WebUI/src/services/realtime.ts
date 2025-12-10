@@ -142,6 +142,7 @@ export function parseHTTPEvent(payload: string): HTTPEventSummary {
     errorDescription: data.response?.errorDescription ?? null,
     traceId: data.request.traceId ?? null,
     isFavorite: data.isFavorite ?? false,
+    isReplay: data.isReplay ?? false,
   }
 }
 

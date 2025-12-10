@@ -112,6 +112,12 @@ final class DebugBridgeHandler: @unchecked Sendable {
                 print("[DebugBridge] Received DB response: requestId=\(response.requestId)")
                 DBResponseManager.shared.handleResponse(response)
 
+            case let .pluginEvent(event):
+                if let deviceId = deviceIdHolder.deviceId {
+                    print("[DebugBridge] Received plugin event from \(deviceId): \(event.pluginId)/\(event.eventType)")
+                    handlePluginEvent(event: event, deviceId: deviceId)
+                }
+
             default:
                 print("[DebugBridge] Received unknown message type")
             }
@@ -182,14 +188,6 @@ final class DebugBridgeHandler: @unchecked Sendable {
     }
 
     private func handleEvents(events: [DebugEventDTO], deviceId: String, req: Request) {
-        // 调试日志：检查接收到的 Mock 事件
-        for event in events {
-            if case let .http(httpEvent) = event, httpEvent.isMocked {
-                print(
-                    "[DebugBridge] Received mocked HTTP event: url=\(httpEvent.request.url.prefix(80))..., isMocked=\(httpEvent.isMocked)"
-                )
-            }
-        }
 
         // 异步处理事件入库
         Task {
@@ -211,6 +209,16 @@ final class DebugBridgeHandler: @unchecked Sendable {
 
         // 广播给 WebUI
         RealtimeStreamHandler.shared.broadcastBreakpointHit(hit, deviceId: deviceId)
+    }
+
+    private func handlePluginEvent(event: PluginEventDTO, deviceId: String) {
+        // 路由到后端插件
+        Task {
+            await BackendPluginRegistry.shared.routeEvent(event, from: deviceId)
+        }
+
+        // 广播给 WebUI
+        RealtimeStreamHandler.shared.broadcastPluginEvent(event, deviceId: deviceId)
     }
 
     private func handleDisconnect(deviceId: String) {

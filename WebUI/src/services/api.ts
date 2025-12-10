@@ -165,7 +165,7 @@ export async function getHTTPEventCurl(
 export async function replayHTTPEvent(
   deviceId: string,
   eventId: string
-): Promise<{ replayId: string; status: string }> {
+): Promise<{ success: boolean; message: string }> {
   return fetchJSON(`${API_BASE}/devices/${deviceId}/http/${eventId}/replay`, {
     method: 'POST',
   })

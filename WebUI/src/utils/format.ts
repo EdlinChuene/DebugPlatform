@@ -153,7 +153,8 @@ export function formatDuration(startOrMs: Date | number | null, end?: Date): str
 /**
  * 格式化字节大小
  */
-export function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || isNaN(bytes)) return '-'
   if (bytes === 0) return '0 B'
   if (bytes < 0) return '-'
   const k = 1024

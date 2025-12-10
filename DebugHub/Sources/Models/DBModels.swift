@@ -74,6 +74,9 @@ final class HTTPEventModel: Model, Content, @unchecked Sendable {
     @Field(key: "is_favorite")
     var isFavorite: Bool
 
+    @Field(key: "is_replay")
+    var isReplay: Bool
+
     init() {
         // Fluent 需要一个空的初始化器
         // 非 Optional Bool 类型需要默认值
@@ -100,7 +103,8 @@ final class HTTPEventModel: Model, Content, @unchecked Sendable {
         mockRuleId: String?,
         traceId: String?,
         timingJSON: String? = nil,
-        isFavorite: Bool = false
+        isFavorite: Bool = false,
+        isReplay: Bool = false
     ) {
         self.id = id
         self.deviceId = deviceId
@@ -122,6 +126,7 @@ final class HTTPEventModel: Model, Content, @unchecked Sendable {
         self.traceId = traceId
         self.timingJSON = timingJSON
         self.isFavorite = isFavorite
+        self.isReplay = isReplay
     }
 }
 

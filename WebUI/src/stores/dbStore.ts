@@ -126,8 +126,17 @@ export const useDBStore = create<DBState>((set, get) => ({
             const response = await api.listDatabases(deviceId)
             set({ databases: response.databases, dbLoading: false })
         } catch (error) {
+            let errorMessage = 'Failed to load databases'
+            if (error instanceof Error) {
+                // 针对常见错误提供友好提示
+                if (error.message.includes('504') || error.message.includes('timeout')) {
+                    errorMessage = '设备连接超时，请确保设备已连接且 DebugProbe SDK 已启用数据库功能'
+                } else {
+                    errorMessage = error.message
+                }
+            }
             set({
-                dbError: error instanceof Error ? error.message : 'Failed to load databases',
+                dbError: errorMessage,
                 dbLoading: false,
             })
         }

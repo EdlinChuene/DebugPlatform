@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { MockRule, MockTargetType, MockRuleCondition, MockRuleAction } from '@/types'
 import { createEmptyRule } from '@/stores/mockStore'
+import { Checkbox } from './Checkbox'
 
 interface MockRuleEditorProps {
   rule: MockRule | null
@@ -192,11 +193,9 @@ export function MockRuleEditor({ rule, isOpen, onClose, onSave, loading, httpOnl
 
               <div className="flex items-center gap-3 pt-5">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={enabled}
-                    onChange={(e) => setEnabled(e.target.checked)}
-                    className="accent-primary w-4 h-4"
+                    onChange={(checked) => setEnabled(checked)}
                   />
                   <span className="text-sm text-text-secondary">启用规则</span>
                 </label>

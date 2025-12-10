@@ -67,6 +67,8 @@ interface HTTPState {
   setAutoScroll: (value: boolean) => void
   setGroupMode: (mode: GroupMode) => void
   applyFilters: () => void
+  loadMore: (deviceId: string) => Promise<void>  // 加载更多
+  hasMore: () => boolean  // 是否有更多数据
 
   // 会话管理
   addSessionDivider: (sessionId: string, isConnected: boolean) => void
@@ -213,6 +215,46 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
   fetchSessionHistory: async (_deviceId: string) => {
     // 会话历史现在由 SessionActivityStore 管理，不再在 HTTP 列表中显示
     // 保留此函数以保持 API 兼容性
+  },
+
+  loadMore: async (deviceId: string) => {
+    const { pageSize, page, total, events, filters, isLoading } = get()
+
+    // 如果正在加载或已经加载完所有数据，不再加载
+    if (isLoading || events.length >= total) return
+
+    const nextPage = page + 1
+    set({ isLoading: true })
+
+    try {
+      const response = await api.getHTTPEvents(deviceId, {
+        page: nextPage,
+        pageSize,
+        method: filters.method || undefined,
+        urlContains: filters.urlContains || undefined,
+        isMocked: filters.mockedOnly ? true : undefined,
+      })
+
+      const newEvents = response.items
+      const allEvents = [...events, ...newEvents]
+      const filteredItems = filterItems(allEvents, filters, deviceId)
+
+      set({
+        events: allEvents,
+        listItems: allEvents,
+        filteredItems,
+        page: nextPage,
+        isLoading: false,
+      })
+    } catch (error) {
+      console.error('Failed to load more HTTP events:', error)
+      set({ isLoading: false })
+    }
+  },
+
+  hasMore: () => {
+    const { events, total } = get()
+    return events.length < total
   },
 
   selectEvent: async (deviceId: string, eventId: string) => {

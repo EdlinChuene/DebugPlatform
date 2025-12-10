@@ -41,7 +41,7 @@ export function MockRuleList({
   }
 
   return (
-    <div className="divide-y divide-border/50">
+    <div className="p-4 space-y-3">
       {rules.map((rule) => (
         <RuleItem
           key={rule.id}
@@ -79,8 +79,8 @@ function RuleItem({
   return (
     <div
       className={clsx(
-        'px-4 py-4 transition-all group',
-        rule.enabled ? 'bg-transparent' : 'bg-bg-medium/30 opacity-60'
+        'p-4 bg-bg-dark border border-border rounded-xl transition-all group',
+        !rule.enabled && 'opacity-50'
       )}
     >
       <div className="flex items-start gap-4">
@@ -146,7 +146,7 @@ function RuleItem({
         </div>
 
         {/* 操作按钮 */}
-        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-2">
           <button
             onClick={onEdit}
             className="p-2 rounded-lg hover:bg-bg-light text-text-muted hover:text-text-primary transition-all"

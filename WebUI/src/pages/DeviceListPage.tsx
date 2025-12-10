@@ -3,7 +3,7 @@ import { useDeviceStore } from '@/stores/deviceStore'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { DeviceCard } from '@/components/DeviceCard'
 import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
-import { RefreshIcon, IPhoneIcon, ClearIcon, OnlineIcon, PackageIcon, UnhealthyXIcon } from '@/components/icons'
+import { IPhoneIcon, ClearIcon, OnlineIcon, PackageIcon, UnhealthyXIcon } from '@/components/icons'
 import clsx from 'clsx'
 
 type FilterType = 'all' | 'online' | 'offline'
@@ -104,12 +104,9 @@ export function DeviceListPage() {
             <button
               onClick={fetchDevices}
               disabled={isLoading}
-              className="btn btn-primary disabled:opacity-50 flex items-center gap-2"
+              className="btn btn-primary disabled:opacity-50"
             >
-              <span className={isLoading ? 'animate-spin' : ''}>
-                <RefreshIcon size={16} />
-              </span>
-              <span>刷新</span>
+              刷新
             </button>
           </div>
         </div>
@@ -255,12 +252,9 @@ function ServerOfflineState({ onRetry, isLoading }: { onRetry: () => void; isLoa
           <button
             onClick={onRetry}
             disabled={isLoading}
-            className="btn btn-primary flex items-center gap-2 mx-auto"
+            className="btn btn-primary mx-auto"
           >
-            <span className={isLoading ? 'animate-spin' : ''}>
-              <RefreshIcon size={16} />
-            </span>
-            <span>{isLoading ? '连接中...' : '重试连接'}</span>
+            {isLoading ? '连接中...' : '重试连接'}
           </button>
         </div>
       </div>

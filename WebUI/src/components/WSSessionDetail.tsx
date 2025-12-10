@@ -4,6 +4,7 @@ import { formatSmartTime, formatBytes } from '@/utils/format'
 import { JSONTree } from './JSONTree'
 import { ProtobufViewer } from './ProtobufViewer'
 import { getWSFrameDetail } from '@/services/api'
+import { Toggle } from './Toggle'
 import clsx from 'clsx'
 
 type PayloadFormat = 'auto' | 'text' | 'json' | 'hex' | 'base64' | 'protobuf'
@@ -213,15 +214,11 @@ function FramesTab({
         </div>
 
         {/* 自动滚动开关 */}
-        <label className="flex items-center gap-1.5 text-xs text-text-muted cursor-pointer hover:text-text-primary transition-colors">
-          <input
-            type="checkbox"
-            checked={autoScroll}
-            onChange={(e) => setAutoScroll(e.target.checked)}
-            className="accent-primary w-3 h-3"
-          />
-          自动滚动
-        </label>
+        <Toggle
+          checked={autoScroll}
+          onChange={(checked) => setAutoScroll(checked)}
+          label="自动滚动"
+        />
       </div>
 
       {/* 帧列表 */}
@@ -232,7 +229,7 @@ function FramesTab({
             <p className="text-sm">暂无消息帧</p>
           </div>
         ) : (
-          <div className="divide-y divide-border/30">
+          <div>
             {frames.map((frame) => (
               <FrameItem
                 key={frame.id}
@@ -392,7 +389,7 @@ const FrameItem = memo(function FrameItem({
   return (
     <div
       className={clsx(
-        'px-4 py-2 cursor-pointer transition-all',
+        'px-4 py-2 cursor-pointer transition-all border-b border-border',
         'hover:bg-bg-light/30',
         isExpanded && 'bg-bg-light/50',
         // 添加方向指示的边框颜色
