@@ -13,12 +13,15 @@ import { useThemeStore } from '@/stores/themeStore'
 import { startHealthCheck, stopHealthCheck, setOnServerOfflineCallback } from '@/stores/connectionStore'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { registerBuiltinPlugins } from '@/plugins/builtin'
+import { PluginRegistry } from '@/plugins/PluginRegistry'
 
 // 不显示侧边栏的路由
 const noSidebarRoutes = ['/api-docs', '/health']
 
 // 立即初始化插件系统（在模块加载时执行）
 registerBuiltinPlugins()
+// 同步初始插件状态到 DebugHub
+PluginRegistry.syncInitialStatesToHub()
 console.log('[App] Plugin system initialized')
 
 function AppContent() {

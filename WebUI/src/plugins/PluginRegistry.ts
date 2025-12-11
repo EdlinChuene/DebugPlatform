@@ -77,6 +77,32 @@ class PluginRegistryImpl {
         this.saveEnabledState()
         this.notifyChange()
         console.log(`[PluginRegistry] Plugin ${pluginId} ${enabled ? 'enabled' : 'disabled'}`)
+
+        // 同步插件状态到 DebugHub
+        this.syncPluginStatesToHub()
+    }
+
+    // 同步所有插件状态到 DebugHub
+    private syncPluginStatesToHub(): void {
+        const plugins = this.getAllPlugins().map((plugin) => ({
+            pluginId: plugin.metadata.pluginId,
+            displayName: plugin.metadata.displayName,
+            isEnabled: plugin.isEnabled,
+        }))
+
+        // 异步发送到 DebugHub，不阻塞主流程
+        fetch('/api/webui-plugins', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugins }),
+        }).catch((error) => {
+            console.warn('[PluginRegistry] Failed to sync plugin states to DebugHub:', error)
+        })
+    }
+
+    // 初始化时同步一次插件状态
+    syncInitialStatesToHub(): void {
+        this.syncPluginStatesToHub()
     }
 
     // 启用依赖该插件的所有插件

@@ -175,6 +175,9 @@ func routes(_ app: Application) throws {
     // 服务器统计 API
     try api.register(collection: StatsController())
 
+    // WebUI 插件状态 API
+    try api.register(collection: WebUIPluginController())
+
     // Token 验证 API
     api.post("auth", "verify") { req async throws -> TokenVerifyResponse in
         let input = try req.content.decode(TokenVerifyRequest.self)
