@@ -884,50 +884,50 @@ function AlertsContent({
                 ) : (
                     <div className="space-y-2">
                         {sortedAlerts.map((alert) => (
-                        <div
-                            key={alert.id}
-                            className={clsx(
-                                'p-3 rounded-lg border transition-colors',
-                                alert.isResolved
-                                    ? 'bg-zinc-800/30 border-zinc-700/50 opacity-60'
-                                    : getSeverityBgColor(alert.severity)
-                            )}
-                        >
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className={clsx('text-xs font-medium', getSeverityColor(alert.severity))}>
-                                            {alert.severity === 'critical'
-                                                ? '严重'
-                                                : alert.severity === 'warning'
-                                                    ? '警告'
-                                                    : '提示'}
-                                        </span>
-                                        <span className="text-xs text-zinc-400">{getMetricTypeLabel(alert.metricType)}</span>
-                                        <span className="text-xs text-zinc-500">{formatTimestamp(alert.timestamp)}</span>
-                                        {alert.isResolved && (
-                                            <span className="text-xs px-1.5 py-0.5 rounded bg-green-900/50 text-green-400">
-                                                已解决
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="text-sm text-zinc-200">{alert.message}</p>
-                                    <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
-                                        <span>当前: {alert.currentValue.toFixed(1)}</span>
-                                        <span>阈值: {alert.threshold}</span>
-                                    </div>
-                                </div>
-                                {!alert.isResolved && (
-                                    <button
-                                        onClick={() => onResolve(alert.id)}
-                                        className="ml-2 px-2 py-1 text-xs rounded bg-green-600/80 text-white hover:bg-green-600 transition-colors"
-                                    >
-                                        解决
-                                    </button>
+                            <div
+                                key={alert.id}
+                                className={clsx(
+                                    'p-3 rounded-lg border transition-colors',
+                                    alert.isResolved
+                                        ? 'bg-zinc-800/30 border-zinc-700/50 opacity-60'
+                                        : getSeverityBgColor(alert.severity)
                                 )}
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={clsx('text-xs font-medium', getSeverityColor(alert.severity))}>
+                                                {alert.severity === 'critical'
+                                                    ? '严重'
+                                                    : alert.severity === 'warning'
+                                                        ? '警告'
+                                                        : '提示'}
+                                            </span>
+                                            <span className="text-xs text-zinc-400">{getMetricTypeLabel(alert.metricType)}</span>
+                                            <span className="text-xs text-zinc-500">{formatTimestamp(alert.timestamp)}</span>
+                                            {alert.isResolved && (
+                                                <span className="text-xs px-1.5 py-0.5 rounded bg-green-900/50 text-green-400">
+                                                    已解决
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-zinc-200">{alert.message}</p>
+                                        <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
+                                            <span>当前: {alert.currentValue.toFixed(1)}</span>
+                                            <span>阈值: {alert.threshold}</span>
+                                        </div>
+                                    </div>
+                                    {!alert.isResolved && (
+                                        <button
+                                            onClick={() => onResolve(alert.id)}
+                                            className="ml-2 px-2 py-1 text-xs rounded bg-green-600/80 text-white hover:bg-green-600 transition-colors"
+                                        >
+                                            解决
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
                     </div>
                 )}
             </div>

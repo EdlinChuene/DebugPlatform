@@ -141,11 +141,8 @@ struct WebUIPluginController: RouteCollection {
             },
         ]
 
-        // 将 payload 转为 JSON String
-        guard
-            let jsonData = try? JSONSerialization.data(withJSONObject: payload),
-            let jsonString = String(data: jsonData, encoding: .utf8)
-        else {
+        // 将 payload 转为 Data
+        guard let payloadData = try? JSONSerialization.data(withJSONObject: payload) else {
             print("[WebUIPluginController] Failed to serialize plugin states")
             return
         }
@@ -154,12 +151,12 @@ struct WebUIPluginController: RouteCollection {
         let command = PluginCommandDTO(
             pluginId: "system",
             commandType: "webui_plugin_state",
-            payload: jsonString
+            payload: payloadData
         )
 
         let message = BridgeMessageDTO.pluginCommand(command)
         DeviceRegistry.shared.broadcast(message: message)
-        print("[WebUIPluginController] Broadcasted WebUI plugin states to all devices")
+        print("[WebUIPluginController] Broadcasted WebUI plugin states to all devices: \(states.count) plugins")
     }
 }
 
