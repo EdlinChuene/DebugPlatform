@@ -19,7 +19,9 @@ import {
   ChevronDownIcon,
   ChartBarIcon,
   ArrowPathIcon,
-  ClearIcon
+  ClearIcon,
+  PerformanceIcon,
+  AlertIcon
 } from './icons'
 
 function formatBytes(bytes: number | null | undefined): string {
@@ -141,6 +143,12 @@ export function ServerStatsPanel() {
           <StatRow icon={<LogIcon size={12} />} label="日志条目" value={formatNumber(stats.logEventCount)} />
           <StatRow icon={<WebSocketIcon size={12} />} label="WS 会话" value={formatNumber(stats.wsSessionCount)} />
           <StatRow icon={<FileTextIcon size={12} />} label="WS 帧" value={formatNumber(stats.wsFrameCount)} />
+
+          {/* 性能统计 */}
+          <div className="text-text-muted/60 text-2xs uppercase tracking-wider mt-2 mb-1">性能监控</div>
+          <StatRow icon={<PerformanceIcon size={12} />} label="性能数据" value={formatNumber(stats.perfMetricsCount)} />
+          <StatRow icon={<PerformanceIcon size={12} />} label="卡顿事件" value={formatNumber(stats.jankEventCount)} />
+          <StatRow icon={<AlertIcon size={12} />} label="告警记录" value={formatNumber(stats.alertCount)} />
 
           {/* 规则统计 */}
           <div className="text-text-muted/60 text-2xs uppercase tracking-wider mt-2 mb-1">规则配置</div>

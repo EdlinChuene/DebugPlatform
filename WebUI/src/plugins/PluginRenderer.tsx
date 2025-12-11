@@ -88,6 +88,7 @@ export function PluginRenderer({ deviceId, activePluginId, className }: PluginRe
                         logEvent: 'log_event',
                         wsEvent: 'ws_connection',
                         breakpointHit: 'breakpoint_hit',
+                        performanceEvent: 'performance_metrics',
                     }
 
                     const pluginEventType = eventTypeMap[message.type]
@@ -100,6 +101,37 @@ export function PluginRenderer({ deviceId, activePluginId, className }: PluginRe
                             timestamp: new Date().toISOString(),
                         }
                         callback(event)
+                    }
+
+                    // 特殊处理：performance 事件有多种类型
+                    if (message.type === 'performanceEvent') {
+                        try {
+                            const perfData = JSON.parse(message.payload)
+                            // 根据 eventType 字段判断具体类型
+                            let specificEventType: string | null = null
+                            if (perfData.eventType === 'metrics' && eventTypes.includes('performance_metrics')) {
+                                specificEventType = 'performance_metrics'
+                            } else if (perfData.eventType === 'jank' && eventTypes.includes('jank_event')) {
+                                specificEventType = 'jank_event'
+                            } else if (perfData.eventType === 'alert' && eventTypes.includes('performance_alert')) {
+                                specificEventType = 'performance_alert'
+                            } else if (perfData.eventType === 'alertResolved' && eventTypes.includes('alert_resolved')) {
+                                specificEventType = 'alert_resolved'
+                            }
+
+                            if (specificEventType) {
+                                const event: PluginEvent = {
+                                    pluginId: activePluginId,
+                                    eventType: specificEventType,
+                                    eventId: Math.random().toString(36).substring(7),
+                                    payload: perfData,
+                                    timestamp: new Date().toISOString(),
+                                }
+                                callback(event)
+                            }
+                        } catch (error) {
+                            console.error('[PluginRenderer] Failed to parse performance event:', error)
+                        }
                     }
                 })
 

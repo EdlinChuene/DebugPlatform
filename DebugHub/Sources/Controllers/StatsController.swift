@@ -28,6 +28,9 @@ struct StatsController: RouteCollection {
         let logCount = try await LogEventModel.query(on: req.db).count()
         let wsSessionCount = try await WSSessionModel.query(on: req.db).count()
         let wsFrameCount = try await WSFrameModel.query(on: req.db).count()
+        let perfMetricsCount = try await PerformanceMetricsModel.query(on: req.db).count()
+        let jankEventCount = try await JankEventModel.query(on: req.db).count()
+        let alertCount = try await AlertModel.query(on: req.db).count()
         let mockRuleCount = try await MockRuleModel.query(on: req.db).count()
         let breakpointRuleCount = try await BreakpointRuleModel.query(on: req.db).count()
         let chaosRuleCount = try await ChaosRuleModel.query(on: req.db).count()
@@ -66,6 +69,9 @@ struct StatsController: RouteCollection {
             logEventCount: logCount,
             wsSessionCount: wsSessionCount,
             wsFrameCount: wsFrameCount,
+            perfMetricsCount: perfMetricsCount,
+            jankEventCount: jankEventCount,
+            alertCount: alertCount,
             mockRuleCount: mockRuleCount,
             breakpointRuleCount: breakpointRuleCount,
             chaosRuleCount: chaosRuleCount,
@@ -85,6 +91,9 @@ struct ServerStatsDTO: Content {
     let logEventCount: Int
     let wsSessionCount: Int
     let wsFrameCount: Int
+    let perfMetricsCount: Int
+    let jankEventCount: Int
+    let alertCount: Int
     let mockRuleCount: Int
     let breakpointRuleCount: Int
     let chaosRuleCount: Int

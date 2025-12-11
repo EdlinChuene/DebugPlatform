@@ -20,6 +20,7 @@ public enum BackendPluginId {
     public static let mock = "mock"
     public static let breakpoint = "breakpoint"
     public static let chaos = "chaos"
+    public static let performance = "performance"
 }
 
 // MARK: - 插件生命周期状态

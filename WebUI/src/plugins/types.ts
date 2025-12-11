@@ -12,6 +12,7 @@ export const BuiltinPluginId = {
     MOCK: 'mock',
     BREAKPOINT: 'breakpoint',
     CHAOS: 'chaos',
+    PERFORMANCE: 'performance',
 } as const
 
 export type BuiltinPluginIdType = (typeof BuiltinPluginId)[keyof typeof BuiltinPluginId]

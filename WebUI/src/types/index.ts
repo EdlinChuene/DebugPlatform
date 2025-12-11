@@ -230,6 +230,7 @@ export type RealtimeMessageType =
   | 'wsEvent'
   | 'logEvent'
   | 'stats'
+  | 'performanceEvent'
   | 'deviceConnected'
   | 'deviceDisconnected'
   | 'breakpointHit'
@@ -427,6 +428,9 @@ export interface ServerStats {
   logEventCount: number
   wsSessionCount: number
   wsFrameCount: number
+  perfMetricsCount: number
+  jankEventCount: number
+  alertCount: number
   mockRuleCount: number
   breakpointRuleCount: number
   chaosRuleCount: number
@@ -435,4 +439,61 @@ export interface ServerStats {
   onlineDeviceCount: number
   databaseSizeBytes: number | null
   databaseMode: string
+}
+
+// ============================================================================
+// 性能监控事件
+// ============================================================================
+
+export interface PerformanceEventData {
+  id: string
+  eventType: 'metrics' | 'jank' | 'alert' | 'alertResolved'
+  timestamp: string
+  metrics?: PerformanceMetricsItem[]
+  jank?: JankEventItem
+  alert?: AlertEventItem
+}
+
+export interface PerformanceMetricsItem {
+  timestamp: string
+  cpu?: {
+    usage: number
+    userTime: number
+    systemTime: number
+    threadCount: number
+  }
+  memory?: {
+    usedMemory: number
+    peakMemory: number
+    freeMemory: number
+    memoryPressure: string
+    footprintRatio: number
+  }
+  fps?: {
+    fps: number
+    droppedFrames: number
+    jankCount: number
+    averageRenderTime: number
+  }
+}
+
+export interface JankEventItem {
+  id: string
+  timestamp: string
+  duration: number
+  droppedFrames: number
+  stackTrace?: string
+}
+
+export interface AlertEventItem {
+  id: string
+  ruleId: string
+  metricType: string
+  severity: string
+  message: string
+  currentValue: number
+  threshold: number
+  timestamp: string
+  isResolved: boolean
+  resolvedAt?: string
 }

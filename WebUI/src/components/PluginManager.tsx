@@ -50,7 +50,7 @@ export function PluginManager({ className }: PluginManagerProps) {
 
     // 禁用所有插件（保留核心插件）
     const handleDisableAll = useCallback(() => {
-        const corePlugins = ['network', 'log', 'websocket', 'database']
+        const corePlugins = ['network', 'log', 'database', "performance"]
         for (const plugin of plugins) {
             if (!corePlugins.includes(plugin.pluginId)) {
                 PluginRegistry.setPluginEnabled(plugin.pluginId, false)
@@ -115,7 +115,7 @@ export function PluginManager({ className }: PluginManagerProps) {
                         <div className="max-h-[400px] overflow-auto">
                             {plugins.map((plugin) => {
                                 const isEnabled = PluginRegistry.isPluginEnabled(plugin.pluginId)
-                                const isCore = ['network', 'log', 'websocket', 'database'].includes(plugin.pluginId)
+                                const isCore = ['network', 'log', 'database', "performance"].includes(plugin.pluginId)
 
                                 return (
                                     <div

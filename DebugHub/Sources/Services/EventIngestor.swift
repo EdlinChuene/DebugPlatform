@@ -37,6 +37,11 @@ final class EventIngestor: @unchecked Sendable {
                 case .stats:
                     // Stats 事件暂不持久化，仅用于实时展示
                     break
+
+                case let .performance(perfEvent):
+                    // Performance 事件通过 PerformanceBackendPlugin 处理
+                    // 这里只处理持久化（如告警事件）
+                    try await ingestPerformanceEvent(perfEvent, deviceId: deviceId, db: db)
                 }
             } catch {
                 print("[EventIngestor] Failed to ingest event: \(error)")
@@ -250,5 +255,28 @@ final class EventIngestor: @unchecked Sendable {
         )
 
         try await model.save(on: db)
+    }
+
+    // MARK: - Performance Event
+
+    private func ingestPerformanceEvent(_ event: PerformanceEventDTO, deviceId: String, db: Database) async throws {
+        // 只持久化告警事件
+        if event.eventType == "alert" || event.eventType == "alertResolved", let alertData = event.alert {
+            let model = AlertModel(
+                id: UUID(uuidString: alertData.id) ?? UUID(),
+                deviceId: deviceId,
+                ruleId: alertData.ruleId,
+                metricType: alertData.metricType,
+                severity: alertData.severity,
+                message: alertData.message,
+                currentValue: alertData.currentValue,
+                threshold: alertData.threshold,
+                timestamp: alertData.timestamp,
+                isResolved: alertData.isResolved,
+                resolvedAt: alertData.resolvedAt
+            )
+            try await model.save(on: db)
+        }
+        // 性能指标和卡顿事件暂不持久化，仅用于实时展示
     }
 }

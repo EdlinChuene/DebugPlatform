@@ -11,7 +11,7 @@ class RealtimeService {
   private currentDeviceId: string | null = null
   private shouldReconnect = false
 
-  connect(deviceId: string, type: 'network' | 'log' | 'both' = 'both') {
+  connect(deviceId: string, type: 'network' | 'log' | 'both' | 'all' = 'all') {
     this.disconnect()
     this.currentDeviceId = deviceId
     this.shouldReconnect = true

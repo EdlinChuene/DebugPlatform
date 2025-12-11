@@ -195,6 +195,154 @@ export const ChaosIcon: React.FC<IconProps> = ({
     </svg>
 )
 
+/** 性能监控图标 */
+export const PerformanceIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <path
+            d="M3 3v18h18"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+        <path
+            d="M7 14l3-3 4 4 6-8"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+    </svg>
+)
+
+/** CPU 图标 */
+export const CPUIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth={strokeWidth} />
+        <rect x="9" y="9" width="6" height="6" stroke="currentColor" strokeWidth={strokeWidth} />
+        <path
+            d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 15h3M1 9h3M1 15h3"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+        />
+    </svg>
+)
+
+/** 内存图标 */
+export const MemoryIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <rect x="2" y="6" width="20" height="12" rx="2" stroke="currentColor" strokeWidth={strokeWidth} />
+        <path
+            d="M6 6V4M10 6V4M14 6V4M18 6V4M6 18v2M10 18v2M14 18v2M18 18v2"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+        />
+        <path
+            d="M6 10v4M10 10v4M14 10v4M18 10v4"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+        />
+    </svg>
+)
+
+/** FPS 图标 */
+export const FPSIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth={strokeWidth} />
+        <path
+            d="M8 21h8M12 17v4"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+        />
+        <path
+            d="M7 7l3 3-3 3M12 13h5"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+    </svg>
+)
+
+/** 告警图标 */
+export const AlertIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <path
+            d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+        <path
+            d="M12 9v4M12 17h.01"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+    </svg>
+)
+
 /** 数据库图标 */
 export const DatabaseIcon: React.FC<IconProps> = ({
     size = defaultProps.size,

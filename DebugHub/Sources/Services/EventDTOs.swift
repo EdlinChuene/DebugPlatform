@@ -15,6 +15,7 @@ enum DebugEventDTO: Codable {
     case webSocket(WSEventDTO)
     case log(LogEventDTO)
     case stats(StatsEventDTO)
+    case performance(PerformanceEventDTO)
 }
 
 // MARK: - HTTP Event DTO
@@ -167,4 +168,67 @@ struct MockRuleDTO: Content {
     var action: Action
     var priority: Int
     var enabled: Bool
+}
+
+// MARK: - Performance Event DTO
+
+/// 性能事件 DTO（用于从客户端接收）
+struct PerformanceEventDTO: Content {
+    let id: String
+    let eventType: String
+    let timestamp: Date
+    let metrics: [PerfMetricsItemDTO]?
+    let jank: PerfJankEventDTO?
+    let alert: PerfAlertEventDTO?
+}
+
+/// 性能指标 DTO（仅用于事件传输）
+struct PerfMetricsItemDTO: Codable {
+    let timestamp: Date
+    let cpu: PerfCPUMetricsDTO?
+    let memory: PerfMemoryMetricsDTO?
+    let fps: PerfFPSMetricsDTO?
+}
+
+struct PerfCPUMetricsDTO: Codable {
+    let usage: Double
+    let userTime: Double
+    let systemTime: Double
+    let threadCount: Int
+}
+
+struct PerfMemoryMetricsDTO: Codable {
+    let usedMemory: UInt64
+    let peakMemory: UInt64
+    let freeMemory: UInt64
+    let memoryPressure: String
+    let footprintRatio: Double
+}
+
+struct PerfFPSMetricsDTO: Codable {
+    let fps: Double
+    let droppedFrames: Int
+    let jankCount: Int
+    let averageRenderTime: Double
+}
+
+struct PerfJankEventDTO: Codable {
+    let id: String
+    let timestamp: Date
+    let duration: Double
+    let droppedFrames: Int
+    let stackTrace: String?
+}
+
+struct PerfAlertEventDTO: Codable {
+    let id: String
+    let ruleId: String
+    let metricType: String
+    let severity: String
+    let message: String
+    let currentValue: Double
+    let threshold: Double
+    let timestamp: Date
+    let isResolved: Bool
+    let resolvedAt: Date?
 }

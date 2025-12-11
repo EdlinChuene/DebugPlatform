@@ -39,6 +39,9 @@ func configure(_ app: Application) throws {
     app.migrations.add(CreateTrafficRule())
     app.migrations.add(CreateDevice())
     app.migrations.add(AddHTTPEventReplay())
+    app.migrations.add(CreatePerformanceMetrics())
+    app.migrations.add(CreateJankEvent())
+    app.migrations.add(CreateAlert())
 
     // 运行迁移
     try app.autoMigrate().wait()
@@ -364,6 +367,7 @@ private func registerBuiltinPlugins() {
     try? registry.register(plugin: LogBackendPlugin())
     try? registry.register(plugin: WebSocketBackendPlugin())
     try? registry.register(plugin: DatabaseBackendPlugin())
+    try? registry.register(plugin: PerformanceBackendPlugin())
 
     // 调试工具插件
     try? registry.register(plugin: MockBackendPlugin())

@@ -87,17 +87,18 @@ final class DebugBridgeHandler: @unchecked Sendable {
             case let .events(events):
                 if let deviceId = deviceIdHolder.deviceId {
                     // 统计事件类型
-                    var httpCount = 0, wsCount = 0, logCount = 0, statsCount = 0
+                    var httpCount = 0, wsCount = 0, logCount = 0, statsCount = 0, perfCount = 0
                     for event in events {
                         switch event {
                         case .http: httpCount += 1
                         case .webSocket: wsCount += 1
                         case .log: logCount += 1
                         case .stats: statsCount += 1
+                        case .performance: perfCount += 1
                         }
                     }
                     print(
-                        "[DebugBridge] Received \(events.count) events from \(deviceId): http=\(httpCount), ws=\(wsCount), log=\(logCount), stats=\(statsCount)"
+                        "[DebugBridge] Received \(events.count) events from \(deviceId): http=\(httpCount), ws=\(wsCount), log=\(logCount), stats=\(statsCount), perf=\(perfCount)"
                     )
                     handleEvents(events: events, deviceId: deviceId, req: req)
                 }
@@ -200,6 +201,77 @@ final class DebugBridgeHandler: @unchecked Sendable {
 
             // 广播原始事件给实时流订阅者
             RealtimeStreamHandler.shared.broadcast(events: events, deviceId: deviceId)
+
+            // 将 performance 事件路由到 PerformanceBackendPlugin
+            for event in events {
+                if case let .performance(perfEvent) = event {
+                    await routePerformanceEvent(perfEvent, deviceId: deviceId)
+                }
+            }
+        }
+    }
+
+    /// 将 PerformanceEventDTO 转换为 PluginEventDTO 并路由到 PerformanceBackendPlugin
+    private func routePerformanceEvent(_ event: PerformanceEventDTO, deviceId: String) async {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        // 根据 eventType 转换为对应的 PluginEventDTO
+        let pluginEventType: String
+        let payload: Data
+
+        do {
+            switch event.eventType {
+            case "metrics":
+                pluginEventType = "performance_metrics"
+                // 将 PerfMetricsItemDTO 转换为 PerformanceMetricsDTO 格式
+                guard let metricsItems = event.metrics, !metricsItems.isEmpty else { return }
+                let metrics = metricsItems.map { item in
+                    PerformanceMetricsDTO(
+                        timestamp: item.timestamp,
+                        cpu: item.cpu.map { CPUMetricsDTO(usage: $0.usage, userTime: $0.userTime, systemTime: $0.systemTime, threadCount: $0.threadCount) },
+                        memory: item.memory.map { MemoryMetricsDTO(usedMemory: $0.usedMemory, peakMemory: $0.peakMemory, freeMemory: $0.freeMemory, memoryPressure: $0.memoryPressure, footprintRatio: $0.footprintRatio) },
+                        fps: item.fps.map { FPSMetricsDTO(fps: $0.fps, droppedFrames: $0.droppedFrames, jankCount: $0.jankCount, averageRenderTime: $0.averageRenderTime) }
+                    )
+                }
+                let batch = PerformanceMetricsBatchDTO(metrics: metrics)
+                payload = try encoder.encode(batch)
+
+            case "jank":
+                pluginEventType = "jank_event"
+                guard let jank = event.jank else { return }
+                // 转换为 JankEventDTO
+                let jankDTO = JankEventDTO(id: jank.id, timestamp: jank.timestamp, duration: jank.duration, droppedFrames: jank.droppedFrames, stackTrace: jank.stackTrace)
+                payload = try encoder.encode(jankDTO)
+
+            case "alert", "alertResolved":
+                pluginEventType = "performance_alert"
+                guard let alert = event.alert else { return }
+                // 转换为 AlertDTO
+                let alertDTO = AlertDTO(
+                    id: alert.id, ruleId: alert.ruleId, metricType: alert.metricType,
+                    severity: alert.severity, message: alert.message,
+                    currentValue: alert.currentValue, threshold: alert.threshold,
+                    timestamp: alert.timestamp, isResolved: alert.isResolved,
+                    resolvedAt: alert.resolvedAt
+                )
+                payload = try encoder.encode(alertDTO)
+
+            default:
+                return
+            }
+
+            let pluginEvent = PluginEventDTO(
+                pluginId: "performance",
+                eventType: pluginEventType,
+                eventId: event.id,
+                timestamp: event.timestamp,
+                payload: payload
+            )
+
+            await BackendPluginRegistry.shared.routeEvent(pluginEvent, from: deviceId)
+        } catch {
+            print("[DebugBridge] Failed to route performance event: \(error)")
         }
     }
 

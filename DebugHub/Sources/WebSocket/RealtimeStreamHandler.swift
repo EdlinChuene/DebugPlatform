@@ -15,6 +15,7 @@ struct RealtimeMessage: Content {
         case wsEvent
         case logEvent
         case stats
+        case performanceEvent
         case deviceConnected
         case deviceDisconnected
         case deviceReconnected
@@ -79,10 +80,12 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
             types = [.httpEvent, .wsEvent]
         case "log":
             types = [.logEvent]
+        case "performance":
+            types = [.performanceEvent]
         case "both", "all":
-            types = [.httpEvent, .wsEvent, .logEvent, .stats, .breakpointHit]
+            types = [.httpEvent, .wsEvent, .logEvent, .stats, .breakpointHit, .performanceEvent]
         default:
-            types = [.httpEvent, .wsEvent, .logEvent, .breakpointHit]
+            types = [.httpEvent, .wsEvent, .logEvent, .breakpointHit, .performanceEvent]
         }
 
         let subscriber = StreamSubscriber(deviceId: deviceId, types: types, webSocket: ws)
@@ -223,18 +226,19 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         encoder.dateEncodingStrategy = .iso8601
 
         // 统计事件类型
-        var httpCount = 0, wsCount = 0, logCount = 0, statsCount = 0
+        var httpCount = 0, wsCount = 0, logCount = 0, statsCount = 0, perfCount = 0
         for event in events {
             switch event {
             case .http: httpCount += 1
             case .webSocket: wsCount += 1
             case .log: logCount += 1
             case .stats: statsCount += 1
+            case .performance: perfCount += 1
             }
         }
-        if wsCount > 0 {
+        if wsCount > 0 || perfCount > 0 {
             print(
-                "[RealtimeStream] Broadcasting events: http=\(httpCount), ws=\(wsCount), log=\(logCount), stats=\(statsCount), subscribers=\(currentSubscribers.count)"
+                "[RealtimeStream] Broadcasting events: http=\(httpCount), ws=\(wsCount), log=\(logCount), stats=\(statsCount), perf=\(perfCount), subscribers=\(currentSubscribers.count)"
             )
         }
 
@@ -260,6 +264,10 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
                 case let .stats(statsEvent):
                     messageType = .stats
                     payloadJSON = try String(data: encoder.encode(statsEvent), encoding: .utf8) ?? "{}"
+
+                case let .performance(perfEvent):
+                    messageType = .performanceEvent
+                    payloadJSON = try String(data: encoder.encode(perfEvent), encoding: .utf8) ?? "{}"
                 }
             } catch {
                 print("[RealtimeStream] Failed to encode event: \(error)")

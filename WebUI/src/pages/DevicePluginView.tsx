@@ -12,6 +12,7 @@ import { useLogStore } from '@/stores/logStore'
 import { useWSStore } from '@/stores/wsStore'
 import { useMockStore } from '@/stores/mockStore'
 import { useBreakpointStore } from '@/stores/breakpointStore'
+import { usePerformanceStore } from '@/stores/performanceStore'
 import { PluginRenderer, PluginTabBar, getPluginTabs } from '@/plugins/PluginRenderer'
 import { PluginRegistry } from '@/plugins/PluginRegistry'
 import { KeyboardShortcutsHelp } from '@/components/KeyboardShortcutsHelp'
@@ -29,7 +30,7 @@ import {
 } from '@/components/icons'
 import { realtimeService, parseHTTPEvent, parseLogEvent } from '@/services/realtime'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
-import type { BreakpointHit } from '@/types'
+import type { BreakpointHit, PerformanceEventData } from '@/types'
 import clsx from 'clsx'
 
 /**
@@ -58,6 +59,7 @@ export function DevicePluginView() {
     const wsStore = useWSStore()
     const mockStore = useMockStore()
     const breakpointStore = useBreakpointStore()
+    const performanceStore = usePerformanceStore()
 
     // UI 状态
     const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
@@ -195,6 +197,11 @@ export function DevicePluginView() {
                     logStore.addRealtimeEvent(parseLogEvent(message.payload))
                     break
                 // wsEvent 由 WebSocketPlugin 统一处理，避免重复
+                case 'performanceEvent': {
+                    const perfEvent = JSON.parse(message.payload) as PerformanceEventData
+                    performanceStore.handleRealtimeEvent(perfEvent)
+                    break
+                }
                 case 'deviceConnected': {
                     const data = JSON.parse(message.payload)
                     addActivity({

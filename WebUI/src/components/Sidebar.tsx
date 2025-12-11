@@ -348,7 +348,14 @@ export function Sidebar() {
 
   const handleDeviceClick = (deviceId: string) => {
     selectDevice(deviceId)
-    navigate(`/device/${deviceId}`)
+    // 保留当前的 plugin 参数
+    const searchParams = new URLSearchParams(location.search)
+    const pluginParam = searchParams.get('plugin')
+    if (pluginParam) {
+      navigate(`/device/${deviceId}?plugin=${pluginParam}`)
+    } else {
+      navigate(`/device/${deviceId}`)
+    }
   }
 
   const handleToggleFavorite = (e: React.MouseEvent, deviceId: string) => {
