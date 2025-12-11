@@ -149,7 +149,7 @@ dependencies: [
 ]
 
 // 集成代码
-#if !APPSTORE
+#if DEBUG
 import DebugProbe
 
 func setupDebugProbe() {
@@ -233,7 +233,7 @@ npm run deploy
 ## 🔒 安全性
 
 1. **Token 认证**: Debug Bridge 连接需要有效 Token
-2. **条件编译**: 使用 `#if !APPSTORE` 保护调试代码
+2. **条件编译**: 使用 `#if DEBUG` 保护调试代码
 3. **内网部署**: Debug Hub 建议仅在内网使用
 4. **自动清理**: 默认 3 天自动清理，收藏请求除外
 

@@ -21,7 +21,7 @@ import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
 import { Toggle } from '@/components/Toggle'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { parseWSEvent } from '@/services/realtime'
-import { deleteAllWSSessions } from '@/services/api'
+import { deleteAllWSSessions, getWSSessionDetail } from '@/services/api'
 import clsx from 'clsx'
 
 // 插件实现类
@@ -104,7 +104,58 @@ class WebSocketPluginImpl implements FrontendPlugin {
                 const data = wsEvent.data as { id: string; closeCode?: number; closeReason?: string }
                 wsStore.updateSessionStatus(data.id, false, data.closeCode, data.closeReason)
             } else if (wsEvent.type === 'frame') {
-                wsStore.addRealtimeFrame(wsEvent.data as Parameters<typeof wsStore.addRealtimeFrame>[0])
+                const frame = wsEvent.data as {
+                    id: string
+                    sessionId: string
+                    sessionUrl?: string
+                    direction: 'send' | 'receive'
+                    opcode: string
+                    payload?: string
+                    payloadPreview?: string
+                    timestamp: string
+                    isMocked: boolean
+                }
+
+                // 如果会话不存在，先创建一个占位会话
+                if (!wsStore.sessions.some(s => s.id === frame.sessionId)) {
+                    // 使用 frame 中的 sessionUrl（如果有），否则使用占位符
+                    const sessionUrl = frame.sessionUrl || '(loading...)'
+                    wsStore.addRealtimeSession({
+                        id: frame.sessionId,
+                        url: sessionUrl,
+                        connectTime: frame.timestamp,
+                        disconnectTime: null,
+                        closeCode: null,
+                        closeReason: null,
+                        isOpen: true,
+                    })
+
+                    // 如果没有 sessionUrl，尝试从后端获取会话详情
+                    if (!frame.sessionUrl && this.pluginContext?.deviceId) {
+                        const deviceId = this.pluginContext.deviceId
+                        getWSSessionDetail(deviceId, frame.sessionId)
+                            .then(detail => {
+                                wsStore.updateSessionUrl(frame.sessionId, detail.url)
+                            })
+                            .catch(() => {
+                                // 忽略错误，后端可能还没创建会话记录
+                            })
+                    }
+                }
+
+                // 计算 payload 大小（base64 解码后的近似大小）
+                const payloadSize = frame.payload ? Math.floor(frame.payload.length * 3 / 4) : 0
+
+                wsStore.addRealtimeFrame({
+                    id: frame.id,
+                    sessionId: frame.sessionId,
+                    direction: frame.direction,
+                    opcode: frame.opcode,
+                    payloadPreview: frame.payloadPreview ?? null,
+                    payloadSize,
+                    timestamp: frame.timestamp,
+                    isMocked: frame.isMocked,
+                })
             }
         }
     }
@@ -346,6 +397,8 @@ function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
                             hasMore={frames.length < totalFrames}
                             frameDirection={frameDirection}
                             onFrameDirectionChange={handleFrameDirectionChange}
+                            loadedCount={frames.length}
+                            totalCount={totalFrames}
                         />
                     )}
                 </div>

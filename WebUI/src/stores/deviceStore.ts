@@ -89,6 +89,9 @@ interface DeviceState {
   selectAllOffline: () => void
   clearSelectedIds: () => void
   batchRemoveSelected: () => Promise<void>
+
+  // 服务离线时更新设备状态
+  setAllDevicesOffline: () => void
 }
 
 export const useDeviceStore = create<DeviceState>((set, get) => ({
@@ -290,6 +293,21 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       set({ error: (error as Error).message })
       throw error
     }
+  },
+
+  // 服务离线时将所有设备设置为离线状态
+  setAllDevicesOffline: () => {
+    set(state => ({
+      devices: state.devices.map(device => ({
+        ...device,
+        isOnline: false
+      })),
+      // 同时更新当前设备详情
+      currentDevice: state.currentDevice ? {
+        ...state.currentDevice,
+        isOnline: false
+      } : null
+    }))
   },
 }))
 

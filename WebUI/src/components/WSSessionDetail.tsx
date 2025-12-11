@@ -5,6 +5,7 @@ import { JSONTree } from './JSONTree'
 import { ProtobufViewer } from './ProtobufViewer'
 import { getWSFrameDetail } from '@/services/api'
 import { Toggle } from './Toggle'
+import { LoadMoreButton } from './LoadMoreButton'
 import clsx from 'clsx'
 
 type PayloadFormat = 'auto' | 'text' | 'json' | 'hex' | 'base64' | 'protobuf'
@@ -18,6 +19,8 @@ interface WSSessionDetailProps {
   hasMore?: boolean
   frameDirection: string
   onFrameDirectionChange: (direction: string) => void
+  loadedCount?: number
+  totalCount?: number
 }
 
 export function WSSessionDetail({
@@ -29,6 +32,8 @@ export function WSSessionDetail({
   hasMore,
   frameDirection,
   onFrameDirectionChange,
+  loadedCount,
+  totalCount,
 }: WSSessionDetailProps) {
   const [activeTab, setActiveTab] = useState<'frames' | 'info'>('frames')
   const [expandedFrameId, setExpandedFrameId] = useState<string | null>(null)
@@ -101,6 +106,8 @@ export function WSSessionDetail({
             onToggleExpand={setExpandedFrameId}
             direction={frameDirection}
             onDirectionChange={onFrameDirectionChange}
+            loadedCount={loadedCount}
+            totalCount={totalCount}
           />
         )}
         {activeTab === 'info' && <InfoTab session={session} />}
@@ -126,6 +133,9 @@ function SessionStatusBadge({ isOpen, closeCode }: { isOpen: boolean; closeCode?
   )
 }
 
+// 帧行基础高度（未展开时）- 仅用于参考
+// const FRAME_ROW_HEIGHT = 60
+
 function FramesTab({
   deviceId,
   sessionId,
@@ -137,6 +147,8 @@ function FramesTab({
   onToggleExpand,
   direction,
   onDirectionChange,
+  loadedCount,
+  totalCount,
 }: {
   deviceId: string
   sessionId: string
@@ -148,26 +160,25 @@ function FramesTab({
   onToggleExpand: (id: string | null) => void
   direction: string
   onDirectionChange: (direction: string) => void
+  loadedCount?: number
+  totalCount?: number
 }) {
-  const listRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   const prevFrameCountRef = useRef(frames.length)
 
-  // 自动滚动到底部（新帧到达时）
-  useEffect(() => {
-    if (!autoScroll || !listRef.current) return
+  // 统计发送/接收帧数
+  const sendCount = frames.filter((f) => f.direction === 'send').length
+  const receiveCount = frames.filter((f) => f.direction === 'receive').length
+  const totalSize = frames.reduce((sum, f) => sum + (f.payloadSize || 0), 0)
 
-    // 只在新帧到达时滚动
-    if (frames.length > prevFrameCountRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight
+  // 当新帧到达时，自动滚动到顶部（因为新帧显示在顶部）
+  useEffect(() => {
+    if (frames.length > prevFrameCountRef.current && autoScroll && scrollRef.current) {
+      scrollRef.current.scrollTop = 0
     }
     prevFrameCountRef.current = frames.length
   }, [frames.length, autoScroll])
-
-  // 统计发送/接收帧数
-  const sendCount = frames.filter(f => f.direction === 'send').length
-  const receiveCount = frames.filter(f => f.direction === 'receive').length
-  const totalSize = frames.reduce((sum, f) => sum + (f.payloadSize || 0), 0)
 
   return (
     <div className="flex flex-col h-full">
@@ -189,7 +200,9 @@ function FramesTab({
               onClick={() => onDirectionChange('send')}
               className={clsx(
                 'px-2 py-1 text-xs rounded transition-colors flex items-center gap-1',
-                direction === 'send' ? 'bg-blue-500/20 text-blue-400' : 'text-text-muted hover:text-blue-400'
+                direction === 'send'
+                  ? 'bg-blue-500/20 text-blue-400'
+                  : 'text-text-muted hover:text-blue-400'
               )}
             >
               <span>↑</span> 发送
@@ -198,7 +211,9 @@ function FramesTab({
               onClick={() => onDirectionChange('receive')}
               className={clsx(
                 'px-2 py-1 text-xs rounded transition-colors flex items-center gap-1',
-                direction === 'receive' ? 'bg-green-500/20 text-green-400' : 'text-text-muted hover:text-green-400'
+                direction === 'receive'
+                  ? 'bg-green-500/20 text-green-400'
+                  : 'text-text-muted hover:text-green-400'
               )}
             >
               <span>↓</span> 接收
@@ -214,45 +229,45 @@ function FramesTab({
         </div>
 
         {/* 自动滚动开关 */}
-        <Toggle
-          checked={autoScroll}
-          onChange={(checked) => setAutoScroll(checked)}
-          label="自动滚动"
-        />
+        <Toggle checked={autoScroll} onChange={(checked) => setAutoScroll(checked)} label="自动滚动" />
       </div>
 
-      {/* 帧列表 */}
-      <div ref={listRef} className="flex-1 overflow-auto">
+      {/* 帧列表 - 普通滚动 */}
+      <div ref={scrollRef} className="flex-1 overflow-auto">
         {frames.length === 0 && !loading ? (
           <div className="flex flex-col items-center justify-center h-full text-text-muted py-8">
             <span className="text-3xl mb-2 opacity-50">📭</span>
             <p className="text-sm">暂无消息帧</p>
           </div>
         ) : (
-          <div>
-            {frames.map((frame) => (
-              <FrameItem
-                key={frame.id}
-                deviceId={deviceId}
-                sessionId={sessionId}
-                frame={frame}
-                isExpanded={expandedFrameId === frame.id}
-                onToggle={() => onToggleExpand(expandedFrameId === frame.id ? null : frame.id)}
-              />
-            ))}
-          </div>
-        )}
+          <div className="divide-y divide-border">
+            {/* 倒序显示帧，最新的在顶部 */}
+            {[...frames].reverse().map((frame) => {
+              const isExpanded = expandedFrameId === frame.id
+              return (
+                <FrameItem
+                  key={frame.id}
+                  deviceId={deviceId}
+                  sessionId={sessionId}
+                  frame={frame}
+                  isExpanded={isExpanded}
+                  onToggle={() => onToggleExpand(isExpanded ? null : frame.id)}
+                />
+              )
+            })}
 
-        {/* 加载更多 */}
-        {hasMore && (
-          <div className="px-4 py-3 text-center">
-            <button
-              onClick={onLoadMore}
-              disabled={loading}
-              className="btn btn-secondary text-xs"
-            >
-              {loading ? '加载中...' : '加载更多'}
-            </button>
+            {/* 加载更多按钮 */}
+            {hasMore && onLoadMore && (
+              <div className="px-4 py-3">
+                <LoadMoreButton
+                  onClick={onLoadMore}
+                  isLoading={loading}
+                  hasMore={hasMore}
+                  loadedCount={loadedCount ?? frames.length}
+                  totalCount={totalCount ?? frames.length}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

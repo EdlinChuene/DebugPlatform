@@ -27,8 +27,7 @@ import {
     StarIcon,
     IPhoneIcon,
 } from '@/components/icons'
-import { realtimeService, parseHTTPEvent, parseLogEvent, parseWSEvent } from '@/services/realtime'
-import { getWSSessionDetail } from '@/services/api'
+import { realtimeService, parseHTTPEvent, parseLogEvent } from '@/services/realtime'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import type { BreakpointHit } from '@/types'
 import clsx from 'clsx'
@@ -195,67 +194,7 @@ export function DevicePluginView() {
                 case 'logEvent':
                     logStore.addRealtimeEvent(parseLogEvent(message.payload))
                     break
-                case 'wsEvent': {
-                    const wsEvent = parseWSEvent(message.payload)
-                    if (wsEvent.type === 'sessionCreated') {
-                        const session = wsEvent.data as { id: string; url: string; connectTime: string }
-                        wsStore.addRealtimeSession({
-                            id: session.id,
-                            url: session.url,
-                            connectTime: session.connectTime,
-                            disconnectTime: null,
-                            closeCode: null,
-                            closeReason: null,
-                            isOpen: true,
-                        })
-                    } else if (wsEvent.type === 'sessionClosed') {
-                        const data = wsEvent.data as { id: string; closeCode?: number; closeReason?: string }
-                        wsStore.updateSessionStatus(data.id, false, data.closeCode, data.closeReason)
-                    } else if (wsEvent.type === 'frame') {
-                        const frame = wsEvent.data as {
-                            id: string
-                            sessionId: string
-                            direction: 'send' | 'receive'
-                            opcode: string
-                            payload?: string
-                            payloadPreview?: string
-                            timestamp: string
-                            isMocked: boolean
-                        }
-
-                        if (!wsStore.sessions.some(s => s.id === frame.sessionId)) {
-                            wsStore.addRealtimeSession({
-                                id: frame.sessionId,
-                                url: '(loading...)',
-                                connectTime: frame.timestamp,
-                                disconnectTime: null,
-                                closeCode: null,
-                                closeReason: null,
-                                isOpen: true,
-                            })
-                            getWSSessionDetail(deviceId, frame.sessionId)
-                                .then(detail => {
-                                    wsStore.updateSessionUrl(frame.sessionId, detail.url)
-                                })
-                                .catch(() => {
-                                    console.log(`[WS] Session ${frame.sessionId} not found, waiting for backend auto-creation`)
-                                })
-                        }
-
-                        const payloadSize = frame.payload ? Math.floor(frame.payload.length * 3 / 4) : 0
-                        wsStore.addRealtimeFrame({
-                            id: frame.id,
-                            sessionId: frame.sessionId,
-                            direction: frame.direction,
-                            opcode: frame.opcode,
-                            payloadPreview: frame.payloadPreview ?? null,
-                            payloadSize,
-                            timestamp: frame.timestamp,
-                            isMocked: frame.isMocked,
-                        })
-                    }
-                    break
-                }
+                // wsEvent 由 WebSocketPlugin 统一处理，避免重复
                 case 'deviceConnected': {
                     const data = JSON.parse(message.payload)
                     addActivity({
@@ -365,7 +304,7 @@ export function DevicePluginView() {
                     {/* 设备信息 - 紧凑单行 */}
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-border flex-shrink-0">
-                            {currentDevice ? getPlatformIcon(currentDevice.deviceInfo.platform, 18) : <IPhoneIcon size={18} />}
+                            {currentDevice ? getPlatformIcon(currentDevice.deviceInfo.platform, 18, undefined, currentDevice.deviceInfo.isSimulator) : <IPhoneIcon size={18} />}
                         </div>
                         <div className="flex items-center gap-2 min-w-0">
                             {/* 设备名称 / 备注名 */}

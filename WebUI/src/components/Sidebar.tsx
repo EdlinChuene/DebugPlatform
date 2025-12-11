@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useDeviceStore } from '@/stores/deviceStore'
@@ -6,10 +6,9 @@ import { useHTTPStore } from '@/stores/httpStore'
 import { useWSStore } from '@/stores/wsStore'
 import { useRuleStore } from '@/stores/ruleStore'
 import { getPlatformIcon } from '@/utils/deviceIcons'
-import { HttpIcon, WebSocketIcon, LogIcon, SearchIcon, IPhoneIcon, StarIcon, ClearIcon, ChevronDownIcon, DebugHubLogo, BookIcon, CheckIcon, PackageIcon, ColorfulTrafficLightIcon, HighlighterIcon } from '@/components/icons'
+import { HttpIcon, WebSocketIcon, LogIcon, SearchIcon, IPhoneIcon, StarIcon, ClearIcon, ChevronDownIcon, DebugHubLogo, BookIcon, CheckIcon, PackageIcon, ColorfulTrafficLightIcon, HighlightIcon, TagIcon, ChevronRightIcon } from '@/components/icons'
 import { ServerStatsPanel } from './ServerStatsPanel'
 import { ThemeToggle } from './ThemeToggle'
-import { Checkbox } from './Checkbox'
 import clsx from 'clsx'
 
 export function Sidebar() {
@@ -17,8 +16,58 @@ export function Sidebar() {
   const location = useLocation()
   const { isServerOnline } = useConnectionStore()
 
+  // 侧边栏宽度（可调整）
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    // 从 localStorage 读取保存的宽度
+    const saved = localStorage.getItem('sidebar-width')
+    return saved ? parseInt(saved, 10) : 288 // 默认 288px (w-72)
+  })
+  const [isResizing, setIsResizing] = useState(false)
+  const sidebarRef = useRef<HTMLElement>(null)
+
+  // 最小和最大宽度
+  const MIN_WIDTH = 240
+  const MAX_WIDTH = 480
+
+  // 处理拖拽调整宽度
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+  }, [])
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX))
+      setSidebarWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false)
+        // 保存宽度到 localStorage
+        localStorage.setItem('sidebar-width', sidebarWidth.toString())
+      }
+    }
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      // 拖拽时禁止选择文本
+      document.body.style.userSelect = 'none'
+      document.body.style.cursor = 'col-resize'
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+  }, [isResizing, sidebarWidth])
+
   // Device Store
-  const { devices, fetchDevices, currentDeviceId, selectDevice, favoriteDeviceIds, toggleFavorite } = useDeviceStore()
+  const { devices, fetchDevices, currentDeviceId, selectDevice, favoriteDeviceIds, toggleFavorite, deviceNicknames } = useDeviceStore()
 
   // HTTP Store (for Domain List) - 支持多选
   const { events, toggleDomain, clearDomains, filters: httpFilters } = useHTTPStore()
@@ -55,37 +104,163 @@ export function Sidebar() {
   // 判断当前是否是 WebSocket 插件
   const isWebSocketPlugin = currentPlugin === 'websocket'
 
-  // Extract Domains/Hosts from Events based on current plugin
-  const domainStats = useMemo(() => {
+  // 展开的节点集合（支持域名和路径的展开）
+  // key 格式: "domain" 或 "domain:/path/to"
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+
+  // 切换节点展开/收起
+  const toggleNodeExpand = (nodeKey: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setExpandedNodes(prev => {
+      const next = new Set(prev)
+      if (next.has(nodeKey)) {
+        next.delete(nodeKey)
+      } else {
+        next.add(nodeKey)
+      }
+      return next
+    })
+  }
+
+  // 检查节点是否展开
+  const isNodeExpanded = (nodeKey: string) => expandedNodes.has(nodeKey)
+
+  // 路径树节点类型（递归结构）
+  interface PathNode {
+    segment: string     // 当前路径段，如 "api"
+    fullPath: string    // 完整路径，如 "/api"
+    count: number       // 该路径下的请求数
+    children: PathNode[] // 子路径节点
+  }
+
+  // 域名树节点类型
+  interface DomainNode {
+    domain: string
+    count: number
+    pathTree: PathNode[] // 路径树
+  }
+
+  // 构建路径树的辅助函数
+  const buildPathTree = (pathCounts: Record<string, number>): PathNode[] => {
+    const root: PathNode[] = []
+
+    // 收集所有路径并解析
+    const allPaths = Object.entries(pathCounts)
+
+    // 按路径构建树
+    for (const [fullPath, count] of allPaths) {
+      const segments = fullPath.split('/').filter(Boolean)
+      let currentLevel = root
+      let currentPath = ''
+
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i]
+        currentPath = currentPath + '/' + segment
+
+        let existing = currentLevel.find(n => n.segment === segment)
+        if (!existing) {
+          existing = {
+            segment,
+            fullPath: currentPath,
+            count: 0,
+            children: []
+          }
+          currentLevel.push(existing)
+        }
+
+        // 只有在最后一层才累加计数
+        if (i === segments.length - 1) {
+          existing.count += count
+        }
+
+        currentLevel = existing.children
+      }
+    }
+
+    // 计算每个节点的总计数（包括子节点）
+    const calculateTotalCount = (nodes: PathNode[]): void => {
+      for (const node of nodes) {
+        calculateTotalCount(node.children)
+        // 计算子节点总数
+        const childTotal = node.children.reduce((sum, child) => sum + child.count, 0)
+        // 如果有子节点但当前节点没有直接请求，count 为子节点总数
+        if (childTotal > 0 && node.count === 0) {
+          node.count = childTotal
+        }
+      }
+    }
+
+    calculateTotalCount(root)
+
+    // 按计数排序
+    const sortNodes = (nodes: PathNode[]): void => {
+      nodes.sort((a, b) => b.count - a.count)
+      for (const node of nodes) {
+        sortNodes(node.children)
+      }
+    }
+
+    sortNodes(root)
+
+    return root
+  }
+
+  // Extract Domains/Hosts from Events based on current plugin (多级树状结构)
+  const domainTree = useMemo((): DomainNode[] => {
     if (!shouldShowDomains) return []
 
     if (currentPlugin === 'websocket') {
       // Extract hosts from WebSocket sessions
-      const stats: Record<string, number> = {}
+      const stats: Record<string, { count: number; pathCounts: Record<string, number> }> = {}
       wsSessions.forEach(session => {
         try {
           const url = new URL(session.url)
           const host = url.hostname
-          stats[host] = (stats[host] || 0) + 1
+          const path = url.pathname || '/'
+          if (!stats[host]) {
+            stats[host] = { count: 0, pathCounts: {} }
+          }
+          stats[host].count++
+          stats[host].pathCounts[path] = (stats[host].pathCounts[path] || 0) + 1
         } catch { }
       })
       return Object.entries(stats)
-        .map(([domain, count]) => ({ domain, count }))
+        .map(([domain, data]) => ({
+          domain,
+          count: data.count,
+          pathTree: buildPathTree(data.pathCounts)
+        }))
         .sort((a, b) => b.count - a.count)
     } else {
-      // Extract domains from HTTP events (default for network plugin)
-      const stats: Record<string, number> = {}
+      // Extract domains from HTTP events (多级树状结构)
+      const stats: Record<string, { count: number; pathCounts: Record<string, number> }> = {}
       events.forEach(e => {
         try {
-          const hostname = new URL(e.url).hostname
-          stats[hostname] = (stats[hostname] || 0) + 1
+          const url = new URL(e.url)
+          const hostname = url.hostname
+          const path = url.pathname || '/'
+
+          if (!stats[hostname]) {
+            stats[hostname] = { count: 0, pathCounts: {} }
+          }
+          stats[hostname].count++
+          stats[hostname].pathCounts[path] = (stats[hostname].pathCounts[path] || 0) + 1
         } catch { }
       })
       return Object.entries(stats)
-        .map(([domain, count]) => ({ domain, count }))
+        .map(([domain, data]) => ({
+          domain,
+          count: data.count,
+          pathTree: buildPathTree(data.pathCounts)
+        }))
         .sort((a, b) => b.count - a.count)
     }
   }, [events, wsSessions, currentPlugin, shouldShowDomains])
+
+  // 兼容旧的 domainStats 格式（用于高亮检测等）
+  const domainStats = useMemo(() => {
+    return domainTree.map(({ domain, count }) => ({ domain, count }))
+  }, [domainTree])
 
   // Track previous plugin to detect plugin switches
   const prevPluginRef = useRef<string>(currentPlugin)
@@ -135,14 +310,30 @@ export function Sidebar() {
     prevEventsCountRef.current = currentCounts
   }, [domainStats, currentPlugin, shouldShowDomains])
 
-  // Filter domains by search
-  const filteredDomainStats = useMemo(() => {
-    if (!domainSearch.trim()) return domainStats
+  // Filter domains by search (树状结构)
+  const filteredDomainTree = useMemo(() => {
+    if (!domainSearch.trim()) return domainTree
     const searchLower = domainSearch.toLowerCase()
-    return domainStats.filter(({ domain }) =>
-      domain.toLowerCase().includes(searchLower)
+
+    // 递归检查路径树是否匹配搜索词
+    const matchesSearch = (nodes: PathNode[]): boolean => {
+      for (const node of nodes) {
+        if (node.segment.toLowerCase().includes(searchLower)) return true
+        if (matchesSearch(node.children)) return true
+      }
+      return false
+    }
+
+    return domainTree.filter(({ domain, pathTree }) =>
+      domain.toLowerCase().includes(searchLower) ||
+      matchesSearch(pathTree)
     )
-  }, [domainStats, domainSearch])
+  }, [domainTree, domainSearch])
+
+  // 兼容旧的 filteredDomainStats 格式
+  const filteredDomainStats = useMemo(() => {
+    return filteredDomainTree.map(({ domain, count }) => ({ domain, count }))
+  }, [filteredDomainTree])
 
   // Filter devices: show current device + favorites, or all if toggled
   const displayedDevices = useMemo(() => {
@@ -179,12 +370,52 @@ export function Sidebar() {
     }
   }
 
+  // Handle path click - 设置 urlContains 筛选
+  const handlePathClick = (domain: string, path: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (currentPlugin === 'websocket') {
+      // WebSocket: 设置 path 筛选（通过 urlContains）
+      const currentPath = wsFilters.urlContains || ''
+      const filterValue = `${domain}${path}`
+      if (currentPath === filterValue) {
+        setWsFilter('urlContains', '')
+      } else {
+        setWsFilter('urlContains', filterValue)
+      }
+    } else {
+      // HTTP: 设置 urlContains 筛选
+      const currentPath = httpFilters.urlContains || ''
+      const filterValue = `${domain}${path}`
+      if (currentPath === filterValue) {
+        // 如果已经选中这个 path，取消选中
+        useHTTPStore.getState().setFilter('urlContains', '')
+      } else {
+        // 同时选中域名和设置 path 筛选
+        if (!httpFilters.domains.includes(domain)) {
+          toggleDomain(domain)
+        }
+        useHTTPStore.getState().setFilter('urlContains', filterValue)
+      }
+    }
+  }
+
+  // Check if path is selected
+  const isPathSelected = (domain: string, path: string) => {
+    const filterValue = `${domain}${path}`
+    if (currentPlugin === 'websocket') {
+      return wsFilters.urlContains === filterValue
+    }
+    return httpFilters.urlContains === filterValue
+  }
+
   // Handle "All Domains" click
   const handleAllDomainsClick = () => {
     if (currentPlugin === 'websocket') {
       setWsFilter('host', '')
+      setWsFilter('urlContains', '') // 同时清除 path 筛选
     } else {
       clearDomains()
+      useHTTPStore.getState().setFilter('urlContains', '') // 同时清除 path 筛选
     }
   }
 
@@ -204,7 +435,7 @@ export function Sidebar() {
     return httpFilters.domains.length === 0
   }
 
-  // Cycle: None -> Whitelist (Highlight) -> Blacklist (Hide) -> None
+  // Cycle: None -> Highlight -> Mark -> Hide -> None
   const cycleDomainRule = async (e: React.MouseEvent, domain: string) => {
     e.stopPropagation()
     const current = getDomainRule(domain)
@@ -220,6 +451,9 @@ export function Sidebar() {
         priority: 0
       })
     } else if (current.action === 'highlight') {
+      // Update to Mark Rule
+      await createOrUpdateRule({ ...current, action: 'mark' })
+    } else if (current.action === 'mark') {
       // Update to Hide Rule
       await createOrUpdateRule({ ...current, action: 'hide' })
     } else {
@@ -229,7 +463,32 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-72 bg-bg-dark border-r border-border flex flex-col h-full">
+    <aside
+      ref={sidebarRef}
+      className="bg-bg-dark border-r border-border flex flex-col h-full relative flex-shrink-0"
+      style={{ width: sidebarWidth }}
+    >
+      {/* 拖拽调整宽度的手柄 */}
+      <div
+        className={clsx(
+          "absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10 transition-colors group/handle",
+          "hover:bg-primary/50",
+          isResizing && "bg-primary"
+        )}
+        onMouseDown={handleMouseDown}
+        title="拖拽调整侧边栏宽度"
+      >
+        {/* 拖拽指示器 - 居中显示的竖线图标 */}
+        <div className={clsx(
+          "absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2",
+          "flex flex-col gap-0.5 opacity-0 group-hover/handle:opacity-100 transition-opacity",
+          isResizing && "opacity-100"
+        )}>
+          <div className="w-0.5 h-3 bg-primary/80 rounded-full" />
+          <div className="w-0.5 h-3 bg-primary/80 rounded-full" />
+          <div className="w-0.5 h-3 bg-primary/80 rounded-full" />
+        </div>
+      </div>
       {/* Header - 可点击跳转首页 */}
       <Link to="/" className="p-5 border-b border-border flex items-center gap-3 hover:bg-bg-light/50 transition-colors">
         <DebugHubLogo size={40} />
@@ -345,7 +604,7 @@ export function Sidebar() {
                           ? "bg-bg-medium/50"
                           : "bg-bg-medium"
                     )}>
-                      {getPlatformIcon(device.platform, 18)}
+                      {getPlatformIcon(device.platform, 18, undefined, device.isSimulator)}
                     </div>
                     {device.isOnline ? (
                       <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-bg-dark rounded-full" />
@@ -354,15 +613,25 @@ export function Sidebar() {
                     )}
                   </div>
                   <div className={clsx("min-w-0 flex-1", isOffline && "opacity-60")}>
+                    {/* 设备名/备注名 */}
                     <div className={clsx(
                       "font-medium truncate text-xs flex items-center gap-1.5",
                       isSelected ? "text-primary" : "text-text-primary"
                     )}>
-                      {device.deviceName}
+                      {deviceNicknames[device.deviceId] || device.deviceName}
                       {device.isSimulator && (
                         <span className="text-2xs px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium">模拟器</span>
                       )}
                     </div>
+                    {/* 如果有备注名，显示原设备名 */}
+                    {deviceNicknames[device.deviceId] && (
+                      <div className={clsx(
+                        "text-2xs truncate",
+                        isSelected ? "text-accent-blue/70" : "text-text-muted/70"
+                      )}>
+                        {device.deviceName}
+                      </div>
+                    )}
                     <div className={clsx(
                       "text-2xs truncate",
                       isSelected ? "text-accent-blue/70" : "text-text-muted"
@@ -491,62 +760,153 @@ export function Sidebar() {
                 <div className="border-t border-border-subtle my-1" />
               )}
 
-              {filteredDomainStats.map(({ domain, count }) => {
+              {filteredDomainTree.map(({ domain, count, pathTree }) => {
                 const rule = getDomainRule(domain)
-                const isWhitelist = rule?.action === 'highlight'
-                const isBlacklist = rule?.action === 'hide'
+                const isHighlightRule = rule?.action === 'highlight'
+                const isMarkRule = rule?.action === 'mark'
+                const isHideRule = rule?.action === 'hide'
                 const isSelected = isDomainSelected(domain)
                 const isHighlighted = highlightedDomains.has(domain)
+                const domainKey = domain
+                const isExpanded = isNodeExpanded(domainKey)
+
+                // 递归渲染路径树
+                // 固定缩进值
+                const INDENT_SIZE = 16 // 每级固定缩进 16px
+
+                const renderPathTree = (nodes: PathNode[], depth: number = 0) => {
+                  return nodes.map(node => {
+                    const nodeKey = `${domain}:${node.fullPath}`
+                    const nodeExpanded = isNodeExpanded(nodeKey)
+                    const hasChildren = node.children.length > 0
+                    const isPathSel = isPathSelected(domain, node.fullPath)
+
+                    return (
+                      <div key={node.fullPath}>
+                        <div
+                          onClick={(e) => handlePathClick(domain, node.fullPath, e)}
+                          className={clsx(
+                            "flex items-center justify-between py-1.5 cursor-pointer text-xs transition-colors group",
+                            isPathSel
+                              ? "bg-accent-blue/20 text-accent-blue font-medium"
+                              : "text-text-muted hover:bg-bg-light hover:text-text-secondary"
+                          )}
+                          style={{ paddingLeft: `${INDENT_SIZE + 4}px`, paddingRight: '12px' }}
+                        >
+                          <div className="flex items-center gap-1 min-w-0">
+                            {/* 展开/收起按钮 */}
+                            {hasChildren ? (
+                              <button
+                                onClick={(e) => toggleNodeExpand(nodeKey, e)}
+                                className={clsx(
+                                  "w-4 h-4 flex items-center justify-center flex-shrink-0 transition-transform hover:bg-bg-medium rounded",
+                                  nodeExpanded && "rotate-90"
+                                )}
+                              >
+                                <ChevronRightIcon
+                                  size={12}
+                                  className={nodeExpanded ? "text-primary" : "text-text-muted"}
+                                />
+                              </button>
+                            ) : (
+                              <span className="w-4 h-4 flex-shrink-0" />
+                            )}
+                            <span className="truncate font-mono text-2xs">/{node.segment}</span>
+                          </div>
+                          <span className={clsx(
+                            "font-mono text-2xs px-1 py-0.5 rounded ml-2 flex-shrink-0",
+                            isPathSel
+                              ? "bg-accent-blue/30"
+                              : "opacity-60 bg-bg-medium"
+                          )}>{node.count}</span>
+                        </div>
+                        {/* 递归渲染子节点 - 固定缩进 */}
+                        {nodeExpanded && hasChildren && (
+                          <div className="border-l border-border-subtle" style={{ marginLeft: `${INDENT_SIZE}px` }}>
+                            {renderPathTree(node.children, depth + 1)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                }
 
                 return (
-                  <div
-                    key={domain}
-                    onClick={() => handleDomainClick(domain)}
-                    className={clsx(
-                      "flex items-center justify-between px-3 py-2 rounded cursor-pointer text-xs transition-colors group",
-                      isSelected
-                        ? "bg-accent-blue text-white font-medium"
-                        : "text-text-secondary hover:bg-bg-light",
-                      isHighlighted && "animate-domain-highlight"
-                    )}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {/* Checkbox indicator for multi-select (HTTP only) */}
-                      {!isWebSocketPlugin && (
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={isSelected}
-                            onChange={() => handleDomainClick(domain)}
-                          />
-                        </div>
+                  <div key={domain}>
+                    {/* 域名行 */}
+                    <div
+                      onClick={() => handleDomainClick(domain)}
+                      className={clsx(
+                        "flex items-center justify-between px-3 py-2 rounded cursor-pointer text-xs transition-colors group",
+                        isSelected
+                          ? "bg-accent-blue text-white font-medium"
+                          : "text-text-secondary hover:bg-bg-light",
+                        isHighlighted && "animate-domain-highlight"
                       )}
-                      {isWhitelist && <HighlighterIcon size={12} />}
-                      {isBlacklist && <ClearIcon size={12} className="text-red-400" />}
-                      <span className={clsx(
-                        "truncate font-mono",
-                        isBlacklist && "opacity-50 line-through"
-                      )}>
-                        {domain}
-                      </span>
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {/* 展开/收起按钮 - 始终显示 */}
+                        <button
+                          onClick={(e) => toggleNodeExpand(domainKey, e)}
+                          className={clsx(
+                            "w-5 h-5 flex items-center justify-center flex-shrink-0 transition-transform hover:bg-bg-medium rounded",
+                            isExpanded && "rotate-90"
+                          )}
+                          title={isExpanded ? "收起路径列表" : "展开路径列表"}
+                        >
+                          <ChevronRightIcon
+                            size={14}
+                            className={clsx(
+                              isSelected ? "text-white" : isExpanded ? "text-primary" : "text-text-primary"
+                            )}
+                          />
+                        </button>
+                        <span className={clsx(
+                          "truncate font-mono",
+                          isHideRule && "opacity-50 line-through"
+                        )}>
+                          {domain}
+                        </span>
+                        {/* 流量规则图标 - 域名后面 */}
+                        {(isHighlightRule || isMarkRule || isHideRule) && (
+                          <span className="flex-shrink-0">
+                            {isHighlightRule && <HighlightIcon size={12} filled className="text-yellow-500" />}
+                            {isMarkRule && <TagIcon size={12} className="text-blue-400" />}
+                            {isHideRule && <ClearIcon size={12} className="text-red-400" />}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={clsx(
+                          "font-mono text-2xs px-1.5 py-0.5 rounded",
+                          isHighlighted
+                            ? "text-primary font-bold bg-primary/10"
+                            : isSelected
+                              ? "text-white bg-white/20"
+                              : "opacity-60 bg-bg-medium"
+                        )}>{count}</span>
+
+                        {/* Quick Action on Hover - 设置流量规则 */}
+                        <button
+                          onClick={(e) => cycleDomainRule(e, domain)}
+                          className={clsx(
+                            "opacity-0 group-hover:opacity-100 p-1.5 hover:bg-bg-medium rounded transition-colors",
+                            isSelected && "hover:bg-white/20"
+                          )}
+                          title="设置流量规则 (无 → 高亮 → 标记 → 隐藏)"
+                        >
+                          <ColorfulTrafficLightIcon size={14} />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className={clsx(
-                        "font-mono text-2xs px-1.5 py-0.5 rounded",
-                        isHighlighted
-                          ? "text-primary font-bold bg-primary/10"
-                          : "opacity-60 bg-bg-medium"
-                      )}>{count}</span>
-
-                      {/* Quick Action on Hover - 设置流量规则 */}
-                      <button
-                        onClick={(e) => cycleDomainRule(e, domain)}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-bg-medium rounded transition-colors"
-                        title="设置流量规则 (无 → 高亮 → 隐藏)"
-                      >
-                        <ColorfulTrafficLightIcon size={14} />
-                      </button>
-                    </div>
+                    {/* Path 树 - 展开时显示 */}
+                    {isExpanded && pathTree.length > 0 && (
+                      <div className="ml-7 border-l border-border-subtle">
+                        {renderPathTree(pathTree)}
+                      </div>
+                    )}
                   </div>
                 )
               })}

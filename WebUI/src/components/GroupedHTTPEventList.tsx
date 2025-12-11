@@ -400,7 +400,8 @@ export function GroupedHTTPEventList({
         const matchedRule = matchEventRule(event, applicableRules)
         const isHighlighted = matchedRule?.action === 'highlight'
         const isMarked = matchedRule?.action === 'mark'
-        const ruleColor = matchedRule?.color
+        // 标记规则默认使用蓝色（与规则列表的 badge-info 一致）
+        const ruleColor = matchedRule?.color || (isMarked ? '#60a5fa' : undefined)
 
         return (
             <div
@@ -426,7 +427,7 @@ export function GroupedHTTPEventList({
                 {/* 标记图标区域 - 始终保留宽度以确保列对齐 */}
                 <div className="w-6 flex-shrink-0 flex items-center justify-center">
                     {isHighlighted && <HighlightIcon size={12} filled className="text-yellow-500" />}
-                    {isMarked && !isHighlighted && <TagIcon size={12} style={{ color: ruleColor || 'currentColor' }} />}
+                    {isMarked && !isHighlighted && <TagIcon size={12} style={{ color: ruleColor }} />}
                 </div>
 
                 {/* Checkbox */}

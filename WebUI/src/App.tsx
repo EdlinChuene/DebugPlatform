@@ -10,7 +10,8 @@ import { ToastContainer } from '@/components/ToastContainer'
 import { BreakpointHitNotification } from '@/components/BreakpointHitNotification'
 import { RefreshIndicator } from '@/components/RefreshIndicator'
 import { useThemeStore } from '@/stores/themeStore'
-import { startHealthCheck, stopHealthCheck } from '@/stores/connectionStore'
+import { startHealthCheck, stopHealthCheck, setOnServerOfflineCallback } from '@/stores/connectionStore'
+import { useDeviceStore } from '@/stores/deviceStore'
 import { registerBuiltinPlugins } from '@/plugins/builtin'
 
 // 不显示侧边栏的路由
@@ -61,6 +62,10 @@ export function App() {
 
   // 启动服务健康检查
   useEffect(() => {
+    // 设置服务离线时的回调：将所有设备标记为离线
+    setOnServerOfflineCallback(() => {
+      useDeviceStore.getState().setAllDevicesOffline()
+    })
     startHealthCheck()
     return () => stopHealthCheck()
   }, [])

@@ -273,13 +273,17 @@ export const useWSStore = create<WSStore>((set, get) => ({
   },
 
   addRealtimeFrame: (frame: WSFrame & { sessionId?: string }) => {
-    const { selectedSessionId } = get()
+    const { selectedSessionId, frames } = get()
     // 只有当前选中的会话的帧才添加到列表
     if (frame.sessionId === selectedSessionId) {
-      set((state) => ({
-        frames: [...state.frames, frame],
-        totalFrames: state.totalFrames + 1,
-      }))
+      // 去重：检查是否已存在相同 id 的帧
+      const exists = frames.some((f) => f.id === frame.id)
+      if (!exists) {
+        set((state) => ({
+          frames: [...state.frames, frame],
+          totalFrames: state.totalFrames + 1,
+        }))
+      }
     }
   },
 

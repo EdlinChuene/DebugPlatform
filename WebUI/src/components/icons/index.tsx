@@ -227,7 +227,7 @@ export const DatabaseIcon: React.FC<IconProps> = ({
 
 // ========== 设备图标 ==========
 
-/** iPhone 图标 */
+/** iPhone 真机图标 - 精细外观设计 */
 export const IPhoneIcon: React.FC<IconProps> = ({
     size = defaultProps.size,
     className,
@@ -241,11 +241,46 @@ export const IPhoneIcon: React.FC<IconProps> = ({
         className={className}
         xmlns="http://www.w3.org/2000/svg"
     >
-        <rect x="5" y="2" width="14" height="20" rx="3" stroke="currentColor" strokeWidth={strokeWidth} />
-        <path d="M9 2h6" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
-        <path d="M10 19h4" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+        {/* 主机身 - 圆角矩形 */}
+        <rect x="6" y="2" width="12" height="20" rx="2.5" stroke="currentColor" strokeWidth={strokeWidth} />
+        {/* 顶部听筒区域 */}
+        <path d="M10 4h4" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+        {/* 底部 Home 指示条 */}
+        <path d="M9.5 19h5" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+        {/* 侧边按钮 */}
+        <path d="M18 8v3" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
     </svg>
 )
+
+/** Android 手机真机图标 */
+export const AndroidPhoneIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => {
+    const sw = strokeWidth ?? 1.5
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            fill="none"
+            className={className}
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            {/* 主机身 - 更方正的设计 */}
+            <rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" strokeWidth={sw} />
+            {/* 顶部摄像头（居中圆孔） */}
+            <circle cx="12" cy="4.5" r="1" stroke="currentColor" strokeWidth={sw} />
+            {/* 底部虚拟按键区 */}
+            <path d="M8 19h8" stroke="currentColor" strokeWidth={sw * 0.8} strokeLinecap="round" opacity="0.5" />
+            {/* 三个虚拟按键指示 */}
+            <circle cx="9" cy="19" r="0.5" fill="currentColor" />
+            <circle cx="12" cy="19" r="0.5" fill="currentColor" />
+            <circle cx="15" cy="19" r="0.5" fill="currentColor" />
+        </svg>
+    )
+}
 
 /** iPad 图标 */
 export const IPadIcon: React.FC<IconProps> = ({
@@ -323,25 +358,73 @@ export const TVIcon: React.FC<IconProps> = ({
     </svg>
 )
 
-/** 模拟器图标 */
+/** iOS 模拟器图标 - Mac 显示 iPhone */
 export const SimulatorIcon: React.FC<IconProps> = ({
     size = defaultProps.size,
     className,
     strokeWidth = defaultProps.strokeWidth
-}) => (
-    <svg
-        width={size}
-        height={size}
-        viewBox="0 0 24 24"
-        fill="none"
-        className={className}
-        xmlns="http://www.w3.org/2000/svg"
-    >
-        <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth={strokeWidth} />
-        <path d="M8 21h8M12 17v4" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
-        <rect x="9" y="5" width="6" height="10" rx="1" stroke="currentColor" strokeWidth={strokeWidth} />
-    </svg>
-)
+}) => {
+    const sw = strokeWidth ?? 1.5
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            fill="none"
+            className={className}
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            {/* Mac 显示器外框 */}
+            <rect x="2" y="2" width="20" height="14" rx="1.5" stroke="currentColor" strokeWidth={sw} />
+            {/* Mac 显示器底边框 */}
+            <path d="M2 13h20" stroke="currentColor" strokeWidth={sw * 0.6} opacity="0.3" />
+            {/* Mac 支架 */}
+            <path d="M8 20h8" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" />
+            <path d="M12 16v4" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" />
+            {/* 屏幕内的 iPhone 轮廓 */}
+            <rect x="9" y="4" width="6" height="9" rx="1" stroke="currentColor" strokeWidth={sw * 0.8} />
+            {/* iPhone 顶部听筒 */}
+            <path d="M10.5 5.5h3" stroke="currentColor" strokeWidth={sw * 0.6} strokeLinecap="round" />
+            {/* iPhone Home 指示条 */}
+            <path d="M10.5 11h3" stroke="currentColor" strokeWidth={sw * 0.6} strokeLinecap="round" />
+        </svg>
+    )
+}
+
+/** Android 模拟器图标 - Mac 显示 Android 手机 */
+export const AndroidSimulatorIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => {
+    const sw = strokeWidth ?? 1.5
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            fill="none"
+            className={className}
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            {/* Mac 显示器外框 */}
+            <rect x="2" y="2" width="20" height="14" rx="1.5" stroke="currentColor" strokeWidth={sw} />
+            {/* Mac 显示器底边框 */}
+            <path d="M2 13h20" stroke="currentColor" strokeWidth={sw * 0.6} opacity="0.3" />
+            {/* Mac 支架 */}
+            <path d="M8 20h8" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" />
+            <path d="M12 16v4" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" />
+            {/* 屏幕内的 Android 手机轮廓 */}
+            <rect x="9" y="4" width="6" height="9" rx="0.5" stroke="currentColor" strokeWidth={sw * 0.8} />
+            {/* Android 顶部摄像头圆点 */}
+            <circle cx="12" cy="5.2" r="0.6" fill="currentColor" />
+            {/* Android 三键指示 */}
+            <circle cx="10.5" cy="11.5" r="0.4" fill="currentColor" />
+            <circle cx="12" cy="11.5" r="0.4" fill="currentColor" />
+            <circle cx="13.5" cy="11.5" r="0.4" fill="currentColor" />
+        </svg>
+    )
+}
 
 // ========== 操作图标 ==========
 
