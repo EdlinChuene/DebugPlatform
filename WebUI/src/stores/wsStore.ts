@@ -36,7 +36,7 @@ interface WSStore {
   // Actions
   fetchSessions: (deviceId: string) => Promise<void>
   selectSession: (deviceId: string, sessionId: string) => Promise<void>
-  fetchFrames: (deviceId: string, sessionId: string) => Promise<void>
+  fetchFrames: (deviceId: string, sessionId: string, direction?: string) => Promise<void>
   setFilter: <K extends keyof WSSessionFilters>(key: K, value: WSSessionFilters[K]) => void
   setFrameDirection: (direction: string) => void
   loadMoreFrames: (deviceId: string, sessionId: string) => Promise<void>
@@ -136,13 +136,19 @@ export const useWSStore = create<WSStore>((set, get) => ({
     }
   },
 
-  fetchFrames: async (deviceId: string, sessionId: string) => {
+  fetchFrames: async (deviceId: string, sessionId: string, direction?: string) => {
+    // 如果传入了 direction 参数，先更新状态
+    if (direction !== undefined) {
+      set({ frameDirection: direction })
+    }
     set({ framesLoading: true, framesError: null, framePage: 1 })
     try {
+      // 使用传入的 direction 或当前状态的 frameDirection
+      const currentDirection = direction !== undefined ? direction : get().frameDirection
       const response = await getWSFrames(deviceId, sessionId, {
         page: 1,
         pageSize: get().framePageSize,
-        direction: get().frameDirection || undefined,
+        direction: currentDirection || undefined,
       })
       set({
         frames: response.items,

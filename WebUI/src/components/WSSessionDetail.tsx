@@ -172,7 +172,7 @@ function FramesTab({
   return (
     <div className="flex flex-col h-full">
       {/* 工具栏 */}
-      <div className="px-4 py-2 border-b border-border/50 flex items-center justify-between gap-3 bg-bg-dark/30">
+      <div className="px-4 py-2 border-b-2 border-border flex items-center justify-between gap-3 bg-bg-dark/30">
         <div className="flex items-center gap-3">
           {/* 方向筛选 */}
           <div className="flex items-center gap-1 bg-bg-light/50 rounded-lg p-1">

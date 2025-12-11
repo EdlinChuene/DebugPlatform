@@ -3,18 +3,35 @@ import { useDeviceStore } from '@/stores/deviceStore'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { DeviceCard } from '@/components/DeviceCard'
 import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
-import { IPhoneIcon, ClearIcon, OnlineIcon, PackageIcon, UnhealthyXIcon } from '@/components/icons'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { IPhoneIcon, ClearIcon, OnlineIcon, PackageIcon, UnhealthyXIcon, CheckIcon } from '@/components/icons'
 import clsx from 'clsx'
 
 type FilterType = 'all' | 'online' | 'offline'
 
 export function DeviceListPage() {
-  const { devices, isLoading, fetchDevices, removeAllOfflineDevices } = useDeviceStore()
+  const {
+    devices,
+    isLoading,
+    fetchDevices,
+    isSelectMode,
+    selectedIds,
+    toggleSelectMode,
+    toggleSelectId,
+    selectAllOffline,
+    batchRemoveSelected,
+  } = useDeviceStore()
   const { isServerOnline } = useConnectionStore()
   const [filter, setFilter] = useState<FilterType>('all')
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
+  const [isRemoving, setIsRemoving] = useState(false)
 
   const onlineCount = devices.filter(d => d.isOnline).length
   const offlineCount = devices.filter(d => !d.isOnline).length
+
+  // 计算是否全选了所有离线设备
+  const offlineDeviceIds = devices.filter(d => !d.isOnline).map(d => d.deviceId)
+  const isAllOfflineSelected = offlineDeviceIds.length > 0 && offlineDeviceIds.every(id => selectedIds.has(id))
 
   const filteredDevices = useMemo(() => {
     switch (filter) {
@@ -35,9 +52,15 @@ export function DeviceListPage() {
     return () => clearInterval(interval)
   }, [fetchDevices])
 
-  const handleRemoveAllOffline = async () => {
-    if (confirm(`确定要移除所有 ${offlineCount} 个离线设备吗？`)) {
-      await removeAllOfflineDevices()
+  const handleBatchRemove = async () => {
+    setIsRemoving(true)
+    try {
+      await batchRemoveSelected()
+      setShowRemoveConfirm(false)
+    } catch {
+      // 错误已在 store 中处理
+    } finally {
+      setIsRemoving(false)
     }
   }
 
@@ -92,22 +115,62 @@ export function DeviceListPage() {
               </button>
             </div>
 
-            {offlineCount > 0 && (
-              <button
-                onClick={handleRemoveAllOffline}
-                className="btn btn-secondary text-red-400 hover:text-red-300 flex items-center gap-2"
-              >
-                <ClearIcon size={16} />
-                <span>移除离线</span>
-              </button>
+            {/* 批量选择相关按钮 */}
+            {isSelectMode ? (
+              <>
+                {/* 全选按钮 */}
+                <button
+                  onClick={selectAllOffline}
+                  disabled={offlineCount === 0}
+                  className={clsx(
+                    'btn btn-secondary flex items-center gap-2',
+                    offlineCount === 0 && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  <CheckIcon size={16} />
+                  <span>{isAllOfflineSelected ? '取消全选' : '全选离线'}</span>
+                </button>
+                {/* 移除选中按钮 */}
+                <button
+                  onClick={() => setShowRemoveConfirm(true)}
+                  disabled={selectedIds.size === 0}
+                  className={clsx(
+                    'btn btn-secondary text-red-400 hover:text-red-300 flex items-center gap-2',
+                    selectedIds.size === 0 && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  <ClearIcon size={16} />
+                  <span>移除选中 ({selectedIds.size})</span>
+                </button>
+                {/* 取消选择 */}
+                <button
+                  onClick={toggleSelectMode}
+                  className="btn btn-secondary"
+                >
+                  取消
+                </button>
+              </>
+            ) : (
+              <>
+                {/* 批量选择按钮 */}
+                {offlineCount > 0 && (
+                  <button
+                    onClick={toggleSelectMode}
+                    className="btn btn-secondary flex items-center gap-2"
+                  >
+                    <CheckIcon size={16} />
+                    <span>批量选择</span>
+                  </button>
+                )}
+                <button
+                  onClick={fetchDevices}
+                  disabled={isLoading}
+                  className="btn btn-primary disabled:opacity-50"
+                >
+                  刷新
+                </button>
+              </>
             )}
-            <button
-              onClick={fetchDevices}
-              disabled={isLoading}
-              className="btn btn-primary disabled:opacity-50"
-            >
-              刷新
-            </button>
           </div>
         </div>
       </header>
@@ -129,6 +192,9 @@ export function DeviceListPage() {
                 key={device.deviceId}
                 device={device}
                 style={{ animationDelay: `${index * 50}ms` }}
+                isSelectMode={isSelectMode}
+                isSelected={selectedIds.has(device.deviceId)}
+                onToggleSelect={() => toggleSelectId(device.deviceId)}
               />
             ))}
           </div>
@@ -136,6 +202,19 @@ export function DeviceListPage() {
           <EmptyState isLoading={isLoading} filter={filter} totalCount={devices.length} />
         )}
       </div>
+
+      {/* 批量移除确认对话框 */}
+      <ConfirmDialog
+        isOpen={showRemoveConfirm}
+        onClose={() => setShowRemoveConfirm(false)}
+        onConfirm={handleBatchRemove}
+        title="移除设备"
+        message={`确定要移除选中的 ${selectedIds.size} 个离线设备吗？\n\n此操作将从列表中移除这些设备，但不会删除它们的历史数据。`}
+        confirmText="确认移除"
+        cancelText="取消"
+        type="danger"
+        loading={isRemoving}
+      />
     </div>
   )
 }
@@ -176,7 +255,7 @@ function EmptyState({ isLoading, filter, totalCount }: { isLoading: boolean; fil
               暂无在线设备
             </h2>
             <p className="text-sm text-text-muted mb-6">
-              请确保 iOS App 已集成 DebugProbe 并连接到 Debug Hub
+              请确保 App 已集成 DebugProbe 并连接到 Debug Platform
             </p>
             <div className="text-left bg-bg-medium rounded-xl p-4 text-xs font-mono text-text-secondary overflow-x-auto">
               <p className="text-text-muted mb-2">// 在 AppDelegate 中初始化</p>
@@ -215,7 +294,7 @@ function ServerOfflineState({ onRetry, isLoading }: { onRetry: () => void; isLoa
             服务未启动
           </h1>
           <p className="text-text-secondary mb-10">
-            无法连接到 Debug Hub 服务
+            无法连接到 Debug Platform 服务
           </p>
 
           {/* Info Grid */}
@@ -235,7 +314,7 @@ function ServerOfflineState({ onRetry, isLoading }: { onRetry: () => void; isLoa
                 <span className="text-xs text-text-muted uppercase tracking-wider">服务</span>
               </div>
               <div className="text-xl font-semibold text-primary">
-                Debug Hub
+                Debug Platform
               </div>
             </div>
           </div>
@@ -244,7 +323,7 @@ function ServerOfflineState({ onRetry, isLoading }: { onRetry: () => void; isLoa
           <div className="text-xs text-text-muted mb-8 p-3 bg-bg-medium/50 rounded-xl">
             <span className="opacity-70">提示:</span>
             <span className="ml-2 text-text-secondary">
-              请确保 Debug Hub 服务已启动并运行在正确的端口上
+              请确保 Debug Platform 服务已启动并运行在正确的端口上
             </span>
           </div>
 

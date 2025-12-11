@@ -20,6 +20,7 @@ import { LogFilters } from '@/components/LogFilters'
 import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
 import { Toggle } from '@/components/Toggle'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { deleteAllLogs } from '@/services/api'
 import clsx from 'clsx'
 
 // 插件实现类
@@ -113,10 +114,11 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
     const toast = useToastStore()
 
     // 确认对话框状态
-    const [showClearConfirm, setShowClearConfirm] = useState(false)
+    const [showClearAllConfirm, setShowClearAllConfirm] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [showFilters, setShowFilters] = useState(false)
     const [scrollControls, setScrollControls] = useState<LogScrollControls | null>(null)
+    const [isClearingAll, setIsClearingAll] = useState(false)
 
     // 初始加载
     useEffect(() => {
@@ -132,11 +134,21 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
         fetchEvents(deviceId)
     }, [deviceId, fetchEvents])
 
-    // 清空
-    const handleClear = useCallback(() => {
-        clearEvents()
-        toast.show('success', '已清空日志')
-    }, [clearEvents, toast])
+    // 清除全部日志
+    const handleClearAll = useCallback(async () => {
+        if (!deviceId) return
+        setIsClearingAll(true)
+        try {
+            const result = await deleteAllLogs(deviceId)
+            clearEvents()
+            toast.show('success', `已清除 ${result.deleted} 条日志`)
+            setShowClearAllConfirm(false)
+        } catch (error) {
+            toast.show('error', '清除失败')
+        } finally {
+            setIsClearingAll(false)
+        }
+    }, [deviceId, clearEvents, toast])
 
     // 批量删除
     const handleBatchDelete = useCallback(async () => {
@@ -237,14 +249,14 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-text-secondary">
-                    {/* 清屏按钮 */}
+                    {/* 清除全部日志按钮 */}
                     <button
-                        onClick={handleClear}
+                        onClick={() => setShowClearAllConfirm(true)}
                         className="btn text-xs px-2 py-1.5 flex-shrink-0 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
-                        title="清空当前列表"
-                        disabled={filteredEvents.length === 0}
+                        title="清除全部日志（从数据库删除）"
+                        disabled={filteredEvents.length === 0 || isClearingAll}
                     >
-                        清屏
+                        清除全部
                     </button>
 
                     <div className="h-5 w-px bg-border flex-shrink-0" />
@@ -280,20 +292,22 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
 
             {/* 过滤器面板 */}
             {showFilters && (
-                <LogFilters
-                    minLevel={filters.minLevel}
-                    subsystems={subsystems}
-                    categories={categories}
-                    selectedSubsystem={filters.subsystem}
-                    selectedCategory={filters.category}
-                    searchText={filters.text}
-                    searchQuery={filters.searchQuery}
-                    onMinLevelChange={setMinLevel}
-                    onSubsystemChange={(value) => setFilter('subsystem', value)}
-                    onCategoryChange={(value) => setFilter('category', value)}
-                    onSearchChange={(value) => setFilter('text', value)}
-                    onSearchQueryChange={setSearchQuery}
-                />
+                <div className="flex-shrink-0 px-3 py-2 border-b border-border bg-bg-medium">
+                    <LogFilters
+                        minLevel={filters.minLevel}
+                        subsystems={subsystems}
+                        categories={categories}
+                        selectedSubsystem={filters.subsystem}
+                        selectedCategory={filters.category}
+                        searchText={filters.text}
+                        searchQuery={filters.searchQuery}
+                        onMinLevelChange={setMinLevel}
+                        onSubsystemChange={(value) => setFilter('subsystem', value)}
+                        onCategoryChange={(value) => setFilter('category', value)}
+                        onSearchChange={(value) => setFilter('text', value)}
+                        onSearchQueryChange={setSearchQuery}
+                    />
+                </div>
             )}
 
             {/* 日志列表 */}
@@ -348,15 +362,17 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
                 )}
             </div>
 
-            {/* 清空确认对话框 */}
+            {/* 清除全部确认对话框 */}
             <ConfirmDialog
-                isOpen={showClearConfirm}
-                onClose={() => setShowClearConfirm(false)}
-                onConfirm={handleClear}
-                title="清空日志"
-                message="确定要清空所有日志吗？此操作无法撤销。"
-                confirmText="清空"
+                isOpen={showClearAllConfirm}
+                onClose={() => setShowClearAllConfirm(false)}
+                onConfirm={handleClearAll}
+                title="清除全部日志"
+                message={`确定要清除该设备的全部日志记录吗？\n\n此操作将从数据库永久删除所有日志数据，且不可恢复。`}
+                confirmText="确认清除"
+                cancelText="取消"
                 type="danger"
+                loading={isClearingAll}
             />
 
             {/* 删除确认对话框 */}
@@ -364,9 +380,10 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
                 isOpen={showDeleteConfirm}
                 onClose={() => setShowDeleteConfirm(false)}
                 onConfirm={handleBatchDelete}
-                title="删除选中日志"
-                message={`确定要删除选中的 ${selectedIds.size} 条日志吗？此操作无法撤销。`}
-                confirmText="删除"
+                title="删除日志"
+                message={`确定要删除选中的 ${selectedIds.size} 条日志吗？\n\n此操作不可恢复。`}
+                confirmText="确认删除"
+                cancelText="取消"
                 type="danger"
             />
         </div>

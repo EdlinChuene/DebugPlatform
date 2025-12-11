@@ -280,7 +280,7 @@ export function VirtualHTTPEventTable({
                 style={rowStyle}
                 onClick={(e) => handleRowClick(event, e)}
                 className={clsx(
-                    'flex items-center cursor-pointer transition-all duration-150 group border-b border-border-light h-full',
+                    'flex items-center cursor-pointer transition-all duration-150 group border-b border-border h-full',
                     // 选中状态 - 底色块样式，使用主题绿色
                     isSelected && 'bg-selected',
                     // 批量选中（非选中状态）

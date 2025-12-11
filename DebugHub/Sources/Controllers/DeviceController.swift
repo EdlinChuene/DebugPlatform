@@ -15,7 +15,6 @@ struct DeviceController: RouteCollection {
         devices.get(use: listDevices)
         devices.get(":deviceId", use: getDevice)
         devices.get(":deviceId", "sessions", use: getSessionHistory)
-        devices.post(":deviceId", "control", "toggle-capture", use: toggleCapture)
         devices.post(":deviceId", "control", "update-mock-rules", use: updateMockRules)
         devices.delete(":deviceId", "data", use: clearDeviceData)
         devices.delete(":deviceId", use: removeDevice)
@@ -134,27 +133,6 @@ struct DeviceController: RouteCollection {
         )
     }
 
-    // MARK: - 开关捕获
-
-    func toggleCapture(req: Request) async throws -> HTTPStatus {
-        guard let deviceId = req.parameters.get("deviceId") else {
-            throw Abort(.badRequest, reason: "Missing deviceId")
-        }
-
-        let payload = try req.content.decode(ToggleCaptureRequest.self)
-
-        let message = BridgeMessageDTO.toggleCapture(
-            network: payload.network,
-            log: payload.log,
-            websocket: payload.websocket,
-            database: payload.database
-        )
-
-        DeviceRegistry.shared.sendMessage(to: deviceId, message: message)
-
-        return .ok
-    }
-
     // MARK: - 更新 Mock 规则
 
     func updateMockRules(req: Request) async throws -> HTTPStatus {
@@ -236,13 +214,6 @@ struct DeviceStatsDTO: Content {
     let httpEventCount: Int
     let logEventCount: Int
     let wsSessionCount: Int
-}
-
-struct ToggleCaptureRequest: Content {
-    let network: Bool
-    let log: Bool
-    let websocket: Bool
-    let database: Bool
 }
 
 struct DeviceSessionDTO: Content {

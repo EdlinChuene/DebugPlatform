@@ -136,7 +136,7 @@ export function PluginRenderer({ deviceId, activePluginId, className }: PluginRe
             return undefined
         }
         return PluginRegistry.get(activePluginId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activePluginId, updateTrigger])
 
     // 初始化插件

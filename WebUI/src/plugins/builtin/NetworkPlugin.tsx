@@ -24,7 +24,7 @@ import { FilterPopover } from '@/components/FilterPopover'
 import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
 import { MockRuleEditor } from '@/components/MockRuleEditor'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { getExportHTTPUrl, getExportHARUrl } from '@/services/api'
+import { getExportHTTPUrl, getExportHARUrl, deleteAllHTTPEvents } from '@/services/api'
 import { Checkbox } from '@/components/Checkbox'
 import { Toggle } from '@/components/Toggle'
 import clsx from 'clsx'
@@ -95,6 +95,8 @@ function NetworkPluginView({ context, isActive }: PluginRenderProps) {
 
     // UI 状态
     const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
+    const [showClearAllConfirm, setShowClearAllConfirm] = useState(false)
+    const [isClearingAll, setIsClearingAll] = useState(false)
     const [showMoreMenu, setShowMoreMenu] = useState(false)
 
     // 计算过滤后的事件列表
@@ -154,6 +156,22 @@ function NetworkPluginView({ context, isActive }: PluginRenderProps) {
         }
     }, [deviceId])
 
+    // 清除全部请求
+    const handleClearAll = useCallback(async () => {
+        if (!deviceId) return
+        setIsClearingAll(true)
+        try {
+            const result = await deleteAllHTTPEvents(deviceId)
+            httpStore.clearEvents()
+            toast.show('success', `已清除 ${result.deleted} 个请求`)
+            setShowClearAllConfirm(false)
+        } catch {
+            toast.show('error', '清除失败')
+        } finally {
+            setIsClearingAll(false)
+        }
+    }, [deviceId, toast])
+
     if (!isActive) {
         return null
     }
@@ -172,6 +190,10 @@ function NetworkPluginView({ context, isActive }: PluginRenderProps) {
             allSelected={allSelected}
             showBatchDeleteConfirm={showBatchDeleteConfirm}
             setShowBatchDeleteConfirm={setShowBatchDeleteConfirm}
+            showClearAllConfirm={showClearAllConfirm}
+            setShowClearAllConfirm={setShowClearAllConfirm}
+            isClearingAll={isClearingAll}
+            handleClearAll={handleClearAll}
             showMoreMenu={showMoreMenu}
             setShowMoreMenu={setShowMoreMenu}
             handleExportSelected={handleExportSelected}
@@ -194,6 +216,10 @@ function HTTPRequestsContent({
     allSelected,
     showBatchDeleteConfirm,
     setShowBatchDeleteConfirm,
+    showClearAllConfirm,
+    setShowClearAllConfirm,
+    isClearingAll,
+    handleClearAll,
     showMoreMenu,
     setShowMoreMenu,
     handleExportSelected,
@@ -211,6 +237,10 @@ function HTTPRequestsContent({
     allSelected: boolean
     showBatchDeleteConfirm: boolean
     setShowBatchDeleteConfirm: (show: boolean) => void
+    showClearAllConfirm: boolean
+    setShowClearAllConfirm: (show: boolean) => void
+    isClearingAll: boolean
+    handleClearAll: () => Promise<void>
     showMoreMenu: boolean
     setShowMoreMenu: (show: boolean) => void
     handleExportSelected: () => void
@@ -309,14 +339,15 @@ function HTTPRequestsContent({
                     {/* 弹性空间 */}
                     <div className="flex-1 min-w-4" />
 
-                    {/* 右侧：清屏 - 自动滚动 - 更多 - 连接状态 - 请求总条数 */}
-                    {/* 清屏按钮 */}
+                    {/* 右侧：清除全部 - 自动滚动 - 更多 - 连接状态 - 请求总条数 */}
+                    {/* 清除全部请求按钮 */}
                     <button
-                        onClick={() => httpStore.clearEvents()}
+                        onClick={() => setShowClearAllConfirm(true)}
                         className="btn text-xs px-2 py-1.5 flex-shrink-0 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
-                        title="清空当前列表"
+                        title="清除全部请求（从数据库删除）"
+                        disabled={filteredEvents.length === 0 || isClearingAll}
                     >
-                        清屏
+                        清除全部
                     </button>
 
                     <div className="h-5 w-px bg-border flex-shrink-0" />
@@ -604,6 +635,19 @@ function HTTPRequestsContent({
                 confirmText="确认删除"
                 cancelText="取消"
                 type="danger"
+            />
+
+            {/* Clear All Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showClearAllConfirm}
+                onClose={() => setShowClearAllConfirm(false)}
+                onConfirm={handleClearAll}
+                title="清除全部请求"
+                message={`确定要清除该设备的全部 HTTP 请求记录吗？\n\n此操作将从数据库永久删除所有请求数据，且不可恢复。`}
+                confirmText="确认清除"
+                cancelText="取消"
+                type="danger"
+                loading={isClearingAll}
             />
 
             {/* Mock Rule Editor Modal - 用于在请求列表中直接编辑 Mock 规则 */}

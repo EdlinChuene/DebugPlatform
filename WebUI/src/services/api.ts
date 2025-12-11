@@ -62,20 +62,6 @@ export async function getDevice(deviceId: string): Promise<DeviceDetail> {
   return fetchJSON(`${API_BASE}/devices/${deviceId}`)
 }
 
-export async function toggleCapture(
-  deviceId: string,
-  network: boolean,
-  log: boolean,
-  websocket: boolean,
-  database: boolean
-): Promise<void> {
-  await fetch(`${API_BASE}/devices/${deviceId}/control/toggle-capture`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ network, log, websocket, database }),
-  })
-}
-
 export async function clearDeviceData(deviceId: string): Promise<void> {
   await fetch(`${API_BASE}/devices/${deviceId}/data`, { method: 'DELETE' })
 }
@@ -201,6 +187,15 @@ export async function batchFavoriteHTTPEvents(
   })
 }
 
+// 删除设备全部 HTTP 请求
+export async function deleteAllHTTPEvents(
+  deviceId: string
+): Promise<{ deleted: number }> {
+  return fetchJSON(`${API_BASE}/devices/${deviceId}/http`, {
+    method: 'DELETE',
+  })
+}
+
 // ============================================================================
 // 数据清理配置 API
 // ============================================================================
@@ -300,6 +295,15 @@ export async function batchDeleteLogs(
   })
 }
 
+// 删除设备全部日志
+export async function deleteAllLogs(
+  deviceId: string
+): Promise<{ deleted: number }> {
+  return fetchJSON(`${API_BASE}/devices/${deviceId}/logs`, {
+    method: 'DELETE',
+  })
+}
+
 // ============================================================================
 // WebSocket 会话 API
 // ============================================================================
@@ -372,6 +376,15 @@ export async function batchDeleteWSSessions(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids }),
+  })
+}
+
+// 删除设备全部 WebSocket 会话
+export async function deleteAllWSSessions(
+  deviceId: string
+): Promise<{ deleted: number }> {
+  return fetchJSON(`${API_BASE}/devices/${deviceId}/ws-sessions`, {
+    method: 'DELETE',
   })
 }
 

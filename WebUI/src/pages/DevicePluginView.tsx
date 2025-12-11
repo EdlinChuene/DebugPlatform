@@ -47,7 +47,7 @@ export function DevicePluginView() {
     const [activePluginId, setActivePluginId] = useState(activePluginParam)
 
     // Stores
-    const { currentDevice, selectDevice, clearSelection, clearDeviceData, toggleFavorite, isFavorite, refreshDevice } =
+    const { currentDevice, selectDevice, clearSelection, clearDeviceData, toggleFavorite, isFavorite, refreshDevice, deviceNicknames, setNickname } =
         useDeviceStore()
     const { setConnected, setInDeviceDetail } = useConnectionStore()
     const toggleTheme = useThemeStore((s) => s.toggleTheme)
@@ -64,6 +64,11 @@ export function DevicePluginView() {
     const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
     const [showClearDeviceDialog, setShowClearDeviceDialog] = useState(false)
     const [showMoreMenu, setShowMoreMenu] = useState(false)
+    const [isEditingNickname, setIsEditingNickname] = useState(false)
+    const [nicknameInput, setNicknameInput] = useState('')
+
+    // 获取当前设备的备注名
+    const currentNickname = deviceId ? deviceNicknames[deviceId] : undefined
 
     // 更新 URL 参数
     const setActivePlugin = useCallback(
@@ -363,9 +368,51 @@ export function DevicePluginView() {
                             {currentDevice ? getPlatformIcon(currentDevice.deviceInfo.platform, 18) : <IPhoneIcon size={18} />}
                         </div>
                         <div className="flex items-center gap-2 min-w-0">
-                            <h1 className="text-base font-semibold text-text-primary truncate">
-                                {currentDevice?.deviceInfo.deviceName || '加载中...'}
-                            </h1>
+                            {/* 设备名称 / 备注名 */}
+                            {isEditingNickname ? (
+                                <input
+                                    type="text"
+                                    value={nicknameInput}
+                                    onChange={(e) => setNicknameInput(e.target.value)}
+                                    onBlur={() => {
+                                        if (deviceId) {
+                                            setNickname(deviceId, nicknameInput)
+                                        }
+                                        setIsEditingNickname(false)
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            if (deviceId) {
+                                                setNickname(deviceId, nicknameInput)
+                                            }
+                                            setIsEditingNickname(false)
+                                        } else if (e.key === 'Escape') {
+                                            setIsEditingNickname(false)
+                                        }
+                                    }}
+                                    className="text-base font-semibold text-text-primary bg-bg-light border border-primary rounded px-2 py-0.5 outline-none"
+                                    autoFocus
+                                    placeholder="输入备注名..."
+                                />
+                            ) : (
+                                <div
+                                    className="flex items-center gap-1 cursor-pointer group/name"
+                                    onClick={() => {
+                                        setNicknameInput(currentNickname || '')
+                                        setIsEditingNickname(true)
+                                    }}
+                                    title="点击编辑备注名"
+                                >
+                                    <h1 className="text-base font-semibold text-text-primary truncate group-hover/name:text-primary transition-colors">
+                                        {currentNickname || currentDevice?.deviceInfo.deviceName || '加载中...'}
+                                    </h1>
+                                    {currentNickname && (
+                                        <span className="text-xs text-text-muted truncate">
+                                            ({currentDevice?.deviceInfo.deviceName})
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                             {currentDevice?.deviceInfo.isSimulator && (
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 flex-shrink-0">
                                     模拟器

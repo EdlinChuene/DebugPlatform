@@ -10,10 +10,6 @@ export interface DeviceInfo {
   buildNumber: string
   platform: string
   isSimulator: boolean
-  captureEnabled: boolean
-  logCaptureEnabled: boolean
-  wsCaptureEnabled: boolean
-  dbInspectorEnabled: boolean
   appIcon?: string
 }
 

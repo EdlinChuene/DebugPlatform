@@ -60,6 +60,7 @@ public final class LogBackendPlugin: BackendPlugin, @unchecked Sendable {
         logs.get("subsystems", use: listSubsystems)
         logs.get("categories", use: listCategories)
         logs.post("batch-delete", use: batchDelete)
+        logs.delete(use: deleteAllLogs)
     }
 
     public func handleEvent(_ event: PluginEventDTO, from deviceId: String) async {
@@ -161,6 +162,23 @@ public final class LogBackendPlugin: BackendPlugin, @unchecked Sendable {
         return BatchLogDeleteResponse(deleted: input.ids.count)
     }
 
+    /// 删除设备全部日志
+    func deleteAllLogs(req: Request) async throws -> DeleteAllLogsResponse {
+        guard let deviceId = req.parameters.get("deviceId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId")
+        }
+
+        let count = try await LogEventModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .count()
+
+        try await LogEventModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .delete()
+
+        return DeleteAllLogsResponse(deleted: count)
+    }
+
     public func shutdown() async {
         state = .stopped
     }
@@ -193,6 +211,7 @@ public final class WebSocketBackendPlugin: BackendPlugin, @unchecked Sendable {
         ws.get("ws-sessions", ":sessionId", use: getSession)
         ws.get("ws-sessions", ":sessionId", "frames", use: listFrames)
         ws.get("ws-sessions", ":sessionId", "frames", ":frameId", use: getFrame)
+        ws.delete("ws-sessions", use: deleteAllWSSessions)
     }
 
     public func handleEvent(_ event: PluginEventDTO, from deviceId: String) async {
@@ -316,9 +335,15 @@ public final class WebSocketBackendPlugin: BackendPlugin, @unchecked Sendable {
 
         let page = req.query[Int.self, at: "page"] ?? 1
         let pageSize = min(req.query[Int.self, at: "pageSize"] ?? 100, 500)
+        let direction = req.query[String.self, at: "direction"]
 
-        let query = WSFrameModel.query(on: req.db)
+        var query = WSFrameModel.query(on: req.db)
             .filter(\.$sessionId == sessionId)
+
+        // 根据方向筛选
+        if let direction = direction, !direction.isEmpty {
+            query = query.filter(\.$direction == direction)
+        }
 
         let total = try await query.count()
         let frames = try await query
@@ -338,6 +363,37 @@ public final class WebSocketBackendPlugin: BackendPlugin, @unchecked Sendable {
             throw Abort(.notFound)
         }
         return WSFrameDetailDTO(from: frame)
+    }
+
+    /// 删除设备全部 WebSocket 会话和帧
+    func deleteAllWSSessions(req: Request) async throws -> DeleteAllWSSessionsResponse {
+        guard let deviceId = req.parameters.get("deviceId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId")
+        }
+
+        // 先获取所有 session ID
+        let sessionIds = try await WSSessionModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .all()
+            .compactMap(\.id)
+
+        // 删除关联的 frames
+        if !sessionIds.isEmpty {
+            try await WSFrameModel.query(on: req.db)
+                .filter(\.$sessionId ~~ sessionIds)
+                .delete()
+        }
+
+        // 删除 sessions
+        let count = try await WSSessionModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .count()
+
+        try await WSSessionModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .delete()
+
+        return DeleteAllWSSessionsResponse(deleted: count)
     }
 
     public func shutdown() async {
@@ -1093,6 +1149,14 @@ struct BatchLogDeleteResponse: Content {
     let deleted: Int
 }
 
+struct DeleteAllLogsResponse: Content {
+    let deleted: Int
+}
+
+struct DeleteAllWSSessionsResponse: Content {
+    let deleted: Int
+}
+
 struct WSSessionDTO: Content {
     let id: String
     let url: String
@@ -1129,7 +1193,8 @@ struct WSSessionDetailDTO: Content {
     init(from model: WSSessionModel, frameCount: Int) {
         id = model.id ?? ""
         url = model.url
-        requestHeaders = (try? JSONDecoder().decode([String: String].self, from: Data(model.requestHeaders.utf8))) ?? [:]
+        requestHeaders = (try? JSONDecoder().decode([String: String].self, from: Data(model.requestHeaders.utf8))) ??
+            [:]
         subprotocols = (try? JSONDecoder().decode([String].self, from: Data(model.subprotocols.utf8))) ?? []
         connectTime = model.connectTime
         disconnectTime = model.disconnectTime

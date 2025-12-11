@@ -7,6 +7,9 @@ import { useLogStore } from './logStore'
 // localStorage key for favorite devices
 const FAVORITE_DEVICES_KEY = 'debug-hub-favorite-devices'
 
+// localStorage key for device nicknames
+const DEVICE_NICKNAMES_KEY = 'debug-hub-device-nicknames'
+
 // Load favorites from localStorage
 const loadFavorites = (): Set<string> => {
   try {
@@ -29,6 +32,28 @@ const saveFavorites = (favorites: Set<string>) => {
   }
 }
 
+// Load device nicknames from localStorage
+const loadNicknames = (): Record<string, string> => {
+  try {
+    const saved = localStorage.getItem(DEVICE_NICKNAMES_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load device nicknames:', e)
+  }
+  return {}
+}
+
+// Save device nicknames to localStorage
+const saveNicknames = (nicknames: Record<string, string>) => {
+  try {
+    localStorage.setItem(DEVICE_NICKNAMES_KEY, JSON.stringify(nicknames))
+  } catch (e) {
+    console.error('Failed to save device nicknames:', e)
+  }
+}
+
 interface DeviceState {
   devices: DeviceListItem[]
   currentDeviceId: string | null
@@ -36,20 +61,34 @@ interface DeviceState {
   isLoading: boolean
   error: string | null
   favoriteDeviceIds: Set<string>
+  deviceNicknames: Record<string, string>
+
+  // 批量选择状态
+  isSelectMode: boolean
+  selectedIds: Set<string>
 
   // Actions
   fetchDevices: () => Promise<void>
   selectDevice: (deviceId: string) => Promise<void>
   refreshDevice: () => Promise<void>
   clearSelection: () => void
-  toggleCapture: (network: boolean, log: boolean) => Promise<void>
-  toggleWebSocketCapture: (websocket: boolean) => Promise<void>
-  toggleDatabaseInspector: (database: boolean) => Promise<void>
   clearDeviceData: () => Promise<void>
   removeDevice: (deviceId: string) => Promise<void>
   removeAllOfflineDevices: () => Promise<void>
   toggleFavorite: (deviceId: string) => void
   isFavorite: (deviceId: string) => boolean
+
+  // 备注名相关
+  setNickname: (deviceId: string, nickname: string) => void
+  getNickname: (deviceId: string) => string | undefined
+  clearNickname: (deviceId: string) => void
+
+  // 批量选择相关
+  toggleSelectMode: () => void
+  toggleSelectId: (deviceId: string) => void
+  selectAllOffline: () => void
+  clearSelectedIds: () => void
+  batchRemoveSelected: () => Promise<void>
 }
 
 export const useDeviceStore = create<DeviceState>((set, get) => ({
@@ -59,6 +98,11 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   isLoading: false,
   error: null,
   favoriteDeviceIds: loadFavorites(),
+  deviceNicknames: loadNicknames(),
+
+  // 批量选择状态
+  isSelectMode: false,
+  selectedIds: new Set(),
 
   fetchDevices: async () => {
     set({ isLoading: true, error: null })
@@ -93,57 +137,6 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
 
   clearSelection: () => {
     set({ currentDeviceId: null, currentDevice: null })
-  },
-
-  toggleCapture: async (network: boolean, log: boolean) => {
-    const { currentDeviceId, currentDevice } = get()
-    if (!currentDeviceId || !currentDevice) return
-
-    try {
-      await api.toggleCapture(
-        currentDeviceId,
-        network,
-        log,
-        currentDevice.deviceInfo.wsCaptureEnabled,
-        currentDevice.deviceInfo.dbInspectorEnabled
-      )
-    } catch (error) {
-      set({ error: (error as Error).message })
-    }
-  },
-
-  toggleWebSocketCapture: async (websocket: boolean) => {
-    const { currentDeviceId, currentDevice } = get()
-    if (!currentDeviceId || !currentDevice) return
-
-    try {
-      await api.toggleCapture(
-        currentDeviceId,
-        currentDevice.deviceInfo.captureEnabled,
-        currentDevice.deviceInfo.logCaptureEnabled,
-        websocket,
-        currentDevice.deviceInfo.dbInspectorEnabled
-      )
-    } catch (error) {
-      set({ error: (error as Error).message })
-    }
-  },
-
-  toggleDatabaseInspector: async (database: boolean) => {
-    const { currentDeviceId, currentDevice } = get()
-    if (!currentDeviceId || !currentDevice) return
-
-    try {
-      await api.toggleCapture(
-        currentDeviceId,
-        currentDevice.deviceInfo.captureEnabled,
-        currentDevice.deviceInfo.logCaptureEnabled,
-        currentDevice.deviceInfo.wsCaptureEnabled,
-        database
-      )
-    } catch (error) {
-      set({ error: (error as Error).message })
-    }
   },
 
   clearDeviceData: async () => {
@@ -211,6 +204,92 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
 
   isFavorite: (deviceId: string) => {
     return get().favoriteDeviceIds.has(deviceId)
+  },
+
+  // 备注名相关
+  setNickname: (deviceId: string, nickname: string) => {
+    const { deviceNicknames } = get()
+    const newNicknames = { ...deviceNicknames }
+    if (nickname.trim()) {
+      newNicknames[deviceId] = nickname.trim()
+    } else {
+      delete newNicknames[deviceId]
+    }
+    saveNicknames(newNicknames)
+    set({ deviceNicknames: newNicknames })
+  },
+
+  getNickname: (deviceId: string) => {
+    return get().deviceNicknames[deviceId]
+  },
+
+  clearNickname: (deviceId: string) => {
+    const { deviceNicknames } = get()
+    const newNicknames = { ...deviceNicknames }
+    delete newNicknames[deviceId]
+    saveNicknames(newNicknames)
+    set({ deviceNicknames: newNicknames })
+  },
+
+  // 批量选择相关
+  toggleSelectMode: () => {
+    const { isSelectMode } = get()
+    set({
+      isSelectMode: !isSelectMode,
+      selectedIds: new Set(), // 切换模式时清空选择
+    })
+  },
+
+  toggleSelectId: (deviceId: string) => {
+    const { selectedIds, devices } = get()
+    // 检查设备是否在线，在线设备不可选中
+    const device = devices.find(d => d.deviceId === deviceId)
+    if (device?.isOnline) return
+
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(deviceId)) {
+      newSelected.delete(deviceId)
+    } else {
+      newSelected.add(deviceId)
+    }
+    set({ selectedIds: newSelected })
+  },
+
+  selectAllOffline: () => {
+    const { devices, selectedIds } = get()
+    const offlineDeviceIds = devices.filter(d => !d.isOnline).map(d => d.deviceId)
+    // 如果已全选则取消全选，否则全选
+    const allSelected = offlineDeviceIds.every(id => selectedIds.has(id))
+    if (allSelected) {
+      set({ selectedIds: new Set() })
+    } else {
+      set({ selectedIds: new Set(offlineDeviceIds) })
+    }
+  },
+
+  clearSelectedIds: () => {
+    set({ selectedIds: new Set() })
+  },
+
+  batchRemoveSelected: async () => {
+    const { selectedIds } = get()
+    if (selectedIds.size === 0) return
+
+    try {
+      // 逐个移除选中的设备
+      const idsToRemove = Array.from(selectedIds)
+      await Promise.all(idsToRemove.map(id => api.removeDevice(id)))
+
+      // 从列表中移除
+      set(state => ({
+        devices: state.devices.filter(d => !idsToRemove.includes(d.deviceId)),
+        selectedIds: new Set(),
+        isSelectMode: false,
+      }))
+    } catch (error) {
+      set({ error: (error as Error).message })
+      throw error
+    }
   },
 }))
 

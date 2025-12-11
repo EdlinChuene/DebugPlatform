@@ -32,10 +32,10 @@ export function Sidebar() {
   // Show all devices toggle
   const [showAllDevices, setShowAllDevices] = useState(false)
 
-  // Get current tab from URL
-  const currentTab = useMemo(() => {
+  // Get current plugin from URL
+  const currentPlugin = useMemo(() => {
     const searchParams = new URLSearchParams(location.search)
-    return searchParams.get('tab') || 'http'
+    return searchParams.get('plugin') || 'network'
   }, [location.search])
 
   // Domain search filter
@@ -50,9 +50,16 @@ export function Sidebar() {
     fetchRules() // Load traffic rules for domain filtering
   }, [])
 
-  // Extract Domains/Hosts from Events based on current tab
+  // 判断是否应该显示域名区域（只有 network 和 websocket 插件显示）
+  const shouldShowDomains = currentPlugin === 'network' || currentPlugin === 'websocket'
+  // 判断当前是否是 WebSocket 插件
+  const isWebSocketPlugin = currentPlugin === 'websocket'
+
+  // Extract Domains/Hosts from Events based on current plugin
   const domainStats = useMemo(() => {
-    if (currentTab === 'websocket') {
+    if (!shouldShowDomains) return []
+
+    if (currentPlugin === 'websocket') {
       // Extract hosts from WebSocket sessions
       const stats: Record<string, number> = {}
       wsSessions.forEach(session => {
@@ -66,7 +73,7 @@ export function Sidebar() {
         .map(([domain, count]) => ({ domain, count }))
         .sort((a, b) => b.count - a.count)
     } else {
-      // Extract domains from HTTP events (default)
+      // Extract domains from HTTP events (default for network plugin)
       const stats: Record<string, number> = {}
       events.forEach(e => {
         try {
@@ -78,17 +85,19 @@ export function Sidebar() {
         .map(([domain, count]) => ({ domain, count }))
         .sort((a, b) => b.count - a.count)
     }
-  }, [events, wsSessions, currentTab])
+  }, [events, wsSessions, currentPlugin, shouldShowDomains])
 
-  // Track previous tab to detect tab switches
-  const prevTabRef = useRef<string>(currentTab)
+  // Track previous plugin to detect plugin switches
+  const prevPluginRef = useRef<string>(currentPlugin)
 
   // Detect new requests and highlight domains
   useEffect(() => {
-    // If tab changed, just update the ref without highlighting
-    if (prevTabRef.current !== currentTab) {
-      prevTabRef.current = currentTab
-      // Reset the counts for the new tab context
+    if (!shouldShowDomains) return
+
+    // If plugin changed, just update the ref without highlighting
+    if (prevPluginRef.current !== currentPlugin) {
+      prevPluginRef.current = currentPlugin
+      // Reset the counts for the new plugin context
       const currentCounts: Record<string, number> = {}
       domainStats.forEach(({ domain, count }) => {
         currentCounts[domain] = count
@@ -124,7 +133,7 @@ export function Sidebar() {
     }
 
     prevEventsCountRef.current = currentCounts
-  }, [domainStats, currentTab])
+  }, [domainStats, currentPlugin, shouldShowDomains])
 
   // Filter domains by search
   const filteredDomainStats = useMemo(() => {
@@ -157,7 +166,7 @@ export function Sidebar() {
   }
 
   const handleDomainClick = (domain: string) => {
-    if (currentTab === 'websocket') {
+    if (currentPlugin === 'websocket') {
       // Toggle WebSocket host filter (单选)
       if (wsFilters.host === domain) {
         setWsFilter('host', '')
@@ -172,7 +181,7 @@ export function Sidebar() {
 
   // Handle "All Domains" click
   const handleAllDomainsClick = () => {
-    if (currentTab === 'websocket') {
+    if (currentPlugin === 'websocket') {
       setWsFilter('host', '')
     } else {
       clearDomains()
@@ -181,7 +190,7 @@ export function Sidebar() {
 
   // Check if domain is currently selected as filter
   const isDomainSelected = (domain: string) => {
-    if (currentTab === 'websocket') {
+    if (currentPlugin === 'websocket') {
       return wsFilters.host === domain
     }
     return httpFilters.domains.includes(domain)
@@ -189,7 +198,7 @@ export function Sidebar() {
 
   // Check if "All Domains" is selected
   const isAllDomainsSelected = () => {
-    if (currentTab === 'websocket') {
+    if (currentPlugin === 'websocket') {
       return !wsFilters.host
     }
     return httpFilters.domains.length === 0
@@ -225,8 +234,8 @@ export function Sidebar() {
       <Link to="/" className="p-5 border-b border-border flex items-center gap-3 hover:bg-bg-light/50 transition-colors">
         <DebugHubLogo size={40} />
         <div>
-          <h1 className="font-semibold text-text-primary text-lg">Debug Hub</h1>
-          <p className="text-2xs text-text-muted">iOS 调试平台</p>
+          <h1 className="font-semibold text-text-primary text-lg">Debug Platform</h1>
+          <p className="text-2xs text-text-muted">调试平台</p>
         </div>
       </Link>
 
@@ -421,17 +430,17 @@ export function Sidebar() {
         </div>
 
         {/* Separator - 与侧边栏同宽，紧贴设备列表 */}
-        {currentDeviceId && (currentTab === 'http' || currentTab === 'websocket') && (
+        {currentDeviceId && shouldShowDomains && (
           <div className="h-px bg-border" />
         )}
 
-        {/* Domain/Host List Section (Only for HTTP/WebSocket tabs) */}
-        {currentDeviceId && (currentTab === 'http' || currentTab === 'websocket') && (
+        {/* Domain/Host List Section (Only for HTTP/WebSocket plugins) */}
+        {currentDeviceId && shouldShowDomains && (
           <div className="px-3 py-3">
             <div className="px-2 mb-3 text-xs font-semibold text-text-secondary uppercase tracking-wider flex justify-between items-center">
               <span className="flex items-center gap-2">
-                {currentTab === 'websocket' ? <WebSocketIcon size={14} /> : <HttpIcon size={14} />}
-                {currentTab === 'websocket' ? 'WS Hosts' : 'Domains'}
+                {currentPlugin === 'websocket' ? <WebSocketIcon size={14} /> : <HttpIcon size={14} />}
+                {currentPlugin === 'websocket' ? 'WS Hosts' : 'Domains'}
               </span>
               <span className="bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded-full text-2xs font-bold">{domainStats.length}</span>
             </div>
@@ -444,7 +453,7 @@ export function Sidebar() {
                   type="text"
                   value={domainSearch}
                   onChange={(e) => setDomainSearch(e.target.value)}
-                  placeholder={currentTab === 'websocket' ? '搜索主机...' : '搜索域名...'}
+                  placeholder={currentPlugin === 'websocket' ? '搜索主机...' : '搜索域名...'}
                   className="w-full pl-8 pr-3 py-2 text-xs bg-bg-medium border border-border rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
                 />
               </div>
@@ -464,7 +473,7 @@ export function Sidebar() {
                 <div className="flex items-center gap-2 min-w-0">
                   <LogIcon size={14} />
                   <span className="font-medium">
-                    {currentTab === 'websocket' ? '全部主机' : '全部域名'}
+                    {currentPlugin === 'websocket' ? '全部主机' : '全部域名'}
                   </span>
                 </div>
                 <span className={clsx(
@@ -503,7 +512,7 @@ export function Sidebar() {
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       {/* Checkbox indicator for multi-select (HTTP only) */}
-                      {currentTab === 'http' && (
+                      {!isWebSocketPlugin && (
                         <div onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             checked={isSelected}
@@ -545,14 +554,14 @@ export function Sidebar() {
               {filteredDomainStats.length === 0 && domainSearch && (
                 <div className="px-4 py-4 text-center text-xs text-text-muted bg-bg-light/20 rounded border border-dashed border-border">
                   <SearchIcon size={24} className="block mb-1 opacity-50 mx-auto" />
-                  {currentTab === 'websocket' ? '未找到匹配的主机' : '未找到匹配的域名'}
+                  {isWebSocketPlugin ? '未找到匹配的主机' : '未找到匹配的域名'}
                 </div>
               )}
 
               {domainStats.length === 0 && !domainSearch && (
                 <div className="px-4 py-4 text-center text-xs text-text-muted bg-bg-light/20 rounded border border-dashed border-border">
-                  {currentTab === 'websocket' ? <WebSocketIcon size={24} className="block mb-1 opacity-50 mx-auto" /> : <HttpIcon size={24} className="block mb-1 opacity-50 mx-auto" />}
-                  {currentTab === 'websocket' ? '暂无 WebSocket 主机' : '暂无域名记录'}
+                  {isWebSocketPlugin ? <WebSocketIcon size={24} className="block mb-1 opacity-50 mx-auto" /> : <HttpIcon size={24} className="block mb-1 opacity-50 mx-auto" />}
+                  {isWebSocketPlugin ? '暂无 WebSocket 主机' : '暂无域名记录'}
                 </div>
               )}
             </div>

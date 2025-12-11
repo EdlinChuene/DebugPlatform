@@ -57,6 +57,7 @@ public final class NetworkBackendPlugin: BackendPlugin, @unchecked Sendable {
         http.post(":eventId", "favorite", use: toggleFavorite)
         http.post("batch", "delete", use: batchDelete)
         http.post("batch", "favorite", use: batchFavorite)
+        http.delete(use: deleteAllHTTPEvents)
     }
 
     public func handleEvent(_ event: PluginEventDTO, from deviceId: String) async {
@@ -351,6 +352,36 @@ public final class NetworkBackendPlugin: BackendPlugin, @unchecked Sendable {
 
         return PluginBatchFavoriteResponse(updated: input.ids.count, favorite: input.favorite)
     }
+
+    /// 删除设备全部 HTTP 事件
+    func deleteAllHTTPEvents(req: Request) async throws -> PluginDeleteAllResponse {
+        guard let deviceId = req.parameters.get("deviceId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId")
+        }
+
+        // 先删除关联的参数表记录
+        let eventIds = try await HTTPEventModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .all()
+            .compactMap(\.id)
+
+        if !eventIds.isEmpty {
+            try await HTTPEventParamModel.query(on: req.db)
+                .filter(\.$eventId ~~ eventIds)
+                .delete()
+        }
+
+        // 删除 HTTP 事件
+        let count = try await HTTPEventModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .count()
+
+        try await HTTPEventModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .delete()
+
+        return PluginDeleteAllResponse(deleted: count)
+    }
 }
 
 // MARK: - DTOs
@@ -461,6 +492,10 @@ struct BatchDeleteInput: Content {
 }
 
 struct PluginBatchDeleteResponse: Content {
+    let deleted: Int
+}
+
+struct PluginDeleteAllResponse: Content {
     let deleted: Int
 }
 

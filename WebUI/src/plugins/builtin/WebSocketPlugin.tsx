@@ -21,6 +21,7 @@ import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
 import { Toggle } from '@/components/Toggle'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { parseWSEvent } from '@/services/realtime'
+import { deleteAllWSSessions } from '@/services/api'
 import clsx from 'clsx'
 
 // 插件实现类
@@ -139,14 +140,16 @@ function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
         selectAll,
         clearSelectedIds,
         batchDelete,
+        fetchFrames,
     } = useWSStore()
 
     const { isConnected } = useConnectionStore()
     const toast = useToastStore()
 
     // 确认对话框状态
-    const [showClearConfirm, setShowClearConfirm] = useState(false)
+    const [showClearAllConfirm, setShowClearAllConfirm] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [isClearingAll, setIsClearingAll] = useState(false)
 
     // 初始加载
     useEffect(() => {
@@ -171,11 +174,21 @@ function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
         fetchSessions(deviceId)
     }, [deviceId, fetchSessions])
 
-    // 清空所有会话
-    const handleClear = useCallback(() => {
-        clearSessions()
-        toast.show('success', '已清空 WebSocket 会话')
-    }, [clearSessions, toast])
+    // 清除全部会话
+    const handleClearAll = useCallback(async () => {
+        if (!deviceId) return
+        setIsClearingAll(true)
+        try {
+            const result = await deleteAllWSSessions(deviceId)
+            clearSessions()
+            toast.show('success', `已清除 ${result.deleted} 个会话`)
+            setShowClearAllConfirm(false)
+        } catch (error) {
+            toast.show('error', '清除失败')
+        } finally {
+            setIsClearingAll(false)
+        }
+    }, [deviceId, clearSessions, toast])
 
     // 批量删除
     const handleBatchDelete = useCallback(async () => {
@@ -194,13 +207,13 @@ function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
 
     // 帧方向过滤变更
     const handleFrameDirectionChange = useCallback((direction: string) => {
-        setFrameDirection(direction)
-        // 重新加载帧
         if (deviceId && selectedSessionId) {
-            const wsStore = useWSStore.getState()
-            wsStore.fetchFrames(deviceId, selectedSessionId)
+            // 直接传递 direction 给 fetchFrames，避免状态更新延迟问题
+            fetchFrames(deviceId, selectedSessionId, direction)
+        } else {
+            setFrameDirection(direction)
         }
-    }, [deviceId, selectedSessionId, setFrameDirection])
+    }, [deviceId, selectedSessionId, fetchFrames, setFrameDirection])
 
     if (!isActive) {
         return null
@@ -263,14 +276,14 @@ function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-text-secondary">
-                    {/* 清屏按钮 */}
+                    {/* 清除全部会话按钮 */}
                     <button
-                        onClick={handleClear}
+                        onClick={() => setShowClearAllConfirm(true)}
                         className="btn text-xs px-2 py-1.5 flex-shrink-0 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
-                        title="清空当前列表"
-                        disabled={sessions.length === 0}
+                        title="清除全部会话（从数据库删除）"
+                        disabled={sessions.length === 0 || isClearingAll}
                     >
-                        清屏
+                        清除全部
                     </button>
 
                     <div className="h-5 w-px bg-border flex-shrink-0" />
@@ -338,15 +351,17 @@ function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
                 </div>
             </div>
 
-            {/* 清空确认对话框 */}
+            {/* 清除全部确认对话框 */}
             <ConfirmDialog
-                isOpen={showClearConfirm}
-                onClose={() => setShowClearConfirm(false)}
-                onConfirm={handleClear}
-                title="清空 WebSocket 会话"
-                message="确定要清空所有 WebSocket 会话吗？此操作无法撤销。"
-                confirmText="清空"
+                isOpen={showClearAllConfirm}
+                onClose={() => setShowClearAllConfirm(false)}
+                onConfirm={handleClearAll}
+                title="清除全部会话"
+                message={`确定要清除该设备的全部 WebSocket 会话记录吗？\n\n此操作将从数据库永久删除所有会话及帧数据，且不可恢复。`}
+                confirmText="确认清除"
+                cancelText="取消"
                 type="danger"
+                loading={isClearingAll}
             />
 
             {/* 删除确认对话框 */}
@@ -354,9 +369,10 @@ function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
                 isOpen={showDeleteConfirm}
                 onClose={() => setShowDeleteConfirm(false)}
                 onConfirm={handleBatchDelete}
-                title="删除选中会话"
-                message={`确定要删除选中的 ${selectedIds.size} 个会话吗？此操作无法撤销。`}
-                confirmText="删除"
+                title="删除会话"
+                message={`确定要删除选中的 ${selectedIds.size} 个会话吗？\n\n此操作不可恢复。`}
+                confirmText="确认删除"
+                cancelText="取消"
                 type="danger"
             />
         </div>

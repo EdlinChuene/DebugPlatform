@@ -22,13 +22,9 @@ public struct DeviceInfoDTO: Content {
     public let buildNumber: String
     public let platform: String
     public let isSimulator: Bool
-    public var captureEnabled: Bool
-    public var logCaptureEnabled: Bool
-    public var wsCaptureEnabled: Bool
-    public var dbInspectorEnabled: Bool
     public let appIcon: String?
 
-    // 自定义解码以支持旧版本客户端（缺少 wsCaptureEnabled/dbInspectorEnabled 字段）
+    // 自定义解码以支持旧版本客户端
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         deviceId = try container.decode(String.self, forKey: .deviceId)
@@ -41,18 +37,13 @@ public struct DeviceInfoDTO: Content {
         buildNumber = try container.decode(String.self, forKey: .buildNumber)
         platform = try container.decode(String.self, forKey: .platform)
         isSimulator = try container.decodeIfPresent(Bool.self, forKey: .isSimulator) ?? false
-        captureEnabled = try container.decodeIfPresent(Bool.self, forKey: .captureEnabled) ?? true
-        logCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .logCaptureEnabled) ?? true
-        wsCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .wsCaptureEnabled) ?? true
-        dbInspectorEnabled = try container.decodeIfPresent(Bool.self, forKey: .dbInspectorEnabled) ?? true
         appIcon = try container.decodeIfPresent(String.self, forKey: .appIcon)
     }
 
     private enum CodingKeys: String, CodingKey {
         case deviceId, deviceName, deviceModel, systemName, systemVersion
         case appName, appVersion, buildNumber, platform
-        case isSimulator, captureEnabled, logCaptureEnabled
-        case wsCaptureEnabled, dbInspectorEnabled
+        case isSimulator
         case appIcon
     }
 }
@@ -402,7 +393,6 @@ enum BridgeMessageDTO: Codable {
     case heartbeat
     case events([DebugEventDTO])
     case registered(sessionId: String)
-    case toggleCapture(network: Bool, log: Bool, websocket: Bool, database: Bool)
     case updateMockRules([MockRuleDTO])
     case requestExport(timeFrom: Date, timeTo: Date, types: [String])
     case replayRequest(ReplayRequestPayload)
@@ -430,7 +420,6 @@ enum BridgeMessageDTO: Codable {
         case heartbeat
         case events
         case registered
-        case toggleCapture
         case updateMockRules
         case requestExport
         case replayRequest
@@ -461,14 +450,6 @@ enum BridgeMessageDTO: Codable {
         case .registered:
             let payload = try container.decode(RegisteredPayload.self, forKey: .payload)
             self = .registered(sessionId: payload.sessionId)
-        case .toggleCapture:
-            let payload = try container.decode(ToggleCapturePayload.self, forKey: .payload)
-            self = .toggleCapture(
-                network: payload.network,
-                log: payload.log,
-                websocket: payload.websocket,
-                database: payload.database
-            )
         case .updateMockRules:
             let rules = try container.decode([MockRuleDTO].self, forKey: .payload)
             self = .updateMockRules(rules)
@@ -523,12 +504,6 @@ enum BridgeMessageDTO: Codable {
         case let .registered(sessionId):
             try container.encode(MessageType.registered, forKey: .type)
             try container.encode(RegisteredPayload(sessionId: sessionId), forKey: .payload)
-        case let .toggleCapture(network, log, websocket, database):
-            try container.encode(MessageType.toggleCapture, forKey: .type)
-            try container.encode(
-                ToggleCapturePayload(network: network, log: log, websocket: websocket, database: database),
-                forKey: .payload
-            )
         case let .updateMockRules(rules):
             try container.encode(MessageType.updateMockRules, forKey: .type)
             try container.encode(rules, forKey: .payload)
@@ -577,13 +552,6 @@ private struct RegisterPayload: Codable {
 
 private struct RegisteredPayload: Codable {
     let sessionId: String
-}
-
-private struct ToggleCapturePayload: Codable {
-    let network: Bool
-    let log: Bool
-    let websocket: Bool
-    let database: Bool
 }
 
 private struct ExportPayload: Codable {

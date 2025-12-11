@@ -404,13 +404,21 @@ export const useHTTPStore = create<HTTPState>((set, get) => ({
   },
 
   batchDelete: async (deviceId: string) => {
-    const { selectedIds, events } = get()
+    const { selectedIds, events, listItems, filters, currentDeviceId } = get()
     if (selectedIds.size === 0) return
 
     try {
       await api.batchDeleteHTTPEvents(deviceId, Array.from(selectedIds))
+      const newEvents = events.filter((e) => !selectedIds.has(e.id))
+      const newListItems = listItems.filter((item) => {
+        if (isSessionDivider(item)) return true
+        return !selectedIds.has(item.id)
+      })
+      const filteredItems = filterItems(newListItems, filters, currentDeviceId ?? undefined)
       set({
-        events: events.filter((e) => !selectedIds.has(e.id)),
+        events: newEvents,
+        listItems: newListItems,
+        filteredItems,
         selectedIds: new Set(),
         total: get().total - selectedIds.size,
       })

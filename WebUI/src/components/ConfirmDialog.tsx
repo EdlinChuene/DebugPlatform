@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { useEffect, useCallback } from 'react'
 import { WarningIcon, LightningIcon, InfoIcon } from './icons'
 
 interface ConfirmDialogProps {
@@ -24,6 +25,20 @@ export function ConfirmDialog({
   type = 'danger',
   loading = false,
 }: ConfirmDialogProps) {
+  // ESC 键关闭弹窗
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key === 'Escape' && !loading) {
+      onClose()
+    }
+  }, [onClose, loading])
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown)
+      return () => document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, handleKeyDown])
+
   if (!isOpen) return null
 
   const typeConfig = {

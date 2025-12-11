@@ -20,38 +20,49 @@ const apiSections: EndpointSection[] = [
     endpoints: [
       { method: 'GET', path: '/api/devices', description: '获取在线设备列表' },
       { method: 'GET', path: '/api/devices/:deviceId', description: '获取设备详情' },
-      { method: 'POST', path: '/api/devices/:deviceId/control/toggle-capture', description: '切换捕获状态' },
+      { method: 'PUT', path: '/api/devices/:deviceId/nickname', description: '更新设备备注名' },
       { method: 'DELETE', path: '/api/devices/:deviceId/data', description: '清空设备数据' },
     ],
   },
   {
     icon: <HttpIcon size={20} />,
-    title: 'HTTP 事件',
+    title: 'Network 插件 - HTTP 事件',
     endpoints: [
-      { method: 'GET', path: '/api/devices/:deviceId/http-events', description: '获取 HTTP 事件列表' },
+      { method: 'GET', path: '/api/devices/:deviceId/http-events', description: '获取 HTTP 事件列表（支持分页和过滤）' },
       { method: 'GET', path: '/api/devices/:deviceId/http-events/:eventId', description: '获取 HTTP 事件详情' },
+      { method: 'DELETE', path: '/api/devices/:deviceId/http-events/:eventId', description: '删除单条 HTTP 事件' },
+      { method: 'POST', path: '/api/devices/:deviceId/http-events/batch-delete', description: '批量删除 HTTP 事件' },
+      { method: 'DELETE', path: '/api/devices/:deviceId/http-events', description: '删除全部 HTTP 事件' },
       { method: 'POST', path: '/api/devices/:deviceId/http-events/:eventId/replay', description: '重放 HTTP 请求' },
       { method: 'PUT', path: '/api/devices/:deviceId/http-events/:eventId/favorite', description: '收藏/取消收藏' },
-    ],
-  },
-  {
-    icon: <LogIcon size={20} />,
-    title: '日志事件',
-    endpoints: [
-      { method: 'GET', path: '/api/devices/:deviceId/log-events', description: '获取日志事件列表' },
+      { method: 'GET', path: '/api/devices/:deviceId/http-events/:eventId/curl', description: '导出 cURL 命令' },
     ],
   },
   {
     icon: <WebSocketIcon size={20} />,
-    title: 'WebSocket 会话',
+    title: 'Network 插件 - WebSocket 会话',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/ws-sessions', description: '获取 WebSocket 会话列表' },
       { method: 'GET', path: '/api/devices/:deviceId/ws-sessions/:sessionId/frames', description: '获取 WebSocket 帧数据' },
+      { method: 'DELETE', path: '/api/devices/:deviceId/ws-sessions/:sessionId', description: '删除单条 WebSocket 会话' },
+      { method: 'POST', path: '/api/devices/:deviceId/ws-sessions/batch-delete', description: '批量删除 WebSocket 会话' },
+      { method: 'DELETE', path: '/api/devices/:deviceId/ws-sessions', description: '删除全部 WebSocket 会话' },
+    ],
+  },
+  {
+    icon: <LogIcon size={20} />,
+    title: 'Log 插件 - 日志事件',
+    endpoints: [
+      { method: 'GET', path: '/api/devices/:deviceId/log-events', description: '获取日志事件列表（支持分页和过滤）' },
+      { method: 'GET', path: '/api/devices/:deviceId/log-events/filter-options', description: '获取日志过滤选项（subsystem/category）' },
+      { method: 'DELETE', path: '/api/devices/:deviceId/log-events/:eventId', description: '删除单条日志' },
+      { method: 'POST', path: '/api/devices/:deviceId/log-events/batch-delete', description: '批量删除日志' },
+      { method: 'DELETE', path: '/api/devices/:deviceId/log-events', description: '删除全部日志' },
     ],
   },
   {
     icon: <MockIcon size={20} />,
-    title: 'Mock 规则',
+    title: 'Mock 插件 - Mock 规则',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/mock-rules', description: '获取 Mock 规则列表' },
       { method: 'POST', path: '/api/devices/:deviceId/mock-rules', description: '创建 Mock 规则' },
@@ -61,7 +72,7 @@ const apiSections: EndpointSection[] = [
   },
   {
     icon: <BreakpointIcon size={20} />,
-    title: '断点调试',
+    title: 'Breakpoint 插件 - 断点调试',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/breakpoints', description: '获取断点规则列表' },
       { method: 'POST', path: '/api/devices/:deviceId/breakpoints', description: '创建断点规则' },
@@ -69,7 +80,7 @@ const apiSections: EndpointSection[] = [
   },
   {
     icon: <ChaosIcon size={20} />,
-    title: '故障注入',
+    title: 'Chaos 插件 - 故障注入',
     endpoints: [
       { method: 'GET', path: '/api/devices/:deviceId/chaos-rules', description: '获取故障注入规则' },
       { method: 'POST', path: '/api/devices/:deviceId/chaos-rules', description: '创建故障注入规则' },
@@ -80,15 +91,14 @@ const apiSections: EndpointSection[] = [
     title: '数据导出',
     endpoints: [
       { method: 'GET', path: '/api/export/har/:deviceId', description: '导出 HAR 文件' },
-      { method: 'GET', path: '/api/devices/:deviceId/http-events/:eventId/curl', description: '导出 cURL 命令' },
     ],
   },
   {
     icon: <LinkIcon size={20} />,
     title: 'WebSocket 连接',
     endpoints: [
-      { method: 'WS', path: '/debug-bridge', description: 'iOS 设备连接端点' },
-      { method: 'WS', path: '/ws/live', description: '实时事件流订阅' },
+      { method: 'WS', path: '/debug-bridge', description: '设备连接端点（App 连接）' },
+      { method: 'WS', path: '/ws/live', description: '实时事件流订阅（Web UI 订阅）' },
     ],
   },
   {
@@ -128,7 +138,7 @@ export function ApiDocsPage() {
             <SearchIcon size={64} />
           </div>
           <h1 className="text-4xl font-bold mb-2 text-text-primary">
-            Debug Hub API
+            Debug Platform API
           </h1>
           <p className="text-text-secondary text-lg mb-4">网络和日志一体化调试平台</p>
           <span className="inline-block px-4 py-1 bg-bg-light rounded text-sm text-primary border border-border">
@@ -206,7 +216,7 @@ export function ApiDocsPage() {
 
         {/* Footer */}
         <footer className="text-center mt-12 py-8 text-text-secondary text-sm">
-          <p>Debug Hub © 2025 Sun. All rights reserved.</p>
+          <p>Debug Platform © 2025 Sun. All rights reserved.</p>
         </footer>
       </div>
     </div>

@@ -3,44 +3,66 @@ import type { DeviceListItem } from '@/types'
 import { formatRelativeTime } from '@/utils/format'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { getPlatformIcon } from '@/utils/deviceIcons'
-import { StarIcon, PackageIcon, ClearIcon } from '@/components/icons'
+import { StarIcon, PackageIcon, CheckIcon } from '@/components/icons'
 import clsx from 'clsx'
 import type { CSSProperties } from 'react'
 
 interface Props {
   device: DeviceListItem
   style?: CSSProperties
+  isSelectMode?: boolean
+  isSelected?: boolean
+  onToggleSelect?: () => void
 }
 
-export function DeviceCard({ device, style }: Props) {
+export function DeviceCard({ device, style, isSelectMode, isSelected, onToggleSelect }: Props) {
   const navigate = useNavigate()
-  const { favoriteDeviceIds, toggleFavorite, removeDevice } = useDeviceStore()
+  const { favoriteDeviceIds, toggleFavorite, deviceNicknames } = useDeviceStore()
   const isFavorite = favoriteDeviceIds.has(device.deviceId)
   const isOffline = !device.isOnline
+  const nickname = deviceNicknames[device.deviceId]
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation()
     toggleFavorite(device.deviceId)
   }
 
-  const handleRemoveDevice = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (confirm(`确定要移除设备 "${device.deviceName}" 吗？`)) {
-      await removeDevice(device.deviceId)
+  const handleClick = () => {
+    if (isSelectMode) {
+      // 选择模式下，只有离线设备可选中
+      if (isOffline) {
+        onToggleSelect?.()
+      }
+    } else {
+      navigate(`/device/${device.deviceId}`)
     }
   }
 
   return (
     <div
-      onClick={() => navigate(`/device/${device.deviceId}`)}
+      onClick={handleClick}
       className={clsx(
         'glass-card p-2.5 cursor-pointer transition-all group animate-fadeIn card-interactive',
-        device.isOnline ? 'hover:border-primary' : 'opacity-60 hover:opacity-80'
+        device.isOnline ? 'hover:border-primary' : 'opacity-60 hover:opacity-80',
+        isSelectMode && isOffline && 'cursor-pointer',
+        isSelectMode && !isOffline && 'cursor-not-allowed opacity-40',
+        isSelected && 'ring-2 ring-primary border-primary'
       )}
       style={style}
     >
       {/* 主要布局：设备图标 + 信息 + 收藏 */}
       <div className="flex items-start gap-2.5">
+        {/* 选择模式下的复选框 */}
+        {isSelectMode && (
+          <div className={clsx(
+            'w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-2.5',
+            isSelected ? 'bg-primary border-primary' : 'border-border',
+            !isOffline && 'opacity-30'
+          )}>
+            {isSelected && <CheckIcon size={12} className="text-white" />}
+          </div>
+        )}
+
         {/* 设备图标 - 与侧边栏样式一致 */}
         <div className="relative flex-shrink-0">
           <div className={clsx(
@@ -61,7 +83,7 @@ export function DeviceCard({ device, style }: Props) {
           {/* 第一行：设备信息 */}
           <div className="flex items-center gap-2">
             <h3 className="font-medium text-sm text-text-primary group-hover:text-primary transition-colors truncate">
-              {device.deviceName}
+              {nickname || device.deviceName}
             </h3>
             {device.isSimulator && (
               <span className="text-2xs px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 flex-shrink-0">
@@ -74,6 +96,12 @@ export function DeviceCard({ device, style }: Props) {
               </span>
             )}
           </div>
+          {/* 如果有备注名，显示原设备名 */}
+          {nickname && (
+            <p className="text-xs text-text-muted truncate">
+              {device.deviceName}
+            </p>
+          )}
           <p className="text-xs text-text-muted truncate mt-0.5">
             {device.deviceModel} · {device.platform} {device.systemVersion}
           </p>
@@ -105,32 +133,24 @@ export function DeviceCard({ device, style }: Props) {
           </div>
         </div>
 
-        {/* 操作按钮组 */}
-        <div className="flex items-center gap-0.5">
-          {/* 离线设备显示移除按钮 */}
-          {isOffline && (
+        {/* 操作按钮组 - 非选择模式下显示 */}
+        {!isSelectMode && (
+          <div className="flex items-center gap-0.5">
+            {/* 收藏按钮 */}
             <button
-              onClick={handleRemoveDevice}
-              className="p-1 rounded transition-all text-red-400/50 opacity-0 group-hover:opacity-100 hover:text-red-400"
-              title="移除设备"
+              onClick={handleToggleFavorite}
+              className={clsx(
+                'p-1 rounded transition-all flex-shrink-0',
+                isFavorite
+                  ? 'text-yellow-400 hover:text-yellow-300'
+                  : 'text-text-muted opacity-0 group-hover:opacity-100 hover:text-yellow-400'
+              )}
+              title={isFavorite ? '取消收藏' : '收藏设备'}
             >
-              <ClearIcon size={14} />
+              <StarIcon size={14} filled={isFavorite} />
             </button>
-          )}
-          {/* 收藏按钮 */}
-          <button
-            onClick={handleToggleFavorite}
-            className={clsx(
-              'p-1 rounded transition-all flex-shrink-0',
-              isFavorite
-                ? 'text-yellow-400 hover:text-yellow-300'
-                : 'text-text-muted opacity-0 group-hover:opacity-100 hover:text-yellow-400'
-            )}
-            title={isFavorite ? '取消收藏' : '收藏设备'}
-          >
-            <StarIcon size={14} filled={isFavorite} />
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )

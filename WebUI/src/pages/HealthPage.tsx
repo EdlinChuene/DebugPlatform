@@ -125,7 +125,7 @@ export function HealthPage() {
             {error ? '服务未启动' : '服务正常运行'}
           </h1>
           <p className="text-text-secondary mb-10">
-            {error ? '无法连接到 Debug Hub 服务' : 'Debug Hub 所有系统运行正常'}
+            {error ? '无法连接到 Debug Platform 服务' : 'Debug Platform 所有系统运行正常'}
           </p>
 
           {/* Info Grid */}
@@ -184,7 +184,7 @@ export function HealthPage() {
 
         {/* Footer */}
         <p className="text-center mt-8 text-text-muted text-sm">
-          <span className="opacity-70">Debug Hub © 2025 Sun</span>
+          <span className="opacity-70">Debug Platform © 2025 Sun</span>
         </p>
       </div>
     </div>
