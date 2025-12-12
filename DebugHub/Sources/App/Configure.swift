@@ -366,7 +366,7 @@ private func registerBuiltinPlugins() {
     let registry = BackendPluginRegistry.shared
 
     // 核心监控插件
-    try? registry.register(plugin: NetworkBackendPlugin())
+    try? registry.register(plugin: HttpBackendPlugin())
     try? registry.register(plugin: LogBackendPlugin())
     try? registry.register(plugin: WebSocketBackendPlugin())
     try? registry.register(plugin: DatabaseBackendPlugin())

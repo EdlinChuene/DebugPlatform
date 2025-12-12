@@ -370,9 +370,9 @@ export function MockRuleEditor({ rule, isOpen, onClose, onSave, loading, httpOnl
           <button
             onClick={handleSubmit}
             disabled={loading || !name.trim()}
-            className="btn bg-primary text-white hover:bg-primary-dark disabled:opacity-50"
+            className="btn btn-primary disabled:opacity-50"
           >
-            {loading ? '保存中...' : isEdit ? '保存修改' : '创建规则'}
+            {loading ? '保存中...' : '保存'}
           </button>
         </div>
       </div>

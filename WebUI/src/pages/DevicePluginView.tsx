@@ -19,6 +19,7 @@ import { KeyboardShortcutsHelp } from '@/components/KeyboardShortcutsHelp'
 import { SessionActivityIndicator } from '@/components/SessionActivityIndicator'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PluginManager } from '@/components/PluginManager'
+import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
 import { getPlatformIcon } from '@/utils/deviceIcons'
 import {
     BackIcon,
@@ -42,9 +43,19 @@ export function DevicePluginView() {
     const navigate = useNavigate()
     const [searchParams, setSearchParams] = useSearchParams()
 
-    // 从 URL 读取当前激活的插件
-    const activePluginParam = searchParams.get('plugin') || 'network'
-    const [activePluginId, setActivePluginId] = useState(activePluginParam)
+    // 从 URL 读取当前激活的插件，如果没有指定或该插件未启用，则使用第一个启用的插件
+    const getDefaultPluginId = useCallback(() => {
+        const pluginParam = searchParams.get('plugin')
+        // 如果 URL 有指定插件且该插件已启用，使用它
+        if (pluginParam && PluginRegistry.isPluginEnabled(pluginParam)) {
+            return pluginParam
+        }
+        // 否则使用第一个启用的插件
+        const enabledTabs = getPluginTabs()
+        return enabledTabs.length > 0 ? enabledTabs[0].pluginId : ''
+    }, [searchParams])
+
+    const [activePluginId, setActivePluginId] = useState(getDefaultPluginId)
 
     // Stores
     const { currentDevice, selectDevice, clearSelection, clearDeviceData, toggleFavorite, isFavorite, refreshDevice, deviceNicknames, setNickname } =
@@ -67,6 +78,17 @@ export function DevicePluginView() {
     const [showMoreMenu, setShowMoreMenu] = useState(false)
     const [isEditingNickname, setIsEditingNickname] = useState(false)
     const [nicknameInput, setNicknameInput] = useState('')
+    const [isRefreshing, setIsRefreshing] = useState(false)
+
+    // 刷新设备信息
+    const handleRefreshDevice = useCallback(async () => {
+        setIsRefreshing(true)
+        try {
+            await refreshDevice()
+        } finally {
+            setIsRefreshing(false)
+        }
+    }, [refreshDevice])
 
     // 获取当前设备的备注名
     const currentNickname = deviceId ? deviceNicknames[deviceId] : undefined
@@ -81,6 +103,17 @@ export function DevicePluginView() {
         },
         [searchParams, setSearchParams]
     )
+
+    // 组件初始化时同步 URL 参数
+    useEffect(() => {
+        const pluginParam = searchParams.get('plugin')
+        // 如果 URL 没有指定插件或指定的插件未启用，更新 URL 到实际的激活插件
+        if (activePluginId && (!pluginParam || pluginParam !== activePluginId)) {
+            const params = new URLSearchParams(searchParams)
+            params.set('plugin', activePluginId)
+            setSearchParams(params, { replace: true })
+        }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     // 监听插件状态变化，当前插件被禁用时自动切换
     useEffect(() => {
@@ -116,7 +149,7 @@ export function DevicePluginView() {
             description: '刷新',
             action: () => {
                 if (deviceId) {
-                    if (activePluginId === 'network') httpStore.fetchEvents(deviceId)
+                    if (activePluginId === 'http') httpStore.fetchEvents(deviceId)
                     else if (activePluginId === 'logs') logStore.fetchEvents(deviceId)
                     else if (activePluginId === 'websocket') wsStore.fetchSessions(deviceId)
                 }
@@ -127,7 +160,7 @@ export function DevicePluginView() {
             ctrl: true,
             description: '清屏',
             action: () => {
-                if (activePluginId === 'network') {
+                if (activePluginId === 'http') {
                     httpStore.clearEvents()
                 } else if (activePluginId === 'logs') {
                     logStore.clearEvents()
@@ -166,7 +199,7 @@ export function DevicePluginView() {
             ctrl: true,
             description: '全选',
             action: () => {
-                if (activePluginId === 'network' && httpStore.isSelectMode) {
+                if (activePluginId === 'http' && httpStore.isSelectMode) {
                     httpStore.selectAll()
                 }
             },
@@ -254,9 +287,19 @@ export function DevicePluginView() {
     useEffect(() => {
         const pluginParam = searchParams.get('plugin')
         if (pluginParam && pluginParam !== activePluginId) {
-            setActivePluginId(pluginParam)
+            // 只有当 URL 指定的插件已启用时才切换
+            if (PluginRegistry.isPluginEnabled(pluginParam)) {
+                setActivePluginId(pluginParam)
+            } else {
+                // 如果 URL 指定的插件未启用，同步到当前激活的插件
+                if (activePluginId) {
+                    const params = new URLSearchParams(searchParams)
+                    params.set('plugin', activePluginId)
+                    setSearchParams(params, { replace: true })
+                }
+            }
         }
-    }, [searchParams, activePluginId])
+    }, [searchParams, activePluginId, setSearchParams])
 
     // 返回设备列表
     const handleBack = useCallback(() => {
@@ -291,7 +334,10 @@ export function DevicePluginView() {
     }
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full relative">
+            {/* 刷新加载覆盖层 */}
+            <ListLoadingOverlay isLoading={isRefreshing} text="刷新设备信息..." />
+
             {/* Header */}
             <header className="px-4 py-2 bg-bg-dark border-b border-border">
                 <div className="flex items-center gap-3">
@@ -383,7 +429,7 @@ export function DevicePluginView() {
                                     className={clsx(
                                         'text-xs px-2 py-0.5 rounded flex items-center gap-1 flex-shrink-0',
                                         currentDevice.isOnline
-                                            ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                                            ? 'bg-status-success-bg text-status-success border border-green-500/30'
                                             : 'bg-red-500/10 text-red-400 border border-red-500/30'
                                     )}
                                 >
@@ -401,11 +447,12 @@ export function DevicePluginView() {
                             )}
                             {/* 刷新按钮 */}
                             <button
-                                onClick={refreshDevice}
-                                className="px-2 py-1 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors"
+                                onClick={handleRefreshDevice}
+                                disabled={isRefreshing}
+                                className="btn btn-primary !px-2 !py-1 text-xs disabled:opacity-50"
                                 title="刷新设备信息"
                             >
-                                刷新
+                                {isRefreshing ? '刷新中...' : '刷新'}
                             </button>
                         </div>
                     </div>

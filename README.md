@@ -6,9 +6,9 @@
 >
 > **本项目全部代码和文档均由 Agent AI 生成**
 
-> **当前版本**: v1.4.0 | [更新日志](docs/CHANGELOG.md) | [开发路线图](docs/ROADMAP.md)
+> **当前版本**: 1.4.0 | [更新日志](docs/CHANGELOG.md) | [开发路线图](docs/ROADMAP.md)
 >
-> **最后更新**: 2025-12-11
+> **最后更新**: 2025-12-12
 
 ## ✨ 功能特性
 
@@ -57,12 +57,12 @@
 │   ┌─────────────────────────────────────────────────────────┐   │
 │   │                   DebugProbe SDK                        │   │
 │   │  ┌─────────────────────────────────────────────────┐    │   │
-│   │  │              Plugin System                      │    │   │
-│   │  │  NetworkPlugin │ LogPlugin │ WebSocketPlugin    │    │   │
-│   │  │  MockPlugin │ BreakpointPlugin │ ChaosPlugin    │    │   │
-│   │  │  DatabasePlugin                                 │    │   │
+│   │  │              Plugin System (8 插件)              │    │   │
+│   │  │  HttpPlugin │ LogPlugin │ WebSocketPlugin        │    │   │
+│   │  │  MockPlugin │ BreakpointPlugin │ ChaosPlugin     │    │   │
+│   │  │  DatabasePlugin │ PerformancePlugin              │    │   │
 │   │  └─────────────────────────────────────────────────┘    │   │
-│   │  PluginManager → DebugEventBus → BridgeClient           │   │
+│   │  PluginManager → EventCallbacks → BridgeClient          │   │
 │   │            ↓ 断线时                                     │   │
 │   │   EventPersistenceQueue (SQLite)                        │   │
 │   └─────────────────────────────────────────────────────────┘   │
@@ -73,9 +73,10 @@
 │                    Debug Hub (Vapor)                            │
 │   ┌─────────────────────────────────────────────────────────┐   │
 │   │              Backend Plugin System                      │   │
-│   │  NetworkBackendPlugin │ LogBackendPlugin │ WSBackendPlugin│  │
+│   │  HttpBackendPlugin │ LogBackendPlugin │ WSBackendPlugin │   │
 │   │  MockBackendPlugin │ BreakpointBackendPlugin            │   │
 │   │  ChaosBackendPlugin │ DatabaseBackendPlugin             │   │
+│   │  PerformanceBackendPlugin                               │   │
 │   └─────────────────────────────────────────────────────────┘   │
 │   BackendPluginRegistry → Services → Controllers → PostgreSQL   │
 │                           ↓                                     │
@@ -87,9 +88,9 @@
 │                 Web UI (React + TypeScript)                     │
 │   ┌─────────────────────────────────────────────────────────┐   │
 │   │              Frontend Plugin System                     │   │
-│   │  NetworkPlugin │ LogPlugin │ WebSocketPlugin            │   │
+│   │  HttpPlugin │ LogPlugin │ WebSocketPlugin               │   │
 │   │  MockPlugin │ BreakpointPlugin │ ChaosPlugin            │   │
-│   │  DatabasePlugin                                         │   │
+│   │  DatabasePlugin │ PerformancePlugin                     │   │
 │   └─────────────────────────────────────────────────────────┘   │
 │   PluginRegistry → PluginRenderer → Zustand Stores              │
 └─────────────────────────────────────────────────────────────────┘
@@ -101,14 +102,14 @@
 
 | 模块 | 文档 | 当前状态 |
 |------|------|----------|
-| **HTTP Inspector** | [HTTP_INSPECTOR_ROADMAP](docs/HTTP_INSPECTOR_ROADMAP.md) | ✅ v1.3 稳定 |
-| **WebSocket Inspector** | [WS_INSPECTOR_ROADMAP](docs/WS_INSPECTOR_ROADMAP.md) | ✅ v1.2 稳定 |
-| **Log Viewer** | [LOG_VIEWER_ROADMAP](docs/LOG_VIEWER_ROADMAP.md) | ✅ v1.3 稳定 |
-| **DB Inspector** | [DB_INSPECTOR_ROADMAP](docs/DB_INSPECTOR_ROADMAP.md) | ✅ v1.3 稳定 |
-| **Mock Engine** | [MOCK_ENGINE_ROADMAP](docs/MOCK_ENGINE_ROADMAP.md) | ✅ v1.2 稳定 |
-| **Breakpoint** | [BREAKPOINT_ROADMAP](docs/BREAKPOINT_ROADMAP.md) | ✅ v1.3 稳定 |
-| **Chaos Engine** | [CHAOS_ENGINE_ROADMAP](docs/CHAOS_ENGINE_ROADMAP.md) | ✅ v1.3 稳定 |
-| **Performance Monitor** | [PERFORMANCE_MONITOR_ROADMAP](docs/PERFORMANCE_MONITOR_ROADMAP.md) | 📋 规划中 |
+| **HTTP Inspector** | [HTTP_INSPECTOR_ROADMAP](docs/HTTP_INSPECTOR_ROADMAP.md) | ✅ 1.3 稳定 |
+| **WebSocket Inspector** | [WS_INSPECTOR_ROADMAP](docs/WS_INSPECTOR_ROADMAP.md) | ✅ 1.2 稳定 |
+| **Log Viewer** | [LOG_VIEWER_ROADMAP](docs/LOG_VIEWER_ROADMAP.md) | ✅ 1.3 稳定 |
+| **DB Inspector** | [DB_INSPECTOR_ROADMAP](docs/DB_INSPECTOR_ROADMAP.md) | ✅ 1.3 稳定 |
+| **Mock Engine** | [MOCK_ENGINE_ROADMAP](docs/MOCK_ENGINE_ROADMAP.md) | ✅ 1.2 稳定 |
+| **Breakpoint** | [BREAKPOINT_ROADMAP](docs/BREAKPOINT_ROADMAP.md) | ✅ 1.3 稳定 |
+| **Chaos Engine** | [CHAOS_ENGINE_ROADMAP](docs/CHAOS_ENGINE_ROADMAP.md) | ✅ 1.3 稳定 |
+| **Performance Monitor** | [PERFORMANCE_MONITOR_ROADMAP](docs/PERFORMANCE_MONITOR_ROADMAP.md) | 🚧 开发中 |
 
 ---
 
@@ -153,12 +154,14 @@ dependencies: [
 import DebugProbe
 
 func setupDebugProbe() {
-    var config = DebugProbe.Configuration(
-        hubURL: URL(string: "http://your-debug-hub:8081")!,
-        token: "your-token"
-    )
-    config.enablePersistence = true
-    DebugProbe.shared.start(configuration: config)
+    // 可选：预先配置参数
+    let settings = DebugProbeSettings.shared
+    settings.hubHost = "your-debug-hub"  // 局域网 IP 或 hostname
+    settings.hubPort = 8081
+    settings.enablePersistence = true
+    
+    // 启动 DebugProbe
+    DebugProbe.shared.start()
 }
 #endif
 ```
@@ -236,6 +239,18 @@ npm run deploy
 2. **条件编译**: 使用 `#if DEBUG` 保护调试代码
 3. **内网部署**: Debug Hub 建议仅在内网使用
 4. **自动清理**: 默认 3 天自动清理，收藏请求除外
+
+---
+
+---
+
+## 📖 相关文档
+
+- [DebugProbe SDK (iOS)](../DebugProbe/README.md) - iOS 端 SDK
+- [Android Probe 开发指南](docs/ANDROID_PROBE_GUIDE.md) - Android 端 SDK 开发指南
+- [WebUI](WebUI/README.md) - 前端界面
+- [开发路线图](docs/ROADMAP.md) - 功能规划
+- [更新日志](docs/CHANGELOG.md) - 版本历史
 
 ---
 

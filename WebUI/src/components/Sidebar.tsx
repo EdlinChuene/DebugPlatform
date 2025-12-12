@@ -84,7 +84,7 @@ export function Sidebar() {
   // Get current plugin from URL
   const currentPlugin = useMemo(() => {
     const searchParams = new URLSearchParams(location.search)
-    return searchParams.get('plugin') || 'network'
+    return searchParams.get('plugin') || 'http'
   }, [location.search])
 
   // Domain search filter
@@ -100,7 +100,7 @@ export function Sidebar() {
   }, [])
 
   // 判断是否应该显示域名区域（只有 network 和 websocket 插件显示）
-  const shouldShowDomains = currentPlugin === 'network' || currentPlugin === 'websocket'
+  const shouldShowDomains = currentPlugin === 'http' || currentPlugin === 'websocket'
   // 判断当前是否是 WebSocket 插件
   const isWebSocketPlugin = currentPlugin === 'websocket'
 

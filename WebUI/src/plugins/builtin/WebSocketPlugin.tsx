@@ -273,7 +273,7 @@ function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
     return (
         <div className="h-full flex flex-col">
             {/* 工具栏 */}
-            <div className="flex-shrink-0 px-3 py-2 border-b border-border bg-bg-medium flex items-center justify-between">
+            <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-bg-medium flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {/* 刷新按钮 */}
                     <button
@@ -353,7 +353,7 @@ function WebSocketPluginView({ context, isActive }: PluginRenderProps) {
                     {/* 连接状态 */}
                     <span className={clsx(
                         'px-2 py-0.5 rounded text-xs',
-                        isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                        isConnected ? 'bg-status-success-bg text-status-success' : 'bg-red-500/20 text-red-400'
                     )}>
                         {isConnected ? '已连接' : '已断开'}
                     </span>

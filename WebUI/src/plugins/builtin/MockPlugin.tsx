@@ -28,7 +28,7 @@ class MockPluginImpl implements FrontendPlugin {
         version: '1.0.0',
         description: 'Mock 规则管理',
         icon: <MockIcon size={16} />,
-        dependencies: [BuiltinPluginId.NETWORK],
+        dependencies: [BuiltinPluginId.HTTP],
     }
 
     state: PluginState = 'uninitialized'
@@ -201,7 +201,7 @@ function MockPluginView({ context, isActive }: PluginRenderProps) {
                     {/* 新建规则按钮 */}
                     <button
                         onClick={handleCreateNew}
-                        className="btn btn-primary text-sm"
+                        className="btn btn-primary text-xs px-2.5 py-1.5"
                     >
                         新建规则
                     </button>
@@ -224,7 +224,7 @@ function MockPluginView({ context, isActive }: PluginRenderProps) {
                     {/* 规则计数 */}
                     <span>共 {rules.length} 条规则</span>
                     <span className="text-text-muted">•</span>
-                    <span className="text-green-400">
+                    <span className="text-status-success">
                         {rules.filter(r => r.enabled).length} 条启用
                     </span>
                 </div>

@@ -1,6 +1,6 @@
 # WebSocket Inspector 路线图
 
-## 当前状态 (v1.2)
+## 当前状态 (1.2)
 
 ### 已实现
 - ✅ WebSocket 连接捕获（URLSessionWebSocketTask Swizzling）

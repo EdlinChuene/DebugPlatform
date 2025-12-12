@@ -4,6 +4,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { PluginRegistry } from '@/plugins/PluginRegistry'
 import { SettingsIcon, PlugIcon } from '@/components/icons'
+import { toast } from 'react-hot-toast'
 import clsx from 'clsx'
 
 interface PluginManagerProps {
@@ -30,14 +31,35 @@ export function PluginManager({ className }: PluginManagerProps) {
                 displayName: plugin.metadata.displayName,
                 description: plugin.metadata.description,
                 icon: plugin.metadata.icon,
+                dependencies: plugin.metadata.dependencies || [],
                 isEnabled: PluginRegistry.isPluginEnabled(plugin.metadata.pluginId),
             }))
     }, [])
 
-    // 切换插件启用状态
+    // 切换插件启用状态（带依赖提示）
     const handleTogglePlugin = useCallback((pluginId: string, enabled: boolean) => {
+        if (enabled) {
+            // 启用插件时，检查是否需要启用依赖
+            const requiredDeps = PluginRegistry.getRequiredDependencies(pluginId)
+            if (requiredDeps.length > 0) {
+                const depNames = requiredDeps.map(id => {
+                    const plugin = PluginRegistry.getPlugin(id)
+                    return plugin?.metadata.displayName || id
+                }).join('、')
+                toast.success(`已同时启用依赖插件：${depNames}`, { duration: 3000 })
+            }
+        } else {
+            // 禁用插件时，检查是否有依赖该插件的插件
+            const dependents = PluginRegistry.getDependentPlugins(pluginId)
+            if (dependents.length > 0) {
+                const depNames = dependents.map(id => {
+                    const plugin = PluginRegistry.getPlugin(id)
+                    return plugin?.metadata.displayName || id
+                }).join('、')
+                toast.success(`已同时禁用依赖插件：${depNames}`, { duration: 3000 })
+            }
+        }
         PluginRegistry.setPluginEnabled(pluginId, enabled)
-        // 状态变化会通过 subscribe 自动触发更新
     }, [])
 
     // 启用所有插件
@@ -50,7 +72,7 @@ export function PluginManager({ className }: PluginManagerProps) {
 
     // 禁用所有插件（保留核心插件）
     const handleDisableAll = useCallback(() => {
-        const corePlugins = ['network', 'log', 'database', "performance"]
+        const corePlugins = ['http', 'log', 'database']
         for (const plugin of plugins) {
             if (!corePlugins.includes(plugin.pluginId)) {
                 PluginRegistry.setPluginEnabled(plugin.pluginId, false)
@@ -115,7 +137,12 @@ export function PluginManager({ className }: PluginManagerProps) {
                         <div className="max-h-[400px] overflow-auto">
                             {plugins.map((plugin) => {
                                 const isEnabled = PluginRegistry.isPluginEnabled(plugin.pluginId)
-                                const isCore = ['network', 'log', 'database', "performance"].includes(plugin.pluginId)
+                                const isCore = ['http', 'log', 'database'].includes(plugin.pluginId)
+                                // 获取依赖的插件名称
+                                const dependencyNames = plugin.dependencies.map(depId => {
+                                    const dep = PluginRegistry.getPlugin(depId)
+                                    return dep?.metadata.displayName || depId
+                                })
 
                                 return (
                                     <div
@@ -151,6 +178,12 @@ export function PluginManager({ className }: PluginManagerProps) {
                                             <div className="text-xs text-text-muted truncate">
                                                 {plugin.description}
                                             </div>
+                                            {/* 依赖提示 */}
+                                            {dependencyNames.length > 0 && (
+                                                <div className="text-xs text-yellow-500/80 mt-0.5">
+                                                    依赖: {dependencyNames.join('、')}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* 开关 */}

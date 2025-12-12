@@ -191,8 +191,34 @@ final class DataCleanupService: LifecycleHandler, @unchecked Sendable {
                 .filter(\.$disconnectTime != nil)
                 .delete()
 
+            // 清理过期性能指标数据
+            let perfMetricsDeleted = try await PerformanceMetricsModel.query(on: db)
+                .filter(\.$timestamp < cutoffDate)
+                .count()
+            try await PerformanceMetricsModel.query(on: db)
+                .filter(\.$timestamp < cutoffDate)
+                .delete()
+
+            // 清理过期卡顿事件
+            let jankEventsDeleted = try await JankEventModel.query(on: db)
+                .filter(\.$timestamp < cutoffDate)
+                .count()
+            try await JankEventModel.query(on: db)
+                .filter(\.$timestamp < cutoffDate)
+                .delete()
+
+            // 清理已解决的过期告警（保留未解决的）
+            let alertsDeleted = try await AlertModel.query(on: db)
+                .filter(\.$timestamp < cutoffDate)
+                .filter(\.$isResolved == true)
+                .count()
+            try await AlertModel.query(on: db)
+                .filter(\.$timestamp < cutoffDate)
+                .filter(\.$isResolved == true)
+                .delete()
+
             app?.logger.info(
-                "Data cleanup completed: HTTP=\(httpDeleted), Log=\(logDeleted), WSFrame=\(wsFrameDeleted), WSSession=\(wsSessionDeleted)"
+                "Data cleanup completed: HTTP=\(httpDeleted), Log=\(logDeleted), WSFrame=\(wsFrameDeleted), WSSession=\(wsSessionDeleted), PerfMetrics=\(perfMetricsDeleted), JankEvents=\(jankEventsDeleted), Alerts=\(alertsDeleted)"
             )
         } catch {
             app?.logger.error("Data cleanup failed: \(error)")

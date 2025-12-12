@@ -61,7 +61,12 @@ export default {
         },
         // 状态码颜色
         status: {
-          success: '#22c55e',
+          success: 'var(--color-status-success)',
+          'success-bg': 'var(--color-status-success-bg)',
+          error: 'var(--color-status-error)',
+          'error-bg': 'var(--color-status-error-bg)',
+          warning: 'var(--color-status-warning)',
+          'warning-bg': 'var(--color-status-warning-bg)',
           redirect: '#3b82f6',
           client: '#f59e0b',
           server: '#ef4444',

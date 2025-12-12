@@ -1,7 +1,7 @@
 import type { MockRule, MockTargetType } from '@/types'
 import { formatSmartTime } from '@/utils/format'
 import clsx from 'clsx'
-import { MockIcon, SparklesIcon, ArrowRightIcon, PencilIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon, UploadIcon, DownloadIcon } from './icons'
+import { MockIcon, ArrowRightIcon, PencilIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon, UploadIcon, DownloadIcon } from './icons'
 
 interface MockRuleListProps {
   rules: MockRule[]
@@ -33,8 +33,8 @@ export function MockRuleList({
         <MockIcon size={48} className="mb-4 opacity-50" />
         <p className="text-lg font-medium mb-2">暂无 Mock 规则</p>
         <p className="text-sm mb-6">创建规则来模拟 API 响应或修改请求</p>
-        <button onClick={onCreateNew} className="btn bg-primary text-white hover:bg-primary-dark flex items-center gap-2">
-          <SparklesIcon size={16} /> 创建第一条规则
+        <button onClick={onCreateNew} className="btn btn-primary">
+          创建第一条规则
         </button>
       </div>
     )

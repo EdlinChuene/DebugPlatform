@@ -16,7 +16,7 @@ public enum BuiltinBackendPlugins {
     /// 创建所有内置后端插件实例
     public static func createAll() -> [BackendPlugin] {
         [
-            NetworkBackendPlugin(),
+            HttpBackendPlugin(),
             LogBackendPlugin(),
             WebSocketBackendPlugin(),
             DatabaseBackendPlugin(),
@@ -663,7 +663,7 @@ public final class MockBackendPlugin: BackendPlugin, @unchecked Sendable {
     public let displayName = "Mock"
     public let version = "1.0.0"
     public let pluginDescription = "Mock 规则管理后端"
-    public let dependencies: [String] = [BackendPluginId.network]
+    public let dependencies: [String] = [BackendPluginId.http]
 
     public private(set) var state: BackendPluginState = .uninitialized
     private var context: BackendPluginContext?
@@ -805,7 +805,7 @@ public final class BreakpointBackendPlugin: BackendPlugin, @unchecked Sendable {
     public let displayName = "Breakpoint"
     public let version = "1.0.0"
     public let pluginDescription = "断点调试后端"
-    public let dependencies: [String] = [BackendPluginId.network]
+    public let dependencies: [String] = [BackendPluginId.http]
 
     public private(set) var state: BackendPluginState = .uninitialized
     private var context: BackendPluginContext?
@@ -976,7 +976,7 @@ public final class ChaosBackendPlugin: BackendPlugin, @unchecked Sendable {
     public let displayName = "Chaos"
     public let version = "1.0.0"
     public let pluginDescription = "故障注入后端"
-    public let dependencies: [String] = [BackendPluginId.network]
+    public let dependencies: [String] = [BackendPluginId.http]
 
     public private(set) var state: BackendPluginState = .uninitialized
     private var context: BackendPluginContext?

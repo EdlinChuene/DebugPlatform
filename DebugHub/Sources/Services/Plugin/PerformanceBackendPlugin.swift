@@ -31,6 +31,10 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
     private var activeAlerts: [String: [AlertDTO]] = [:]
     private let alertsLock = NSLock()
 
+    /// 内存中缓存的 App 启动时间（按设备 ID）
+    private var appLaunchMetrics: [String: AppLaunchMetricsDTO] = [:]
+    private let launchLock = NSLock()
+
     /// 最大缓存数量（每设备）
     private let maxCacheSize = 300 // 5 分钟的数据（1秒1条）
 
@@ -47,9 +51,11 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
 
         // 实时指标
         perf.get("realtime", use: getRealtimeMetrics)
-
         // 历史指标
         perf.get("history", use: getHistoryMetrics)
+
+        // 趋势分析
+        perf.get("trends", use: getTrends)
 
         // 卡顿事件
         perf.get("janks", use: listJankEvents)
@@ -73,6 +79,9 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
         alerts.delete("rules", ":ruleId", use: deleteAlertRule)
         alerts.put("rules", ":ruleId", use: updateAlertRule)
         alerts.post(":alertId", "resolve", use: resolveAlert)
+
+        // App 启动时间
+        perf.get("launch", use: getAppLaunchMetrics)
     }
 
     public func handleEvent(_ event: PluginEventDTO, from deviceId: String) async {
@@ -83,6 +92,8 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
             await handleJankEvent(event, from: deviceId)
         case "performance_alert":
             await handlePerformanceAlert(event, from: deviceId)
+        case "app_launch":
+            await handleAppLaunchEvent(event, from: deviceId)
         default:
             break
         }
@@ -94,7 +105,6 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
     private func addMetricsToCache(_ metrics: [PerformanceMetricsDTO], deviceId: String) {
         metricsLock.lock()
         defer { metricsLock.unlock() }
-
         if realtimeMetrics[deviceId] == nil {
             realtimeMetrics[deviceId] = []
         }
@@ -170,6 +180,20 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
         return nil
     }
 
+    /// 同步添加 App 启动时间到缓存
+    private func addAppLaunchToCache(_ metrics: AppLaunchMetricsDTO, deviceId: String) {
+        launchLock.lock()
+        defer { launchLock.unlock() }
+        appLaunchMetrics[deviceId] = metrics
+    }
+
+    /// 同步获取 App 启动时间
+    private func getAppLaunchFromCache(deviceId: String) -> AppLaunchMetricsDTO? {
+        launchLock.lock()
+        defer { launchLock.unlock() }
+        return appLaunchMetrics[deviceId]
+    }
+
     // MARK: - Event Handlers
 
     private func handlePerformanceMetrics(_ event: PluginEventDTO, from deviceId: String) async {
@@ -242,6 +266,52 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
 
         } catch {
             context?.logger.error("Failed to process performance alert: \(error)")
+        }
+    }
+
+    private func handleAppLaunchEvent(_ event: PluginEventDTO, from deviceId: String) async {
+        do {
+            let launchMetrics = try event.decodePayload(as: AppLaunchMetricsDTO.self)
+
+            // 保存到内存缓存
+            addAppLaunchToCache(launchMetrics, deviceId: deviceId)
+
+            // 构建 PerformanceEventDTO 并通过 RealtimeStreamHandler 广播
+            // 这样 WebUI 可以通过标准的 performanceEvent 消息接收
+            let perfEventDTO = PerformanceEventDTO(
+                id: UUID().uuidString,
+                eventType: "appLaunch",
+                timestamp: launchMetrics.timestamp,
+                metrics: nil,
+                jank: nil,
+                alert: nil,
+                appLaunch: PerfAppLaunchDTO(
+                    totalTime: launchMetrics.totalTime,
+                    preMainTime: launchMetrics.preMainTime,
+                    mainToLaunchTime: launchMetrics.mainToLaunchTime,
+                    launchToFirstFrameTime: launchMetrics.launchToFirstFrameTime,
+                    timestamp: launchMetrics.timestamp
+                )
+            )
+            
+            // 通过 RealtimeStreamHandler 广播给 WebUI
+            RealtimeStreamHandler.shared.broadcast(events: [.performance(perfEventDTO)], deviceId: deviceId)
+
+            // 构建日志输出
+            var logParts = ["App launch recorded: total=\(launchMetrics.totalTime)ms"]
+            if let preMain = launchMetrics.preMainTime {
+                logParts.append("preMain=\(preMain)ms")
+            }
+            if let mainToLaunch = launchMetrics.mainToLaunchTime {
+                logParts.append("mainToLaunch=\(mainToLaunch)ms")
+            }
+            if let launchToFrame = launchMetrics.launchToFirstFrameTime {
+                logParts.append("launchToFirstFrame=\(launchToFrame)ms")
+            }
+            context?.logger.info("\(logParts.joined(separator: ", ")) [device: \(deviceId)]")
+
+        } catch {
+            context?.logger.error("Failed to process app launch event: \(error)")
         }
     }
 
@@ -363,6 +433,147 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
         )
     }
 
+    /// 获取性能趋势分析
+    func getTrends(req: Request) async throws -> PerformanceTrendsResponse {
+        guard let deviceId = req.parameters.get("deviceId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId")
+        }
+
+        // 分析时间范围（默认最近1小时）
+        let minutes = req.query[Int.self, at: "minutes"] ?? 60
+        let cutoff = Date().addingTimeInterval(-TimeInterval(minutes * 60))
+
+        let metrics = try await PerformanceMetricsModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .filter(\.$timestamp >= cutoff)
+            .sort(\.$timestamp, .ascending)
+            .all()
+
+        guard metrics.count >= 2 else {
+            return PerformanceTrendsResponse(
+                deviceId: deviceId,
+                analysisMinutes: minutes,
+                dataPoints: metrics.count,
+                cpu: nil,
+                memory: nil,
+                fps: nil,
+                overall: .stable,
+                recommendations: ["数据点不足，无法进行趋势分析"]
+            )
+        }
+
+        // 将数据分成前后两半进行对比
+        let midIndex = metrics.count / 2
+        let firstHalf = Array(metrics[0..<midIndex])
+        let secondHalf = Array(metrics[midIndex...])
+
+        // CPU 趋势分析
+        let cpuTrend = analyzeTrend(
+            first: firstHalf.compactMap(\.cpuUsage),
+            second: secondHalf.compactMap(\.cpuUsage),
+            metricName: "CPU"
+        )
+
+        // 内存趋势分析
+        let memoryTrend = analyzeTrend(
+            first: firstHalf.compactMap { $0.memoryFootprintRatio }.map { $0 * 100 },
+            second: secondHalf.compactMap { $0.memoryFootprintRatio }.map { $0 * 100 },
+            metricName: "Memory"
+        )
+
+        // FPS 趋势分析（FPS 下降是负面趋势）
+        let fpsTrend = analyzeTrend(
+            first: firstHalf.compactMap(\.fps),
+            second: secondHalf.compactMap(\.fps),
+            metricName: "FPS",
+            invertTrend: true
+        )
+
+        // 综合评估
+        let trends = [cpuTrend?.trend, memoryTrend?.trend, fpsTrend?.trend].compactMap { $0 }
+        let degradingCount = trends.filter { $0 == .degrading }.count
+        let improvingCount = trends.filter { $0 == .improving }.count
+
+        let overall: TrendDirection
+        if degradingCount >= 2 {
+            overall = .degrading
+        } else if improvingCount >= 2 {
+            overall = .improving
+        } else {
+            overall = .stable
+        }
+
+        // 生成建议
+        var recommendations: [String] = []
+
+        if let cpu = cpuTrend, cpu.trend == .degrading {
+            recommendations.append("CPU 使用率呈上升趋势（+\(String(format: "%.1f", cpu.changePercent))%），建议检查后台任务或优化算法")
+        }
+        if let memory = memoryTrend, memory.trend == .degrading {
+            recommendations.append("内存使用呈上升趋势（+\(String(format: "%.1f", memory.changePercent))%），可能存在内存泄漏")
+        }
+        if let fps = fpsTrend, fps.trend == .degrading {
+            recommendations.append("帧率呈下降趋势（\(String(format: "%.1f", fps.changePercent))%），建议优化 UI 渲染性能")
+        }
+
+        if recommendations.isEmpty && overall == .stable {
+            recommendations.append("性能表现稳定，无明显异常")
+        } else if overall == .improving {
+            recommendations.append("整体性能呈改善趋势")
+        }
+
+        return PerformanceTrendsResponse(
+            deviceId: deviceId,
+            analysisMinutes: minutes,
+            dataPoints: metrics.count,
+            cpu: cpuTrend,
+            memory: memoryTrend,
+            fps: fpsTrend,
+            overall: overall,
+            recommendations: recommendations
+        )
+    }
+
+    /// 分析单项指标趋势
+    private func analyzeTrend(
+        first: [Double],
+        second: [Double],
+        metricName: String,
+        invertTrend: Bool = false
+    ) -> MetricTrend? {
+        guard !first.isEmpty, !second.isEmpty else { return nil }
+
+        let firstAvg = first.reduce(0, +) / Double(first.count)
+        let secondAvg = second.reduce(0, +) / Double(second.count)
+
+        let change = secondAvg - firstAvg
+        let changePercent = firstAvg > 0 ? (change / firstAvg) * 100 : 0
+
+        // 判断趋势方向（5% 以上的变化视为显著）
+        let trend: TrendDirection
+        let significantChange = abs(changePercent) > 5
+
+        if !significantChange {
+            trend = .stable
+        } else if invertTrend {
+            // FPS：下降是负面，上升是正面
+            trend = change < 0 ? .degrading : .improving
+        } else {
+            // CPU/Memory：上升是负面，下降是正面
+            trend = change > 0 ? .degrading : .improving
+        }
+
+        return MetricTrend(
+            metricName: metricName,
+            trend: trend,
+            firstHalfAverage: firstAvg,
+            secondHalfAverage: secondAvg,
+            changePercent: changePercent,
+            minValue: min(first.min() ?? 0, second.min() ?? 0),
+            maxValue: max(first.max() ?? 0, second.max() ?? 0)
+        )
+    }
+
     /// 列出卡顿事件
     func listJankEvents(req: Request) async throws -> JankEventListResponse {
         guard let deviceId = req.parameters.get("deviceId") else {
@@ -393,6 +604,20 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
             total: total,
             page: page,
             pageSize: pageSize
+        )
+    }
+
+    /// 获取 App 启动时间指标
+    func getAppLaunchMetrics(req: Request) async throws -> AppLaunchResponse {
+        guard let deviceId = req.parameters.get("deviceId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId")
+        }
+
+        let launchMetrics = getAppLaunchFromCache(deviceId: deviceId)
+
+        return AppLaunchResponse(
+            deviceId: deviceId,
+            launchMetrics: launchMetrics
         )
     }
 
@@ -761,11 +986,14 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
             )
         }
 
+        // 注：聚合数据时，network 和 diskIO 暂不支持聚合
         return PerformanceMetricsDTO(
             timestamp: timestamp,
             cpu: cpuMetrics,
             memory: memoryMetrics,
-            fps: fpsMetrics
+            fps: fpsMetrics,
+            network: nil,
+            diskIO: nil
         )
     }
 
@@ -784,6 +1012,8 @@ public struct PerformanceMetricsDTO: Codable, Content {
     public let cpu: CPUMetricsDTO?
     public let memory: MemoryMetricsDTO?
     public let fps: FPSMetricsDTO?
+    public let network: NetworkTrafficMetricsDTO?
+    public let diskIO: DiskIOMetricsDTO?
 
     public func toDictionary() -> [String: Any] {
         var dict: [String: Any] = ["timestamp": ISO8601DateFormatter().string(from: timestamp)]
@@ -812,6 +1042,24 @@ public struct PerformanceMetricsDTO: Codable, Content {
                 "averageRenderTime": fps.averageRenderTime,
             ]
         }
+        if let network {
+            dict["network"] = [
+                "bytesReceived": network.bytesReceived,
+                "bytesSent": network.bytesSent,
+                "receivedRate": network.receivedRate,
+                "sentRate": network.sentRate,
+            ]
+        }
+        if let diskIO {
+            dict["diskIO"] = [
+                "readBytes": diskIO.readBytes,
+                "writeBytes": diskIO.writeBytes,
+                "readOps": diskIO.readOps,
+                "writeOps": diskIO.writeOps,
+                "readRate": diskIO.readRate,
+                "writeRate": diskIO.writeRate,
+            ]
+        }
         return dict
     }
 }
@@ -838,8 +1086,89 @@ public struct FPSMetricsDTO: Codable, Content {
     public let averageRenderTime: Double
 }
 
+/// 网络流量指标 DTO
+public struct NetworkTrafficMetricsDTO: Codable, Content {
+    public let bytesReceived: UInt64
+    public let bytesSent: UInt64
+    public let receivedRate: Double
+    public let sentRate: Double
+}
+
+/// 磁盘 I/O 指标 DTO
+public struct DiskIOMetricsDTO: Codable, Content {
+    public let readBytes: UInt64
+    public let writeBytes: UInt64
+    public let readOps: UInt64
+    public let writeOps: UInt64
+    public let readRate: Double
+    public let writeRate: Double
+}
+
+/// App 启动时间指标 DTO（分阶段记录）
+public struct AppLaunchMetricsDTO: Codable, Content {
+    /// 总启动时间（毫秒）
+    public let totalTime: Double
+    /// PreMain 阶段耗时（毫秒）：processStart -> mainExecuted
+    public let preMainTime: Double?
+    /// Main 到 Launch 阶段耗时（毫秒）：mainExecuted -> didFinishLaunching
+    public let mainToLaunchTime: Double?
+    /// Launch 到首帧阶段耗时（毫秒）：didFinishLaunching -> firstFrameRendered
+    public let launchToFirstFrameTime: Double?
+    /// 记录时间戳
+    public let timestamp: Date
+
+    public func toDictionary() -> [String: Any] {
+        var result: [String: Any] = [
+            "totalTime": totalTime,
+            "timestamp": ISO8601DateFormatter().string(from: timestamp),
+        ]
+        if let preMainTime = preMainTime {
+            result["preMainTime"] = preMainTime
+        }
+        if let mainToLaunchTime = mainToLaunchTime {
+            result["mainToLaunchTime"] = mainToLaunchTime
+        }
+        if let launchToFirstFrameTime = launchToFirstFrameTime {
+            result["launchToFirstFrameTime"] = launchToFirstFrameTime
+        }
+        return result
+    }
+}
+
 public struct PerformanceMetricsBatchDTO: Codable {
     public let metrics: [PerformanceMetricsDTO]
+}
+
+// MARK: - Trends DTOs
+
+/// 趋势方向
+public enum TrendDirection: String, Codable, Content {
+    case improving = "improving"
+    case stable = "stable"
+    case degrading = "degrading"
+}
+
+/// 单项指标趋势
+public struct MetricTrend: Codable, Content {
+    public let metricName: String
+    public let trend: TrendDirection
+    public let firstHalfAverage: Double
+    public let secondHalfAverage: Double
+    public let changePercent: Double
+    public let minValue: Double
+    public let maxValue: Double
+}
+
+/// 趋势分析响应
+public struct PerformanceTrendsResponse: Content {
+    public let deviceId: String
+    public let analysisMinutes: Int
+    public let dataPoints: Int
+    public let cpu: MetricTrend?
+    public let memory: MetricTrend?
+    public let fps: MetricTrend?
+    public let overall: TrendDirection
+    public let recommendations: [String]
 }
 
 /// 卡顿事件 DTO
@@ -910,11 +1239,19 @@ public struct PerformanceStatusResponse: Content {
     public let recentJankCount: Int
 }
 
+public struct AppLaunchResponse: Content {
+    public let deviceId: String
+    public let launchMetrics: AppLaunchMetricsDTO?
+}
+
 public struct PerformanceConfigInput: Content {
     public let sampleInterval: Double?
     public let monitorFPS: Bool?
     public let monitorCPU: Bool?
     public let monitorMemory: Bool?
+    public let monitorNetwork: Bool?
+    public let monitorDiskIO: Bool?
+    public let smartSamplingEnabled: Bool?
 }
 
 public struct PerformanceConfigResponse: Content {

@@ -2,9 +2,9 @@
 
 本文档是 Debug Platform 的总体规划。各功能模块的详细路线图请参阅对应文档。
 
-> **当前版本**: v1.4.0 | [更新日志](CHANGELOG.md)
+> **当前版本**: 1.4.0 | [更新日志](CHANGELOG.md)
 >
-> **最后更新**: 2025-12-11
+> **最后更新**: 2025-12-12
 
 ---
 
@@ -14,9 +14,9 @@
 
 | 层级 | 状态 | 说明 |
 |------|------|------|
-| **DebugProbe (iOS SDK)** | ✅ 100% | 7 个内置插件，统一 PluginManager |
-| **DebugHub (Vapor 后端)** | ✅ 100% | 7 个 Backend 插件，BackendPluginRegistry |
-| **WebUI (React 前端)** | ✅ 100% | 7 个 Frontend 插件，PluginRenderer |
+| **DebugProbe (iOS SDK)** | ✅ 100% | 8 个内置插件，统一 PluginManager |
+| **DebugHub (Vapor 后端)** | ✅ 100% | 8 个 Backend 插件，BackendPluginRegistry |
+| **WebUI (React 前端)** | ✅ 100% | 8 个 Frontend 插件，PluginRenderer |
 
 ---
 
@@ -24,14 +24,14 @@
 
 | 模块 | 文档 | 当前状态 | 下一步 |
 |------|------|----------|--------|
-| **HTTP Inspector** | [HTTP_INSPECTOR_ROADMAP.md](HTTP_INSPECTOR_ROADMAP.md) | ✅ v1.3 稳定 | 请求缓存 |
-| **WebSocket Inspector** | [WS_INSPECTOR_ROADMAP.md](WS_INSPECTOR_ROADMAP.md) | ✅ v1.2 稳定 | 消息搜索/过滤 |
-| **Log Viewer** | [LOG_VIEWER_ROADMAP.md](LOG_VIEWER_ROADMAP.md) | ✅ v1.3 稳定 | 搜索历史 |
-| **DB Inspector** | [DB_INSPECTOR_ROADMAP.md](DB_INSPECTOR_ROADMAP.md) | ✅ v1.3 稳定 | 数据编辑 |
-| **Mock Engine** | [MOCK_ENGINE_ROADMAP.md](MOCK_ENGINE_ROADMAP.md) | ✅ v1.2 稳定 | 动态响应模板 |
-| **Breakpoint** | [BREAKPOINT_ROADMAP.md](BREAKPOINT_ROADMAP.md) | ✅ v1.3 稳定 | 请求修改 UI |
-| **Chaos Engine** | [CHAOS_ENGINE_ROADMAP.md](CHAOS_ENGINE_ROADMAP.md) | ✅ v1.3 稳定 | DNS 失败模拟 |
-| **Performance Monitor** | [PERFORMANCE_MONITOR_ROADMAP.md](PERFORMANCE_MONITOR_ROADMAP.md) | 📋 规划中 | 基础指标采集 |
+| **HTTP Inspector** | [HTTP_INSPECTOR_ROADMAP.md](HTTP_INSPECTOR_ROADMAP.md) | ✅ 1.3 稳定 | 请求缓存 |
+| **WebSocket Inspector** | [WS_INSPECTOR_ROADMAP.md](WS_INSPECTOR_ROADMAP.md) | ✅ 1.2 稳定 | 消息搜索/过滤 |
+| **Log Viewer** | [LOG_VIEWER_ROADMAP.md](LOG_VIEWER_ROADMAP.md) | ✅ 1.3 稳定 | 搜索历史 |
+| **DB Inspector** | [DB_INSPECTOR_ROADMAP.md](DB_INSPECTOR_ROADMAP.md) | ✅ 1.3 稳定 | 数据编辑 |
+| **Mock Engine** | [MOCK_ENGINE_ROADMAP.md](MOCK_ENGINE_ROADMAP.md) | ✅ 1.2 稳定 | 动态响应模板 |
+| **Breakpoint** | [BREAKPOINT_ROADMAP.md](BREAKPOINT_ROADMAP.md) | ✅ 1.3 稳定 | 请求修改 UI |
+| **Chaos Engine** | [CHAOS_ENGINE_ROADMAP.md](CHAOS_ENGINE_ROADMAP.md) | ✅ 1.3 稳定 | DNS 失败模拟 |
+| **Performance Monitor** | [PERFORMANCE_MONITOR_ROADMAP.md](PERFORMANCE_MONITOR_ROADMAP.md) | 🚧 开发中 | 实时仪表盘 |
 
 ---
 
@@ -139,17 +139,26 @@ debug_platform_database_size_bytes{}
 
 | 版本 | 计划内容 | 预计时间 |
 |------|----------|----------|
-| v1.5 | WebSocket 搜索/过滤 + 请求缓存 | 2025 Q1 |
-| v1.6 | 会话录制与回放 | 2025 Q1 |
-| v2.0 | 多设备对比 + Prometheus | 2025 Q2 |
+| 1.5 | WebSocket 搜索/过滤 + 请求缓存 | 2025 Q1 |
+| 1.6 | 会话录制与回放 | 2025 Q1 |
+| 2.0 | 多设备对比 + Prometheus | 2025 Q2 |
+
+---
+
+## 📖 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [ANDROID_PROBE_GUIDE.md](ANDROID_PROBE_GUIDE.md) | Android 版 DebugProbe SDK 开发指南 |
+| [PROMPTS.md](PROMPTS.md) | AI 开发 Prompts 参考 |
+| [CHANGELOG.md](CHANGELOG.md) | 更新日志 |
 
 ---
 
 ## 📝 已废弃文档
 
-以下文档已在 v1.4.0 版本中移除（历史参考用的 AI Prompts 和进度追踪）：
+以下文档已在 1.4.0 版本中移除（历史参考用的 AI Prompts 和进度追踪）：
 
 - ~~PLUGIN_REFACTOR_PROMPTS_1.md~~
 - ~~PLUGIN_REFACTOR_PROMPTS_2.md~~
 - ~~PLUGIN_REFACTOR_STATUS.md~~
-- ~~PROMPTS.md~~

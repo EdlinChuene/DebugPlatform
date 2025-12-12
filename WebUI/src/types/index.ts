@@ -447,11 +447,12 @@ export interface ServerStats {
 
 export interface PerformanceEventData {
   id: string
-  eventType: 'metrics' | 'jank' | 'alert' | 'alertResolved'
+  eventType: 'metrics' | 'jank' | 'alert' | 'alertResolved' | 'appLaunch'
   timestamp: string
   metrics?: PerformanceMetricsItem[]
   jank?: JankEventItem
   alert?: AlertEventItem
+  appLaunch?: AppLaunchEventItem
 }
 
 export interface PerformanceMetricsItem {
@@ -475,6 +476,18 @@ export interface PerformanceMetricsItem {
     jankCount: number
     averageRenderTime: number
   }
+  network?: {
+    bytesReceived: number
+    bytesSent: number
+    downloadRate: number
+    uploadRate: number
+  }
+  diskIO?: {
+    readBytes: number
+    writeBytes: number
+    readRate: number
+    writeRate: number
+  }
 }
 
 export interface JankEventItem {
@@ -496,4 +509,13 @@ export interface AlertEventItem {
   timestamp: string
   isResolved: boolean
   resolvedAt?: string
+}
+
+// SDK 发送的实际数据结构（分阶段记录）
+export interface AppLaunchEventItem {
+  totalTime: number             // 总启动时间（毫秒）
+  preMainTime?: number          // PreMain 阶段耗时（毫秒）
+  mainToLaunchTime?: number     // Main 到 Launch 阶段耗时（毫秒）
+  launchToFirstFrameTime?: number // Launch 到首帧阶段耗时（毫秒）
+  timestamp: string             // 记录时间
 }

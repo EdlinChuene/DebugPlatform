@@ -5,7 +5,7 @@ import { ReactNode } from 'react'
 
 // 内置插件 ID 常量
 export const BuiltinPluginId = {
-    NETWORK: 'network',
+    HTTP: 'http',
     LOG: 'log',
     DATABASE: 'database',
     WEBSOCKET: 'websocket',

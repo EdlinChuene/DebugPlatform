@@ -180,6 +180,7 @@ struct PerformanceEventDTO: Content {
     let metrics: [PerfMetricsItemDTO]?
     let jank: PerfJankEventDTO?
     let alert: PerfAlertEventDTO?
+    let appLaunch: PerfAppLaunchDTO?
 }
 
 /// 性能指标 DTO（仅用于事件传输）
@@ -188,6 +189,8 @@ struct PerfMetricsItemDTO: Codable {
     let cpu: PerfCPUMetricsDTO?
     let memory: PerfMemoryMetricsDTO?
     let fps: PerfFPSMetricsDTO?
+    let network: PerfNetworkTrafficDTO?
+    let diskIO: PerfDiskIODTO?
 }
 
 struct PerfCPUMetricsDTO: Codable {
@@ -212,6 +215,22 @@ struct PerfFPSMetricsDTO: Codable {
     let averageRenderTime: Double
 }
 
+struct PerfNetworkTrafficDTO: Codable {
+    let bytesReceived: UInt64
+    let bytesSent: UInt64
+    let receivedRate: Double
+    let sentRate: Double
+}
+
+struct PerfDiskIODTO: Codable {
+    let readBytes: UInt64
+    let writeBytes: UInt64
+    let readOps: UInt64
+    let writeOps: UInt64
+    let readRate: Double
+    let writeRate: Double
+}
+
 struct PerfJankEventDTO: Codable {
     let id: String
     let timestamp: Date
@@ -231,4 +250,17 @@ struct PerfAlertEventDTO: Codable {
     let timestamp: Date
     let isResolved: Bool
     let resolvedAt: Date?
+}
+
+struct PerfAppLaunchDTO: Codable {
+    /// 总启动时间（毫秒）
+    let totalTime: Double
+    /// PreMain 阶段耗时（毫秒）：processStart -> mainExecuted
+    let preMainTime: Double?
+    /// Main 到 Launch 阶段耗时（毫秒）：mainExecuted -> didFinishLaunching
+    let mainToLaunchTime: Double?
+    /// Launch 到首帧阶段耗时（毫秒）：didFinishLaunching -> firstFrameRendered
+    let launchToFirstFrameTime: Double?
+    /// 记录时间戳
+    let timestamp: Date
 }

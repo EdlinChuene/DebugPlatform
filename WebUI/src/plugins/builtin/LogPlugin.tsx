@@ -171,7 +171,7 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
     return (
         <div className="h-full flex flex-col">
             {/* 工具栏 */}
-            <div className="flex-shrink-0 px-3 py-2 border-b border-border bg-bg-medium flex items-center justify-between">
+            <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-bg-medium flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {/* 刷新按钮 */}
                     <button
@@ -275,7 +275,7 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
                     {/* 连接状态 */}
                     <span className={clsx(
                         'px-2 py-0.5 rounded text-xs',
-                        isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                        isConnected ? 'bg-status-success-bg text-status-success' : 'bg-red-500/20 text-red-400'
                     )}>
                         {isConnected ? '已连接' : '已断开'}
                     </span>
@@ -292,7 +292,7 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
 
             {/* 过滤器面板 */}
             {showFilters && (
-                <div className="flex-shrink-0 px-3 py-2 border-b border-border bg-bg-medium">
+                <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-bg-medium">
                     <LogFilters
                         minLevel={filters.minLevel}
                         subsystems={subsystems}
@@ -331,15 +331,15 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
 
                 {/* 悬浮滚动按钮 */}
                 {scrollControls && (
-                    <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-10">
+                    <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
                         <button
                             onClick={() => scrollControls.scrollToTop()}
                             disabled={scrollControls.isAtTop}
                             className={clsx(
-                                "w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-lg",
+                                "w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-lg",
                                 scrollControls.isAtTop
-                                    ? "bg-bg-dark/50 text-text-muted/30 cursor-not-allowed"
-                                    : "bg-primary/90 text-white hover:bg-primary border border-primary"
+                                    ? "bg-primary/30 text-white/30 cursor-not-allowed"
+                                    : "bg-primary text-white hover:bg-primary/80"
                             )}
                             title="滚动到顶部"
                         >
@@ -349,10 +349,10 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
                             onClick={() => scrollControls.scrollToBottom()}
                             disabled={scrollControls.isAtBottom}
                             className={clsx(
-                                "w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-lg",
+                                "w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-lg",
                                 scrollControls.isAtBottom
-                                    ? "bg-bg-dark/50 text-text-muted/30 cursor-not-allowed"
-                                    : "bg-primary/90 text-white hover:bg-primary border border-primary"
+                                    ? "bg-primary/30 text-white/30 cursor-not-allowed"
+                                    : "bg-primary text-white hover:bg-primary/80"
                             )}
                             title="滚动到底部"
                         >

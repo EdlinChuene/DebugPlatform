@@ -62,17 +62,23 @@ class PluginRegistryImpl {
         const plugin = this.getPlugin(pluginId)
         if (!plugin) return
 
-        plugin.isEnabled = enabled
-        this.enabledState.set(pluginId, enabled)
-
         // 处理依赖联动
         if (enabled) {
-            // 启用插件时，同时启用依赖该插件的所有插件
-            this.enableDependentPlugins(pluginId)
+            // 启用插件时，先检查并启用它依赖的插件
+            const enabledDeps = this.enableRequiredDependencies(pluginId)
+            if (enabledDeps.length > 0) {
+                console.log(`[PluginRegistry] Auto-enabled dependencies for ${pluginId}: ${enabledDeps.join(', ')}`)
+            }
         } else {
             // 禁用插件时，同时禁用依赖该插件的所有插件
-            this.disableDependentPlugins(pluginId)
+            const disabledDeps = this.disableDependentPlugins(pluginId)
+            if (disabledDeps.length > 0) {
+                console.log(`[PluginRegistry] Auto-disabled dependent plugins of ${pluginId}: ${disabledDeps.join(', ')}`)
+            }
         }
+
+        plugin.isEnabled = enabled
+        this.enabledState.set(pluginId, enabled)
 
         this.saveEnabledState()
         this.notifyChange()
@@ -80,6 +86,27 @@ class PluginRegistryImpl {
 
         // 同步插件状态到 DebugHub
         this.syncPluginStatesToHub()
+    }
+
+    // 检查并返回启用插件时需要同时启用的依赖插件列表
+    getRequiredDependencies(pluginId: string): string[] {
+        const plugin = this.getPlugin(pluginId)
+        if (!plugin) return []
+
+        const deps = plugin.metadata.dependencies || []
+        return deps.filter(dep => !this.isPluginEnabled(dep))
+    }
+
+    // 检查是否可以禁用插件（返回依赖该插件的已启用插件列表）
+    getDependentPlugins(pluginId: string): string[] {
+        const dependents: string[] = []
+        for (const [id, registration] of this.plugins) {
+            const deps = registration.plugin.metadata.dependencies
+            if (deps?.includes(pluginId) && this.isPluginEnabled(id)) {
+                dependents.push(id)
+            }
+        }
+        return dependents
     }
 
     // 同步所有插件状态到 DebugHub
@@ -105,30 +132,43 @@ class PluginRegistryImpl {
         this.syncPluginStatesToHub()
     }
 
-    // 启用依赖该插件的所有插件
-    private enableDependentPlugins(pluginId: string): void {
-        // 找到所有依赖该插件且当前被禁用的插件
-        for (const [id, registration] of this.plugins) {
-            const deps = registration.plugin.metadata.dependencies
-            if (deps?.includes(pluginId) && !this.isPluginEnabled(id)) {
-                registration.plugin.isEnabled = true
-                this.enabledState.set(id, true)
-                console.log(`[PluginRegistry] Auto-enabled dependent plugin: ${id}`)
+    // 启用插件所依赖的所有插件（返回被启用的插件列表）
+    private enableRequiredDependencies(pluginId: string): string[] {
+        const plugin = this.getPlugin(pluginId)
+        if (!plugin) return []
+
+        const deps = plugin.metadata.dependencies || []
+        const enabled: string[] = []
+
+        for (const depId of deps) {
+            if (!this.isPluginEnabled(depId)) {
+                const depPlugin = this.getPlugin(depId)
+                if (depPlugin) {
+                    depPlugin.isEnabled = true
+                    this.enabledState.set(depId, true)
+                    enabled.push(depId)
+                }
             }
         }
+
+        return enabled
     }
 
-    // 禁用依赖该插件的所有插件
-    private disableDependentPlugins(pluginId: string): void {
+    // 禁用依赖该插件的所有插件（返回被禁用的插件列表）
+    private disableDependentPlugins(pluginId: string): string[] {
+        const disabled: string[] = []
+
         // 找到所有依赖该插件且当前启用的插件
         for (const [id, registration] of this.plugins) {
             const deps = registration.plugin.metadata.dependencies
             if (deps?.includes(pluginId) && this.isPluginEnabled(id)) {
                 registration.plugin.isEnabled = false
                 this.enabledState.set(id, false)
-                console.log(`[PluginRegistry] Auto-disabled dependent plugin: ${id}`)
+                disabled.push(id)
             }
         }
+
+        return disabled
     }
 
     // 获取插件启用状态

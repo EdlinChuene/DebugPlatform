@@ -29,6 +29,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // 提高 chunk 大小警告阈值（包含 recharts 后合理的大小）
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -38,6 +40,8 @@ export default defineConfig({
           vendor: ['react', 'react-dom', 'react-router-dom'],
           // 将状态管理分离
           zustand: ['zustand'],
+          // 将 recharts 及其依赖分离成独立 chunk
+          recharts: ['recharts', 'd3-scale', 'd3-shape', 'd3-path', 'd3-color', 'd3-interpolate', 'd3-format', 'd3-time', 'd3-time-format', 'd3-array'],
         },
       },
       // 忽略 protobufjs 中 eval 的警告（这是库的内部实现，无法修改）

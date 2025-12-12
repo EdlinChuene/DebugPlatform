@@ -1,4 +1,4 @@
-// NetworkBackendPlugin.swift
+// HttpBackendPlugin.swift
 // DebugHub
 //
 // Created by Sun on 2025/12/09.
@@ -9,17 +9,17 @@ import Fluent
 import Foundation
 import Vapor
 
-// MARK: - Network Backend Plugin
+// MARK: - HTTP Backend Plugin
 
-/// 网络监控后端插件
+/// HTTP 请求监控后端插件
 /// 负责 HTTP 事件的持久化和 API 提供
-public final class NetworkBackendPlugin: BackendPlugin, @unchecked Sendable {
+public final class HttpBackendPlugin: BackendPlugin, @unchecked Sendable {
     // MARK: - Plugin Metadata
 
-    public let pluginId: String = BackendPluginId.network
-    public let displayName: String = "Network"
+    public let pluginId: String = BackendPluginId.http
+    public let displayName: String = "HTTP"
     public let version: String = "1.0.0"
-    public let pluginDescription: String = "HTTP 网络请求监控后端"
+    public let pluginDescription: String = "HTTP 请求监控后端"
     public let dependencies: [String] = []
 
     // MARK: - State
@@ -38,15 +38,15 @@ public final class NetworkBackendPlugin: BackendPlugin, @unchecked Sendable {
         self.context = context
         state = .booting
 
-        // 网络插件启动时不需要特殊初始化
+        // HTTP 插件启动时不需要特殊初始化
         // 数据库迁移已在主配置中完成
 
         state = .running
-        context.logger.info("NetworkBackendPlugin booted")
+        context.logger.info("HttpBackendPlugin booted")
     }
 
     public func registerRoutes(on routes: RoutesBuilder) throws {
-        // 网络相关路由
+        // HTTP 相关路由
         // 保持与现有 HTTPEventController 兼容的路由结构
         let http = routes.grouped("devices", ":deviceId", "http")
 
@@ -83,7 +83,7 @@ public final class NetworkBackendPlugin: BackendPlugin, @unchecked Sendable {
         state = .stopping
         // 清理资源
         state = .stopped
-        context?.logger.info("NetworkBackendPlugin shut down")
+        context?.logger.info("HttpBackendPlugin shut down")
     }
 
     // MARK: - Event Ingestion

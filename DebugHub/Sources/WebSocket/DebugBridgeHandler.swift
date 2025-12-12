@@ -231,7 +231,9 @@ final class DebugBridgeHandler: @unchecked Sendable {
                         timestamp: item.timestamp,
                         cpu: item.cpu.map { CPUMetricsDTO(usage: $0.usage, userTime: $0.userTime, systemTime: $0.systemTime, threadCount: $0.threadCount) },
                         memory: item.memory.map { MemoryMetricsDTO(usedMemory: $0.usedMemory, peakMemory: $0.peakMemory, freeMemory: $0.freeMemory, memoryPressure: $0.memoryPressure, footprintRatio: $0.footprintRatio) },
-                        fps: item.fps.map { FPSMetricsDTO(fps: $0.fps, droppedFrames: $0.droppedFrames, jankCount: $0.jankCount, averageRenderTime: $0.averageRenderTime) }
+                        fps: item.fps.map { FPSMetricsDTO(fps: $0.fps, droppedFrames: $0.droppedFrames, jankCount: $0.jankCount, averageRenderTime: $0.averageRenderTime) },
+                        network: item.network.map { NetworkTrafficMetricsDTO(bytesReceived: $0.bytesReceived, bytesSent: $0.bytesSent, receivedRate: $0.receivedRate, sentRate: $0.sentRate) },
+                        diskIO: item.diskIO.map { DiskIOMetricsDTO(readBytes: $0.readBytes, writeBytes: $0.writeBytes, readOps: $0.readOps, writeOps: $0.writeOps, readRate: $0.readRate, writeRate: $0.writeRate) }
                     )
                 }
                 let batch = PerformanceMetricsBatchDTO(metrics: metrics)
@@ -256,6 +258,18 @@ final class DebugBridgeHandler: @unchecked Sendable {
                     resolvedAt: alert.resolvedAt
                 )
                 payload = try encoder.encode(alertDTO)
+
+            case "appLaunch":
+                pluginEventType = "app_launch"
+                guard let appLaunch = event.appLaunch else { return }
+                let launchDTO = AppLaunchMetricsDTO(
+                    totalTime: appLaunch.totalTime,
+                    preMainTime: appLaunch.preMainTime,
+                    mainToLaunchTime: appLaunch.mainToLaunchTime,
+                    launchToFirstFrameTime: appLaunch.launchToFirstFrameTime,
+                    timestamp: appLaunch.timestamp
+                )
+                payload = try encoder.encode(launchDTO)
 
             default:
                 return

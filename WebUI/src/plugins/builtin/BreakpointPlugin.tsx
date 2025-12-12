@@ -32,7 +32,7 @@ class BreakpointPluginImpl implements FrontendPlugin {
         version: '1.0.0',
         description: '请求断点调试',
         icon: <BreakpointIcon size={16} />,
-        dependencies: [BuiltinPluginId.NETWORK],
+        dependencies: [BuiltinPluginId.HTTP],
     }
 
     state: PluginState = 'uninitialized'
@@ -255,7 +255,7 @@ function BreakpointPluginView({ context, isActive }: PluginRenderProps) {
                     {activeTab === 'rules' && (
                         <button
                             onClick={handleCreate}
-                            className="btn btn-primary text-sm"
+                            className="btn btn-primary text-xs px-2.5 py-1.5"
                         >
                             新建规则
                         </button>
@@ -280,7 +280,7 @@ function BreakpointPluginView({ context, isActive }: PluginRenderProps) {
                     {/* 规则统计 */}
                     <span>共 {rules.length} 条规则</span>
                     <span className="text-text-muted">•</span>
-                    <span className="text-green-400">{enabledCount} 条启用</span>
+                    <span className="text-status-success">{enabledCount} 条启用</span>
                 </div>
             </div>
 
@@ -325,11 +325,12 @@ function BreakpointPluginView({ context, isActive }: PluginRenderProps) {
                         {loading ? (
                             <div className="flex items-center justify-center h-full text-text-muted">加载中...</div>
                         ) : rules.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-text-muted">
-                                <PauseIcon size={48} className="mb-3 opacity-50" />
-                                <p className="text-sm mb-3">暂无断点规则</p>
-                                <button onClick={handleCreate} className="btn btn-primary text-sm">
-                                    + 新建规则
+                            <div className="flex flex-col items-center justify-center h-full text-text-muted py-12">
+                                <PauseIcon size={48} className="mb-4 opacity-50" />
+                                <p className="text-lg font-medium mb-2">暂无断点规则</p>
+                                <p className="text-sm mb-6">创建规则来拦截和调试请求</p>
+                                <button onClick={handleCreate} className="btn btn-primary">
+                                    创建第一条规则
                                 </button>
                             </div>
                         ) : (

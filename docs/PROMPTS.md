@@ -1,8 +1,8 @@
 # Debug Platform AI 开发 Prompts 参考
 
-本文档是为 AI Agent（如 GitHub Copilot）提供的项目上下文和开发 Prompts 参考，帮助 AI 更高效地理解和修改代码。
+本文档是为 AI Agent（如 GitHub Copilot、Cursor）提供的项目上下文和开发 Prompts 参考，帮助 AI 更高效地理解和修改代码。
 
-> **版本**: v1.4.0 | **最后更新**: 2025-12-11
+> **版本**: 1.4.0 | **最后更新**: 2025-12-12
 
 ---
 
@@ -12,21 +12,22 @@ Debug Platform 是一个全功能移动 App 调试平台，采用三层插件化
 
 | 层级 | 技术栈 | 位置 | 插件数量 |
 |------|--------|------|----------|
-| **DebugProbe (SDK)** | Swift + Combine | `DebugProbe/Sources/` | 7 个 |
-| **DebugHub (后端)** | Vapor + Fluent + PostgreSQL | `DebugHub/Sources/` | 7 个 |
-| **WebUI (前端)** | React 18 + TypeScript + Zustand + Vite | `WebUI/src/` | 7 个 |
+| **DebugProbe (SDK)** | Swift + Combine | `DebugProbe/Sources/` | 8 个 |
+| **DebugHub (后端)** | Vapor + Fluent + PostgreSQL | `DebugHub/Sources/` | 8 个 |
+| **WebUI (前端)** | React 18 + TypeScript + Zustand + Vite | `WebUI/src/` | 8 个 |
 
 ### 核心功能模块
 
 | 插件 ID | 功能 | 状态 |
 |---------|------|------|
-| `network` | HTTP/HTTPS 请求监控 | ✅ 稳定 |
+| `http` | HTTP/HTTPS 请求监控 | ✅ 稳定 |
 | `websocket` | WebSocket 连接和帧监控 | ✅ 稳定 |
 | `log` | 日志捕获和分析 | ✅ 稳定 |
 | `database` | SQLite 数据库检查 | ✅ 稳定 |
 | `mock` | Mock 规则引擎 | ✅ 稳定 |
 | `breakpoint` | 请求断点调试 | ✅ 稳定 |
 | `chaos` | 故障注入引擎 | ✅ 稳定 |
+| `performance` | 性能监控 | 🚧 开发中 |
 
 ---
 
@@ -37,23 +38,30 @@ Debug Platform 是一个全功能移动 App 调试平台，采用三层插件化
 ```
 DebugHub/Sources/
 ├── App/
-│   └── configure.swift, routes.swift      # 应用配置和路由
+│   ├── App.swift                          # 应用入口
+│   └── Configure.swift                    # 应用配置
 ├── Controllers/
 │   ├── DeviceController.swift             # 设备 CRUD API
 │   ├── TrafficRuleController.swift        # 流量规则 API
 │   ├── DomainPolicyController.swift       # 域名策略 API
 │   ├── ExportController.swift             # 导出功能（cURL/HAR）
-│   └── StatsController.swift              # 统计信息 API
+│   ├── StatsController.swift              # 统计信息 API
+│   └── WebUIPluginController.swift        # WebUI 插件状态 API
 ├── Services/
 │   ├── Plugin/                            # 后端插件系统
 │   │   ├── BackendPluginProtocol.swift    # 插件协议定义
 │   │   ├── BackendPluginRegistry.swift    # 插件注册中心
 │   │   ├── BuiltinBackendPlugins.swift    # 内置插件工厂
-│   │   └── NetworkBackendPlugin.swift     # 示例：网络插件实现
+│   │   ├── HttpBackendPlugin.swift        # HTTP 插件实现
+│   │   └── PerformanceBackendPlugin.swift # 性能监控插件
 │   ├── DeviceRegistry.swift               # 设备注册管理
 │   ├── EventIngestor.swift                # 事件接收处理
+│   ├── EventDTOs.swift                    # 事件数据传输对象
+│   ├── DatabaseDTOs.swift                 # 数据库相关 DTO
+│   ├── DBResponseManager.swift            # 数据库响应管理
 │   ├── SearchQueryParser.swift            # 高级搜索语法解析
 │   ├── BreakpointManager.swift            # 断点管理
+│   ├── ReplayCommand.swift                # 请求重放命令
 │   └── DataCleanupService.swift           # 数据清理服务
 ├── Models/
 │   ├── DeviceModel.swift                  # 设备实体
@@ -62,69 +70,88 @@ DebugHub/Sources/
 │   ├── BreakpointRuleModel.swift          # 断点规则实体
 │   ├── ChaosRuleModel.swift               # 混沌规则实体
 │   └── Migrations.swift                   # 数据库迁移
-├── Storage/
-│   └── PostgreSQL/SQLite 配置
 └── WebSocket/
-    └── WebSocket 连接处理
+    ├── DebugBridgeHandler.swift           # 设备连接处理
+    └── RealtimeStreamHandler.swift        # WebUI 实时推送
 ```
 
 ### WebUI 前端 (React + TypeScript)
 
 ```
 WebUI/src/
-├── App.tsx                                # 应用入口
+├── App.tsx                                # 应用入口和路由配置
 ├── main.tsx                               # React 挂载点
-├── index.css                              # 全局样式（Tailwind）
-├── components/
-│   ├── Sidebar.tsx                        # 侧边栏（设备列表 + 域名树）
-│   ├── VirtualHTTPEventTable.tsx          # HTTP 请求虚拟滚动表格
+├── index.css                              # 全局样式（Tailwind + 主题变量）
+├── components/                            # 可复用 UI 组件
+│   ├── AdvancedSearch.tsx                 # 高级搜索语法组件
+│   ├── BatchSelectionBar.tsx              # 批量选择操作栏
+│   ├── BreakpointHitPanel.tsx             # 断点命中详情面板
+│   ├── DBInspector.tsx                    # 数据库检查器
+│   ├── DeviceCard.tsx                     # 设备卡片
 │   ├── GroupedHTTPEventList.tsx           # HTTP 请求分组列表
 │   ├── HTTPEventDetail.tsx                # HTTP 请求详情面板
-│   ├── WSSessionList.tsx                  # WebSocket 会话列表
-│   ├── WSSessionDetail.tsx                # WebSocket 会话详情（帧列表）
-│   ├── VirtualLogList.tsx                 # 日志虚拟滚动列表
-│   ├── DBInspector.tsx                    # 数据库检查器
+│   ├── JSONTree.tsx                       # JSON 树形展示
 │   ├── MockRuleEditor.tsx                 # Mock 规则编辑器
 │   ├── MockRuleList.tsx                   # Mock 规则列表
-│   ├── BreakpointHitPanel.tsx             # 断点命中面板
+│   ├── PluginManager.tsx                  # 插件管理界面
 │   ├── ProtobufViewer.tsx                 # Protobuf 解析器
-│   ├── JSONTree.tsx                       # JSON 树形展示
-│   ├── TimingWaterfall.tsx                # 性能时间线瀑布图
 │   ├── RequestDiff.tsx                    # 请求对比组件
+│   ├── Sidebar.tsx                        # 侧边栏（设备列表 + 域名树）
+│   ├── TimingWaterfall.tsx                # 性能时间线瀑布图
+│   ├── VirtualHTTPEventTable.tsx          # HTTP 虚拟滚动表格
+│   ├── VirtualLogList.tsx                 # 日志虚拟滚动列表
+│   ├── WSSessionDetail.tsx                # WebSocket 会话详情
+│   ├── WSSessionList.tsx                  # WebSocket 会话列表
 │   └── ...
-├── plugins/
+├── pages/                                 # 页面组件
+│   ├── ApiDocsPage.tsx                    # API 文档页
+│   ├── DeviceDetailPage.tsx               # 设备详情页
+│   ├── DeviceListPage.tsx                 # 设备列表页
+│   ├── DevicePluginView.tsx               # 设备插件视图
+│   ├── HealthPage.tsx                     # 健康检查页
+│   └── RulesPage.tsx                      # 规则管理页
+├── plugins/                               # 前端插件系统
 │   ├── types.ts                           # 插件类型定义
+│   ├── index.ts                           # 插件导出
 │   ├── PluginRegistry.ts                  # 插件注册中心
 │   ├── PluginRenderer.tsx                 # 插件渲染器
-│   └── builtin/
-│       ├── NetworkPlugin.tsx              # 网络插件
+│   └── builtin/                           # 内置插件
+│       ├── index.ts                       # 内置插件导出
+│       ├── HttpPlugin.tsx                 # HTTP 网络插件
 │       ├── WebSocketPlugin.tsx            # WebSocket 插件
 │       ├── LogPlugin.tsx                  # 日志插件
 │       ├── DatabasePlugin.tsx             # 数据库插件
-│       ├── MockPlugin.tsx                 # Mock 插件
-│       ├── BreakpointPlugin.tsx           # 断点插件
-│       └── ChaosPlugin.tsx                # 混沌插件
+│       ├── MockPlugin.tsx                 # Mock 规则插件
+│       ├── BreakpointPlugin.tsx           # 断点调试插件
+│       ├── ChaosPlugin.tsx                # Chaos 故障注入插件
+│       └── PerformancePlugin.tsx          # 性能监控插件
 ├── stores/                                # Zustand 状态管理
 │   ├── deviceStore.ts                     # 设备状态
-│   ├── connectionStore.ts                 # 连接状态
+│   ├── connectionStore.ts                 # WebSocket 连接状态
 │   ├── httpStore.ts                       # HTTP 事件状态
 │   ├── wsStore.ts                         # WebSocket 状态
 │   ├── logStore.ts                        # 日志状态
 │   ├── dbStore.ts                         # 数据库状态
 │   ├── mockStore.ts                       # Mock 规则状态
 │   ├── breakpointStore.ts                 # 断点状态
+│   ├── performanceStore.ts                # 性能监控状态
 │   ├── ruleStore.ts                       # 流量规则状态
 │   ├── domainStore.ts                     # 域名策略状态
+│   ├── protobufStore.ts                   # Protobuf 配置状态
 │   ├── themeStore.ts                      # 主题状态
 │   └── toastStore.ts                      # Toast 消息状态
 ├── services/
-│   └── api.ts                             # API 调用封装
+│   ├── api.ts                             # HTTP API 调用封装
+│   └── realtime.ts                        # WebSocket 实时通信
 ├── hooks/
-│   └── 自定义 React Hooks
+│   └── useKeyboardShortcuts.ts            # 键盘快捷键 Hook
 ├── types/
 │   └── index.ts                           # 全局类型定义
 └── utils/
-    └── format.ts                          # 格式化工具函数
+    ├── format.ts                          # 格式化工具函数
+    ├── deviceIcons.tsx                    # 设备图标
+    ├── logSearch.ts                       # 日志搜索工具
+    └── protobufDescriptor.ts              # Protobuf 描述符解析
 ```
 
 ---
@@ -224,14 +251,15 @@ protocol BackendPluginProtocol: AnyActor {
 # HTTP Inspector 相关开发
 
 ## 关键文件
-- 后端 API: `DebugHub/Sources/Services/Plugin/NetworkBackendPlugin.swift`
-- 前端插件: `WebUI/src/plugins/builtin/NetworkPlugin.tsx`
+- 后端 API: `DebugHub/Sources/Services/Plugin/HttpBackendPlugin.swift`
+- 前端插件: `WebUI/src/plugins/builtin/HttpPlugin.tsx`
 - 状态管理: `WebUI/src/stores/httpStore.ts`
 - 列表组件: `WebUI/src/components/VirtualHTTPEventTable.tsx`
+- 分组列表: `WebUI/src/components/GroupedHTTPEventList.tsx`
 - 详情组件: `WebUI/src/components/HTTPEventDetail.tsx`
 
 ## 数据流
-1. SDK 捕获 HTTP 请求 → 发送 `network.http` 事件
+1. SDK 捕获 HTTP 请求 → 发送 `http.request` / `http.response` 事件
 2. Hub 接收并存储到 PostgreSQL
 3. Hub 通过 WebSocket 推送到 WebUI
 4. httpStore 更新状态 → 组件重渲染

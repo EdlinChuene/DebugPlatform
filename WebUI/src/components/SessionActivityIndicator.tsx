@@ -41,7 +41,7 @@ export function SessionActivityIndicator({
                         deviceActivities.length === 0
                             ? 'bg-gray-500/10 text-gray-400 border border-gray-500/20 hover:bg-gray-500/15'
                             : isConnected
-                                ? 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/15'
+                                ? 'bg-status-success-bg text-status-success border border-green-500/20 hover:bg-green-500/15'
                                 : 'bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/15'
                     )}
                 >
@@ -107,7 +107,7 @@ export function SessionActivityIndicator({
                 className={clsx(
                     'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                     isConnected
-                        ? 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/15'
+                        ? 'bg-status-success-bg text-status-success border border-green-500/20 hover:bg-green-500/15'
                         : 'bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/15'
                 )}
             >

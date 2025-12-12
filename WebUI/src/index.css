@@ -60,6 +60,14 @@
   /* Font - System fonts with Inter/JetBrains as optional enhancement */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, Consolas, 'Liberation Mono', monospace;
+
+  /* Status colors - Theme adaptive */
+  --color-status-success: #4ade80;
+  --color-status-success-bg: rgba(74, 222, 128, 0.15);
+  --color-status-error: #f87171;
+  --color-status-error-bg: rgba(248, 113, 113, 0.15);
+  --color-status-warning: #fbbf24;
+  --color-status-warning-bg: rgba(251, 191, 36, 0.15);
 }
 
 .light {
@@ -104,6 +112,14 @@
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.1);
   --shadow-glow: none;
+
+  /* Status colors - Darker for light theme readability */
+  --color-status-success: #16a34a;
+  --color-status-success-bg: rgba(22, 163, 74, 0.12);
+  --color-status-error: #dc2626;
+  --color-status-error-bg: rgba(220, 38, 38, 0.12);
+  --color-status-warning: #d97706;
+  --color-status-warning-bg: rgba(217, 119, 6, 0.12);
 }
 
 /* Base Styles */
@@ -189,9 +205,9 @@ input[type='checkbox'] {
   appearance: none;
   width: 16px;
   height: 16px;
-  border: 1.5px solid var(--color-border);
+  border: 1.5px solid var(--color-border-subtle);
   border-radius: 4px;
-  background-color: var(--color-text-muted);
+  background-color: transparent;
   cursor: pointer;
   transition: all 0.15s ease;
   position: relative;
@@ -199,8 +215,8 @@ input[type='checkbox'] {
 }
 
 .checkbox-custom:hover {
-  border-color: var(--color-text-secondary);
-  background-color: var(--color-text-secondary);
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-glow);
 }
 
 .checkbox-custom:checked {
@@ -494,7 +510,7 @@ input[type='checkbox'] {
 
 .btn-primary {
   background: var(--color-primary);
-  color: #0a0f18;
+  color: var(--color-bg-darkest);
 }
 
 .btn-primary:hover {

@@ -259,10 +259,10 @@ function EmptyState({ isLoading, filter, totalCount }: { isLoading: boolean; fil
             </p>
             <div className="text-left bg-bg-medium rounded-xl p-4 text-xs font-mono text-text-secondary overflow-x-auto">
               <p className="text-text-muted mb-2">// 在 AppDelegate 中初始化</p>
-              <p><span className="text-purple-400">let</span> config = <span className="text-primary">DebugProbe.Configuration</span>(</p>
-              <p className="pl-4">hubURL: <span className="text-green-400">"ws://{'<'}host{'>'}:{'<'}port{'>'}/debug-bridge"</span></p>
-              <p>)</p>
-              <p className="mt-1"><span className="text-primary">DebugProbe</span>.shared.start(configuration: config)</p>
+              <p><span className="text-purple-400">let</span> settings = <span className="text-primary">DebugProbeSettings</span>.shared</p>
+              <p>settings.hubHost = <span className="text-green-400">"{'<'}host{'>'}"</span></p>
+              <p>settings.hubPort = <span className="text-green-400">{'<'}port{'>'}</span></p>
+              <p className="mt-1"><span className="text-primary">DebugProbe</span>.shared.start()</p>
             </div>
           </>
         )}

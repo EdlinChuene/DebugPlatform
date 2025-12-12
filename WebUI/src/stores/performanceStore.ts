@@ -25,11 +25,36 @@ export interface FPSMetrics {
     averageRenderTime: number // ms
 }
 
+export interface NetworkTrafficMetrics {
+    bytesReceived: number
+    bytesSent: number
+    downloadRate: number // bytes/s
+    uploadRate: number // bytes/s
+}
+
+export interface DiskIOMetrics {
+    readBytes: number
+    writeBytes: number
+    readRate: number // bytes/s
+    writeRate: number // bytes/s
+}
+
+// App 启动时间指标（分阶段记录）
+export interface AppLaunchMetrics {
+    totalTime: number              // 总启动时间（毫秒）
+    preMainTime?: number           // PreMain 阶段耗时（毫秒）
+    mainToLaunchTime?: number      // Main 到 Launch 阶段耗时（毫秒）
+    launchToFirstFrameTime?: number // Launch 到首帧阶段耗时（毫秒）
+    lastRecordedAt: string         // 记录时间
+}
+
 export interface PerformanceMetrics {
     timestamp: string
     cpu?: CPUMetrics
     memory?: MemoryMetrics
     fps?: FPSMetrics
+    network?: NetworkTrafficMetrics
+    diskIO?: DiskIOMetrics
 }
 
 export interface JankEvent {
@@ -136,6 +161,31 @@ interface AlertRuleInput {
     isEnabled?: boolean
 }
 
+// MARK: - Trends Types
+
+export type TrendDirection = 'improving' | 'stable' | 'degrading'
+
+export interface MetricTrend {
+    metricName: string
+    trend: TrendDirection
+    firstHalfAverage: number
+    secondHalfAverage: number
+    changePercent: number
+    minValue: number
+    maxValue: number
+}
+
+export interface PerformanceTrends {
+    deviceId: string
+    analysisMinutes: number
+    dataPoints: number
+    cpu?: MetricTrend
+    memory?: MetricTrend
+    fps?: MetricTrend
+    overall: TrendDirection
+    recommendations: string[]
+}
+
 // MARK: - Store State
 
 interface PerformanceState {
@@ -156,12 +206,22 @@ interface PerformanceState {
     lastMetrics: PerformanceMetrics | null
     recentJankCount: number
 
+    // App 启动时间
+    appLaunchMetrics: AppLaunchMetrics | null
+
+    // 趋势分析
+    trends: PerformanceTrends | null
+    isLoadingTrends: boolean
+
     // 配置
     config: {
         sampleInterval: number
         monitorFPS: boolean
         monitorCPU: boolean
         monitorMemory: boolean
+        monitorNetwork: boolean
+        monitorDiskIO: boolean
+        smartSamplingEnabled: boolean
     }
 
     // 告警
@@ -180,6 +240,7 @@ interface PerformanceState {
     // Actions
     fetchRealtimeMetrics: (deviceId: string) => Promise<void>
     fetchHistoryMetrics: (deviceId: string, startTime?: Date, endTime?: Date, interval?: number) => Promise<void>
+    fetchTrends: (deviceId: string, minutes?: number) => Promise<void>
     fetchJankEvents: (deviceId: string, page?: number, minDuration?: number) => Promise<void>
     fetchStatus: (deviceId: string) => Promise<void>
     updateConfig: (deviceId: string, config: PerformanceConfigInput) => Promise<void>
@@ -226,6 +287,10 @@ async function getHistoryMetrics(
     params.set('interval', interval.toString())
 
     return api.api.get<PerformanceHistoryResponse>(`${API_BASE}/devices/${deviceId}/performance/history?${params}`)
+}
+
+async function getTrends(deviceId: string, minutes: number = 60): Promise<PerformanceTrends> {
+    return api.api.get<PerformanceTrends>(`${API_BASE}/devices/${deviceId}/performance/trends?minutes=${minutes}`)
 }
 
 async function getJankEvents(
@@ -311,11 +376,19 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
     lastMetrics: null,
     recentJankCount: 0,
 
+    appLaunchMetrics: null,
+
+    trends: null,
+    isLoadingTrends: false,
+
     config: {
         sampleInterval: 1.0,
         monitorFPS: true,
         monitorCPU: true,
         monitorMemory: true,
+        monitorNetwork: true,
+        monitorDiskIO: true,
+        smartSamplingEnabled: true,
     },
 
     alerts: [],
@@ -347,6 +420,17 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
             set({ realtimeMetrics: response.metrics, isLoading: false })
         } catch (error) {
             set({ error: String(error), isLoading: false })
+        }
+    },
+
+    fetchTrends: async (deviceId: string, minutes: number = 60) => {
+        set({ isLoadingTrends: true })
+        try {
+            const response = await getTrends(deviceId, minutes)
+            set({ trends: response, isLoadingTrends: false })
+        } catch (error) {
+            console.error('Failed to fetch trends:', error)
+            set({ isLoadingTrends: false })
         }
     },
 
@@ -572,6 +656,22 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
                                 averageRenderTime: m.fps.averageRenderTime,
                             }
                             : undefined,
+                        network: m.network
+                            ? {
+                                bytesReceived: m.network.bytesReceived,
+                                bytesSent: m.network.bytesSent,
+                                downloadRate: m.network.downloadRate,
+                                uploadRate: m.network.uploadRate,
+                            }
+                            : undefined,
+                        diskIO: m.diskIO
+                            ? {
+                                readBytes: m.diskIO.readBytes,
+                                writeBytes: m.diskIO.writeBytes,
+                                readRate: m.diskIO.readRate,
+                                writeRate: m.diskIO.writeRate,
+                            }
+                            : undefined,
                     }))
                     get().addRealtimeMetrics(metrics)
                     // 设置监控状态为 true（收到数据说明在监控中）
@@ -624,6 +724,21 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
                     })
                 }
                 break
+
+            case 'appLaunch':
+                if (event.appLaunch) {
+                    // SDK 发送分阶段启动数据: { totalTime, preMainTime, mainToLaunchTime, launchToFirstFrameTime, timestamp }
+                    set({
+                        appLaunchMetrics: {
+                            totalTime: event.appLaunch.totalTime,
+                            preMainTime: event.appLaunch.preMainTime,
+                            mainToLaunchTime: event.appLaunch.mainToLaunchTime,
+                            launchToFirstFrameTime: event.appLaunch.launchToFirstFrameTime,
+                            lastRecordedAt: event.appLaunch.timestamp,
+                        },
+                    })
+                }
+                break
         }
     },
 
@@ -641,6 +756,7 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
             jankPage: 1,
             lastMetrics: null,
             recentJankCount: 0,
+            trends: null,
             alerts: [],
             activeAlertCount: 0,
         })
@@ -649,15 +765,19 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
 
 // MARK: - Helper Functions
 
-export function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B'
+export function formatBytes(bytes: number | undefined | null): string {
+    if (bytes === undefined || bytes === null || isNaN(bytes) || bytes === 0) return '0 B'
+    if (bytes < 0) return '0 B' // 处理负数情况
     const k = 1024
     const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+    // 确保索引不越界
+    const index = Math.min(i, sizes.length - 1)
+    return parseFloat((bytes / Math.pow(k, index)).toFixed(1)) + ' ' + sizes[index]
 }
 
-export function formatDuration(ms: number): string {
+export function formatDuration(ms: number | undefined | null): string {
+    if (ms === undefined || ms === null || isNaN(ms)) return '--'
     if (ms < 1000) return `${ms.toFixed(0)}ms`
     return `${(ms / 1000).toFixed(2)}s`
 }
@@ -744,5 +864,43 @@ export function getConditionLabel(condition: AlertCondition): string {
             return '小于等于'
         default:
             return condition
+    }
+}
+export function getTrendLabel(trend: TrendDirection): string {
+    switch (trend) {
+        case 'improving':
+            return '改善中'
+        case 'stable':
+            return '稳定'
+        case 'degrading':
+            return '劣化中'
+        default:
+            return trend
+    }
+}
+
+export function getTrendColor(trend: TrendDirection): string {
+    switch (trend) {
+        case 'improving':
+            return 'text-green-400'
+        case 'stable':
+            return 'text-blue-400'
+        case 'degrading':
+            return 'text-red-400'
+        default:
+            return 'text-zinc-400'
+    }
+}
+
+export function getTrendIcon(trend: TrendDirection): string {
+    switch (trend) {
+        case 'improving':
+            return '📈'
+        case 'stable':
+            return '➖'
+        case 'degrading':
+            return '📉'
+        default:
+            return '❓'
     }
 }
