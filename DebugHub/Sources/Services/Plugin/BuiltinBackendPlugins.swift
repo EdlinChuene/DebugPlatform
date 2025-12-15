@@ -120,6 +120,7 @@ public final class LogBackendPlugin: BackendPlugin, @unchecked Sendable {
         let total = try await query.count()
         let events = try await query
             .sort(\.$timestamp, .descending)
+            .sort(\.$seqNum, .descending)
             .range((page - 1) * pageSize..<page * pageSize)
             .all()
 
@@ -305,6 +306,7 @@ public final class WebSocketBackendPlugin: BackendPlugin, @unchecked Sendable {
         let total = try await query.count()
         let sessions = try await query
             .sort(\.$connectTime, .descending)
+            .sort(\.$id, .descending)
             .range((page - 1) * pageSize..<page * pageSize)
             .all()
 
@@ -348,6 +350,7 @@ public final class WebSocketBackendPlugin: BackendPlugin, @unchecked Sendable {
         let total = try await query.count()
         let frames = try await query
             .sort(\.$timestamp, .descending)
+            .sort(\.$seqNum, .descending)
             .range((page - 1) * pageSize..<page * pageSize)
             .all()
 

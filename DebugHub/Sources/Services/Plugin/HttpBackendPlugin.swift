@@ -212,6 +212,7 @@ public final class HttpBackendPlugin: BackendPlugin, @unchecked Sendable {
 
         let events = try await query
             .sort(\.$startTime, .descending)
+            .sort(\.$seqNum, .descending)
             .range((page - 1) * pageSize..<page * pageSize)
             .all()
 
