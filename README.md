@@ -8,7 +8,7 @@
 
 > **当前版本**: 1.4.0 | [更新日志](docs/CHANGELOG.md) | [开发路线图](docs/ROADMAP.md)
 >
-> **最后更新**: 2025-12-12
+> **最后更新**: 2025-12-15
 
 ## ✨ 功能特性
 
@@ -46,6 +46,17 @@
 - 💾 **事件持久化** - 断线时本地 SQLite 缓存，重连后自动恢复
 - 🐘 **PostgreSQL 支持** - 生产环境高并发数据库
 - ⚙️ **运行时配置** - 动态修改 Hub 地址，无需重新编译
+
+---
+
+## 📸 截图预览
+
+| | |
+|:---:|:---:|
+| ![设备列表](screenshots/screenshot_0.png) | ![插件详情](screenshots/screenshot_1.png) |
+| ![2](screenshots/screenshot_0.png) | ![WebSocket 监控](screenshots/screenshot_3.png) |
+| ![日志查看](screenshots/screenshot_4.png) | ![数据库检查](screenshots/screenshot_5.png) |
+| ![Mock 规则](screenshots/screenshot_6.png) | ![断点调试](screenshots/screenshot_7.png) |
 
 ---
 
