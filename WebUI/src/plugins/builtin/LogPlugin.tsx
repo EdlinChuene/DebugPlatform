@@ -20,7 +20,9 @@ import { LogFilters } from '@/components/LogFilters'
 import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
 import { Toggle } from '@/components/Toggle'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { LogDetailModal } from '@/components/LogDetailModal'
 import { deleteAllLogs } from '@/services/api'
+import { LogEvent } from '@/types'
 import clsx from 'clsx'
 
 // 插件实现类
@@ -119,6 +121,8 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
     const [showFilters, setShowFilters] = useState(false)
     const [scrollControls, setScrollControls] = useState<LogScrollControls | null>(null)
     const [isClearingAll, setIsClearingAll] = useState(false)
+    // 日志详情弹窗状态
+    const [detailEvent, setDetailEvent] = useState<LogEvent | null>(null)
 
     // 初始加载
     useEffect(() => {
@@ -164,6 +168,11 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
         selectEvent(id)
     }, [selectEvent])
 
+    // 处理双击显示详情
+    const handleDoubleClick = useCallback((event: LogEvent) => {
+        setDetailEvent(event)
+    }, [])
+
     if (!isActive) {
         return null
     }
@@ -171,7 +180,7 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
     return (
         <div className="h-full flex flex-col">
             {/* 工具栏 */}
-            <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-bg-medium flex items-center justify-between">
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-border bg-bg-medium flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {/* 刷新按钮 */}
                     <button
@@ -295,7 +304,7 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
 
             {/* 过滤器面板 */}
             {showFilters && (
-                <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-bg-medium">
+                <div className="flex-shrink-0 px-3 py-1.5 border-b border-border bg-bg-medium">
                     <LogFilters
                         minLevel={filters.minLevel}
                         subsystems={subsystems}
@@ -320,6 +329,7 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
                     autoScroll={autoScroll}
                     selectedId={selectedId}
                     onSelect={handleSelect}
+                    onDoubleClick={handleDoubleClick}
                     isSelectMode={isSelectMode}
                     selectedIds={selectedIds}
                     onToggleSelect={toggleSelectId}
@@ -389,6 +399,14 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
                 cancelText="取消"
                 type="danger"
             />
+
+            {/* 日志详情弹窗 */}
+            {detailEvent && (
+                <LogDetailModal
+                    event={detailEvent}
+                    onClose={() => setDetailEvent(null)}
+                />
+            )}
         </div>
     )
 }

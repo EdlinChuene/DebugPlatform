@@ -6,6 +6,7 @@ import { useHTTPStore } from '@/stores/httpStore'
 import { useLogStore } from '@/stores/logStore'
 import { useWSStore } from '@/stores/wsStore'
 import { usePerformanceStore } from '@/stores/performanceStore'
+import { useConnectionStore } from '@/stores/connectionStore'
 import { TokenConfirmDialog } from './TokenConfirmDialog'
 import type { ServerStats } from '@/types'
 import {
@@ -54,12 +55,17 @@ function formatNumber(num: number): string {
 }
 
 export function ServerStatsPanel() {
-  const [stats, setStats] = useState<ServerStats | null>(null)
+  // 从全局 WebSocket 订阅获取 stats
+  const storeStats = useConnectionStore((s) => s.serverStats)
+  const [localStats, setLocalStats] = useState<ServerStats | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [showTruncateDialog, setShowTruncateDialog] = useState(false)
   const [isTruncating, setIsTruncating] = useState(false)
   const toast = useToastStore()
+
+  // 优先使用 WebSocket 推送的 stats，fallback 到本地状态
+  const stats = storeStats || localStats
 
   // Traffic Rule store for refreshing after truncate
   const { fetchRules } = useRuleStore()
@@ -74,7 +80,7 @@ export function ServerStatsPanel() {
     setIsLoading(true)
     try {
       const data = await getServerStats()
-      setStats(data)
+      setLocalStats(data)
     } catch (error) {
       console.error('Failed to fetch server stats:', error)
     } finally {
@@ -108,11 +114,11 @@ export function ServerStatsPanel() {
   }
 
   useEffect(() => {
-    fetchStats()
-    // 每 30 秒刷新一次
-    const interval = setInterval(fetchStats, 30000)
-    return () => clearInterval(interval)
-  }, [])
+    // 初始加载 stats（如果 WebSocket 还没有推送数据）
+    if (!storeStats) {
+      fetchStats()
+    }
+  }, [storeStats])
 
   if (!stats) {
     return null

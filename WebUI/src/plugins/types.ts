@@ -28,6 +28,10 @@ export interface PluginMetadata {
     description: string
     icon: ReactNode
     dependencies?: string[]
+    // 是否为子插件（子插件不在标签栏单独显示，但可在插件管理器中启用/禁用）
+    isSubPlugin?: boolean
+    // 父插件 ID（子插件需指定所属的父插件）
+    parentPluginId?: string
 }
 
 // 插件上下文 - 提供给插件的能力

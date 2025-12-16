@@ -11,6 +11,7 @@ import type { HTTPEventSummary, TrafficRule, MockRule } from '@/types'
 import { type ListItem, isSessionDivider } from '@/stores/httpStore'
 import { useRuleStore } from '@/stores/ruleStore'
 import { useFavoriteUrlStore } from '@/stores/favoriteUrlStore'
+import { useResizableColumns, ColumnResizeHandle, ColumnDivider, type ColumnConfig } from '@/hooks/useResizableColumns'
 import {
     formatSmartTime,
     formatDuration,
@@ -27,7 +28,19 @@ import { Checkbox } from './Checkbox'
 import { LoadMoreButton } from './LoadMoreButton'
 
 // 行高度（像素）
-const ROW_HEIGHT = 56
+const ROW_HEIGHT = 44
+
+// HTTP 表格列配置
+const HTTP_COLUMNS: ColumnConfig[] = [
+    { id: 'index', label: '#', defaultWidth: 48, minWidth: 40, maxWidth: 80, resizable: false },
+    { id: 'marker', label: '', defaultWidth: 24, minWidth: 24, maxWidth: 24, resizable: false },
+    { id: 'time', label: '时间', defaultWidth: 100, minWidth: 80, maxWidth: 160, resizable: true },
+    { id: 'method', label: '方法', defaultWidth: 90, minWidth: 70, maxWidth: 120, resizable: true },
+    { id: 'status', label: '状态', defaultWidth: 80, minWidth: 60, maxWidth: 100, resizable: true },
+    { id: 'url', label: 'URL / 域名', flex: true, minWidth: 150, resizable: true },
+    { id: 'duration', label: '耗时', defaultWidth: 90, minWidth: 60, maxWidth: 120, resizable: true },
+    { id: 'tags', label: '标记', defaultWidth: 80, minWidth: 60, maxWidth: 120, resizable: false },
+]
 
 // 滚动控制回调接口
 export interface ScrollControls {
@@ -117,6 +130,12 @@ export function VirtualHTTPEventTable({
     const lastFirstItemRef = useRef<string | null>(null)
     const [isAtTop, setIsAtTop] = useState(true)
     const [isAtBottom, setIsAtBottom] = useState(false)
+
+    // 可调整列宽
+    const { getColumnStyle, isResizing, startResize } = useResizableColumns({
+        storageKey: 'http-table',
+        columns: HTTP_COLUMNS,
+    })
 
     // 获取规则
     const { deviceRules, rules, fetchDeviceRules, fetchRules } = useRuleStore()
@@ -299,15 +318,15 @@ export function VirtualHTTPEventTable({
                 )}
             >
                 {/* 序号列 */}
-                <div className={clsx(
-                    'w-12 flex-shrink-0 flex items-center justify-center text-xs font-mono',
-                    isSelected ? 'text-white/80' : 'text-text-muted'
+                <div style={getColumnStyle('index')} className={clsx(
+                    'flex items-center justify-center text-xs font-mono',
+                    isSelected ? 'text-selected-text-muted' : 'text-text-muted'
                 )}>
                     {rowNumber}
                 </div>
 
                 {/* 标记图标区域 - 始终保留宽度以确保列对齐 */}
-                <div className="w-6 flex-shrink-0 flex items-center justify-center">
+                <div style={getColumnStyle('marker')} className="flex items-center justify-center">
                     {isHighlighted && <HighlightIcon size={12} filled className="text-yellow-500" />}
                     {isMarked && !isHighlighted && <TagIcon size={12} style={{ color: ruleColor }} />}
                 </div>
@@ -323,18 +342,18 @@ export function VirtualHTTPEventTable({
                 )}
 
                 {/* Time */}
-                <div className={clsx(
-                    'px-4 py-3.5 w-[100px] flex-shrink-0',
-                    isSelected ? 'text-white' : 'text-text-muted'
+                <div style={getColumnStyle('time')} className={clsx(
+                    'px-3 py-2.5',
+                    isSelected ? 'text-selected-text-secondary' : 'text-text-muted'
                 )}>
-                    <span className="text-sm font-mono">{formatSmartTime(event.startTime)}</span>
+                    <span className="text-xs font-mono">{formatSmartTime(event.startTime)}</span>
                 </div>
 
                 {/* Method */}
-                <div className="px-4 py-3.5 w-[90px] flex-shrink-0">
+                <div style={getColumnStyle('method')} className="px-3 py-2.5">
                     <span
                         className={clsx(
-                            'inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-mono font-bold min-w-[60px] shadow-sm',
+                            'inline-flex items-center justify-center px-2 py-1 rounded text-xs font-mono font-bold min-w-[50px] shadow-sm',
                             getMethodClass(event.method)
                         )}
                     >
@@ -343,10 +362,10 @@ export function VirtualHTTPEventTable({
                 </div>
 
                 {/* Status */}
-                <div className="px-4 py-3.5 w-[80px] flex-shrink-0">
+                <div style={getColumnStyle('status')} className="px-3 py-2.5">
                     <span
                         className={clsx(
-                            'inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-mono font-semibold min-w-[44px] shadow-sm',
+                            'inline-flex items-center justify-center px-2 py-1 rounded text-xs font-mono font-semibold min-w-[40px] shadow-sm',
                             getStatusClass(event.statusCode)
                         )}
                     >
@@ -355,17 +374,17 @@ export function VirtualHTTPEventTable({
                 </div>
 
                 {/* URL */}
-                <div className="px-4 py-3.5 flex-1 min-w-0 overflow-hidden">
-                    <div className="flex flex-col gap-0.5">
+                <div style={getColumnStyle('url')} className="px-3 py-2.5 min-w-0 overflow-hidden">
+                    <div className="flex flex-col">
                         <span className={clsx(
-                            'text-sm truncate transition-colors',
-                            isSelected ? 'text-white font-medium' : 'text-text-primary'
+                            'text-xs truncate transition-colors',
+                            isSelected ? 'text-selected-text-primary font-medium' : 'text-text-primary'
                         )} title={event.url}>
                             {truncateUrl(event.url)}
                         </span>
                         <span className={clsx(
-                            'text-xs truncate font-mono',
-                            isSelected ? 'text-white/70' : 'text-text-muted'
+                            'text-2xs truncate font-mono',
+                            isSelected ? 'text-selected-text-muted' : 'text-text-muted'
                         )}>
                             {extractDomain(event.url)}
                         </span>
@@ -373,9 +392,9 @@ export function VirtualHTTPEventTable({
                 </div>
 
                 {/* Duration */}
-                <div className="px-4 py-3.5 w-[90px] flex-shrink-0">
+                <div style={getColumnStyle('duration')} className="px-3 py-2.5">
                     <span className={clsx(
-                        'text-sm font-mono font-medium',
+                        'text-xs font-mono font-medium',
                         getDurationClass(event.duration)
                     )}>
                         {formatDuration(event.duration)}
@@ -383,10 +402,10 @@ export function VirtualHTTPEventTable({
                 </div>
 
                 {/* Tags */}
-                <div className="px-4 py-3.5 w-[80px] flex-shrink-0 flex items-center justify-center gap-2">
+                <div style={getColumnStyle('tags')} className="px-3 py-2.5 flex items-center justify-center gap-1.5">
                     {event.isReplay && (
-                        <span className="inline-flex items-center justify-center w-6 h-6 text-blue-400" title="重放请求">
-                            <RefreshIcon size={14} />
+                        <span className="inline-flex items-center justify-center w-5 h-5 text-blue-400" title="重放请求">
+                            <RefreshIcon size={12} />
                         </span>
                     )}
                     {isMocked && (
@@ -396,18 +415,18 @@ export function VirtualHTTPEventTable({
                             rules={mockRules}
                             onEditRule={onEditMockRule}
                         >
-                            <span className="inline-flex items-center justify-center w-6 h-6 text-purple-400 hover:text-purple-300 transition-colors cursor-pointer" title="已 Mock - 点击查看规则">
-                                <MockIcon size={14} />
+                            <span className="inline-flex items-center justify-center w-5 h-5 text-purple-400 hover:text-purple-300 transition-colors cursor-pointer" title="已 Mock - 点击查看规则">
+                                <MockIcon size={12} />
                             </span>
                         </MockRulePopover>
                     )}
                     {isFavorite && (
-                        <span className="badge-favorite text-base" title="已收藏">
-                            <StarIcon size={14} filled />
+                        <span className="badge-favorite text-sm" title="已收藏">
+                            <StarIcon size={12} filled />
                         </span>
                     )}
                     {!isMocked && !isFavorite && !event.isReplay && (
-                        <span className="w-6 h-6" />
+                        <span className="w-5 h-5" />
                     )}
                 </div>
             </div>
@@ -415,24 +434,45 @@ export function VirtualHTTPEventTable({
     }
 
     return (
-        <div className="h-full flex flex-col">
+        <div className={clsx('h-full flex flex-col', isResizing && 'select-none')}>
             {/* Header */}
             <div className="flex items-center bg-bg-medium border-b border-border text-text-secondary sticky top-0 z-10 flex-shrink-0">
                 {/* 序号列 */}
-                <div className="w-12 flex-shrink-0 px-2 py-2 font-semibold text-xs uppercase tracking-wider text-center">#</div>
+                <div style={getColumnStyle('index')} className="relative px-2 py-1.5 font-semibold text-xs uppercase tracking-wider text-center">
+                    #
+                    <ColumnDivider />
+                </div>
                 {/* 标记图标区域占位 */}
-                <div className="w-6 flex-shrink-0"></div>
+                <div style={getColumnStyle('marker')} className="relative">
+                    <ColumnDivider />
+                </div>
                 {isSelectMode && (
-                    <div className="px-3 py-2 w-10 flex-shrink-0">
+                    <div className="relative px-2 py-1.5 w-10 flex-shrink-0">
                         <span className="sr-only">选择</span>
+                        <ColumnDivider />
                     </div>
                 )}
-                <div className="px-4 py-2 w-[100px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">时间</div>
-                <div className="px-4 py-2 w-[90px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">方法</div>
-                <div className="px-4 py-2 w-[80px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">状态</div>
-                <div className="px-4 py-2 flex-1 font-semibold text-xs uppercase tracking-wider">URL / 域名</div>
-                <div className="px-4 py-2 w-[90px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider">耗时</div>
-                <div className="px-4 py-2 w-[80px] flex-shrink-0 font-semibold text-xs uppercase tracking-wider text-center">标记</div>
+                <div style={getColumnStyle('time')} className="relative px-3 py-1.5 font-semibold text-xs uppercase tracking-wider">
+                    时间
+                    <ColumnResizeHandle onMouseDown={(e) => startResize('time', e.clientX)} isResizing={isResizing} />
+                </div>
+                <div style={getColumnStyle('method')} className="relative px-3 py-1.5 font-semibold text-xs uppercase tracking-wider">
+                    方法
+                    <ColumnResizeHandle onMouseDown={(e) => startResize('method', e.clientX)} isResizing={isResizing} />
+                </div>
+                <div style={getColumnStyle('status')} className="relative px-3 py-1.5 font-semibold text-xs uppercase tracking-wider">
+                    状态
+                    <ColumnResizeHandle onMouseDown={(e) => startResize('status', e.clientX)} isResizing={isResizing} />
+                </div>
+                <div style={getColumnStyle('url')} className="relative px-3 py-1.5 font-semibold text-xs uppercase tracking-wider min-w-0">
+                    URL / 域名
+                    <ColumnResizeHandle onMouseDown={(e) => startResize('url', e.clientX)} isResizing={isResizing} />
+                </div>
+                <div style={getColumnStyle('duration')} className="relative px-3 py-1.5 font-semibold text-xs uppercase tracking-wider">
+                    耗时
+                    <ColumnResizeHandle onMouseDown={(e) => startResize('duration', e.clientX)} isResizing={isResizing} />
+                </div>
+                <div style={getColumnStyle('tags')} className="px-3 py-1.5 font-semibold text-xs uppercase tracking-wider text-center">标记</div>
             </div>
 
             {/* Virtual List */}

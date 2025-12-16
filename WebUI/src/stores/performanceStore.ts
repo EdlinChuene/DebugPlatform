@@ -45,7 +45,39 @@ export interface AppLaunchMetrics {
     preMainTime?: number           // PreMain 阶段耗时（毫秒）
     mainToLaunchTime?: number      // Main 到 Launch 阶段耗时（毫秒）
     launchToFirstFrameTime?: number // Launch 到首帧阶段耗时（毫秒）
-    lastRecordedAt: string         // 记录时间
+    timestamp: string              // 记录时间（ISO 字符串）
+}
+
+// App 启动历史记录项
+export interface AppLaunchHistoryItem {
+    id: string
+    totalTime: number
+    preMainTime?: number
+    mainToLaunchTime?: number
+    launchToFirstFrameTime?: number
+    timestamp: string // ISO 时间字符串
+}
+
+// App 启动统计指标
+export interface AppLaunchStats {
+    count: number        // 总启动次数
+    avgTotalTime: number // 平均总耗时
+    minTotalTime: number // 最小总耗时
+    maxTotalTime: number // 最大总耗时
+    p50TotalTime: number // P50 耗时
+    p90TotalTime: number // P90 耗时
+    p95TotalTime: number // P95 耗时
+    avgPreMainTime?: number // 平均 pre-main 耗时
+    avgMainToLaunchTime?: number // 平均 main-to-launch 耗时
+    avgLaunchToFirstFrameTime?: number // 平均 launch-to-first-frame 耗时
+}
+
+// App 启动完整响应
+export interface AppLaunchResponse {
+    deviceId: string
+    launchMetrics: AppLaunchMetrics | null // 最新一次启动
+    history: AppLaunchHistoryItem[] // 历史启动记录
+    stats: AppLaunchStats | null // 统计指标
 }
 
 export interface PerformanceMetrics {
@@ -208,6 +240,9 @@ interface PerformanceState {
 
     // App 启动时间
     appLaunchMetrics: AppLaunchMetrics | null
+    appLaunchHistory: AppLaunchHistoryItem[]
+    appLaunchStats: AppLaunchStats | null
+    isLoadingAppLaunch: boolean
 
     // 趋势分析
     trends: PerformanceTrends | null
@@ -245,6 +280,7 @@ interface PerformanceState {
     fetchStatus: (deviceId: string) => Promise<void>
     updateConfig: (deviceId: string, config: PerformanceConfigInput) => Promise<void>
     clearMetrics: (deviceId: string) => Promise<void>
+    fetchAppLaunchData: (deviceId: string) => Promise<void>
 
     // Alert Actions
     fetchAlerts: (deviceId: string, includeResolved?: boolean) => Promise<void>
@@ -358,6 +394,11 @@ async function postResolveAlert(deviceId: string, alertId: string): Promise<{ su
     return api.api.post(`${API_BASE}/devices/${deviceId}/performance/alerts/${alertId}/resolve`, {})
 }
 
+// App 启动数据 API
+async function getAppLaunchData(deviceId: string): Promise<AppLaunchResponse> {
+    return api.api.get<AppLaunchResponse>(`${API_BASE}/devices/${deviceId}/performance/launch`)
+}
+
 // MARK: - Store
 
 export const usePerformanceStore = create<PerformanceState>((set, get) => ({
@@ -377,6 +418,9 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
     recentJankCount: 0,
 
     appLaunchMetrics: null,
+    appLaunchHistory: [],
+    appLaunchStats: null,
+    isLoadingAppLaunch: false,
 
     trends: null,
     isLoadingTrends: false,
@@ -486,6 +530,28 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
         }
     },
 
+    fetchAppLaunchData: async (deviceId: string) => {
+        set({ isLoadingAppLaunch: true })
+        try {
+            const response = await getAppLaunchData(deviceId)
+            set({
+                appLaunchMetrics: response.launchMetrics ? {
+                    totalTime: response.launchMetrics.totalTime,
+                    preMainTime: response.launchMetrics.preMainTime,
+                    mainToLaunchTime: response.launchMetrics.mainToLaunchTime,
+                    launchToFirstFrameTime: response.launchMetrics.launchToFirstFrameTime,
+                    timestamp: response.launchMetrics.timestamp,
+                } : null,
+                appLaunchHistory: response.history,
+                appLaunchStats: response.stats,
+                isLoadingAppLaunch: false,
+            })
+        } catch (error) {
+            console.error('Failed to fetch app launch data:', error)
+            set({ isLoadingAppLaunch: false })
+        }
+    },
+
     // Realtime updates
     addRealtimeMetrics: (metrics: PerformanceMetrics[]) => {
         set((state) => {
@@ -501,11 +567,18 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
     },
 
     addJankEvent: (event: JankEvent) => {
-        set((state) => ({
-            jankEvents: [event, ...state.jankEvents].slice(0, 100), // 最多保留 100 条
-            jankTotal: state.jankTotal + 1,
-            recentJankCount: state.recentJankCount + 1,
-        }))
+        set((state) => {
+            // 根据 ID 去重，避免重复添加
+            const exists = state.jankEvents.some(e => e.id === event.id)
+            if (exists) {
+                return state
+            }
+            return {
+                jankEvents: [event, ...state.jankEvents].slice(0, 100), // 最多保留 100 条
+                jankTotal: state.jankTotal + 1,
+                recentJankCount: state.recentJankCount + 1,
+            }
+        })
     },
 
     // Alert Actions
@@ -734,7 +807,7 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
                             preMainTime: event.appLaunch.preMainTime,
                             mainToLaunchTime: event.appLaunch.mainToLaunchTime,
                             launchToFirstFrameTime: event.appLaunch.launchToFirstFrameTime,
-                            lastRecordedAt: event.appLaunch.timestamp,
+                            timestamp: event.appLaunch.timestamp,
                         },
                     })
                 }

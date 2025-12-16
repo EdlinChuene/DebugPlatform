@@ -38,6 +38,8 @@ struct DBInfoDTO: Content {
     let descriptor: DatabaseDescriptorDTO
     let tableCount: Int
     let fileSizeBytes: Int64?
+    /// 数据库文件的绝对路径
+    let absolutePath: String?
 }
 
 // MARK: - Table Info DTO

@@ -25,7 +25,7 @@ import {
 } from '../types'
 
 // 插件实现类
-class BreakpointPluginImpl implements FrontendPlugin {
+class HttpBreakpointPluginImpl implements FrontendPlugin {
     metadata: PluginMetadata = {
         pluginId: BuiltinPluginId.BREAKPOINT,
         displayName: 'Breakpoint',
@@ -33,6 +33,8 @@ class BreakpointPluginImpl implements FrontendPlugin {
         description: '请求断点调试',
         icon: <BreakpointIcon size={16} />,
         dependencies: [BuiltinPluginId.HTTP],
+        isSubPlugin: true, // 作为 HTTP 的子插件
+        parentPluginId: BuiltinPluginId.HTTP,
     }
 
     state: PluginState = 'uninitialized'
@@ -92,10 +94,22 @@ class BreakpointPluginImpl implements FrontendPlugin {
     }
 }
 
-// 插件视图组件
+// 插件视图组件 - 包装器
 function BreakpointPluginView({ context, isActive }: PluginRenderProps) {
-    const deviceId = context.deviceId
-    const { pendingHits, fetchPendingHits, resumeBreakpoint: storeResumeBreakpoint } = useBreakpointStore()
+    if (!isActive || !context.deviceId) return null
+    return <BreakpointPluginContent deviceId={context.deviceId} isActive={isActive} />
+}
+
+// 导出内容组件供 HttpPlugin 使用
+export function BreakpointPluginContent({ deviceId, isActive }: { deviceId: string; isActive: boolean }) {
+    const {
+        pendingHits,
+        fetchPendingHits,
+        resumeBreakpoint: storeResumeBreakpoint,
+        editingRule: storeEditingRule,
+        isEditorOpen: storeIsEditorOpen,
+        closeEditor: storeCloseEditor,
+    } = useBreakpointStore()
     const toast = useToastStore()
 
     const [rules, setRules] = useState<BreakpointRule[]>([])
@@ -104,6 +118,15 @@ function BreakpointPluginView({ context, isActive }: PluginRenderProps) {
     const [showEditor, setShowEditor] = useState(false)
     const [activeTab, setActiveTab] = useState<'rules' | 'pending'>('rules')
     const [resuming, setResuming] = useState(false)
+
+    // 监听 store 中的编辑状态变化
+    useEffect(() => {
+        if (storeIsEditorOpen && storeEditingRule) {
+            setEditingRule({ ...storeEditingRule })
+            setShowEditor(true)
+            storeCloseEditor() // 清除 store 状态
+        }
+    }, [storeIsEditorOpen, storeEditingRule, storeCloseEditor])
 
     const fetchRules = useCallback(async () => {
         if (!deviceId) return
@@ -228,10 +251,6 @@ function BreakpointPluginView({ context, isActive }: PluginRenderProps) {
 
     // 统计启用的规则数量
     const enabledCount = useMemo(() => rules.filter(r => r.enabled).length, [rules])
-
-    if (!isActive || !deviceId) {
-        return null
-    }
 
     return (
         <div className="h-full flex flex-col">
@@ -571,4 +590,4 @@ function BreakpointRuleEditor({
     )
 }
 
-export const BreakpointPlugin = new BreakpointPluginImpl()
+export const HttpBreakpointPlugin = new HttpBreakpointPluginImpl()

@@ -133,6 +133,35 @@ export const BreakpointIcon: React.FC<IconProps> = ({
     </svg>
 )
 
+/** 请求列表图标 - 用于 HTTP 子标签 */
+export const RequestListIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        {/* 三条横线代表列表 */}
+        <path
+            d="M8 6h12M8 12h12M8 18h12"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+        {/* 三个圆点代表列表项标记 */}
+        <circle cx="4" cy="6" r="1.5" fill="currentColor" />
+        <circle cx="4" cy="12" r="1.5" fill="currentColor" />
+        <circle cx="4" cy="18" r="1.5" fill="currentColor" />
+    </svg>
+)
+
 /** Mock 图标 */
 export const MockIcon: React.FC<IconProps> = ({
     size = defaultProps.size,
@@ -2065,5 +2094,26 @@ export const HighlighterIcon: React.FC<IconProps> = ({
                 <stop offset="1" stopColor="#fde047" />
             </linearGradient>
         </defs>
+    </svg>
+)
+
+/** 插件禁用图标 - 带斜线的圆形禁止符号 */
+export const PlugDisabledIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        {/* 禁止圆圈 */}
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+        {/* 斜线 */}
+        <path d="M5.5 18.5L18.5 5.5" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
     </svg>
 )

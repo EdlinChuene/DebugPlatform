@@ -7,9 +7,6 @@ import { useLogStore } from './logStore'
 // localStorage key for favorite devices
 const FAVORITE_DEVICES_KEY = 'debug-hub-favorite-devices'
 
-// localStorage key for device nicknames
-const DEVICE_NICKNAMES_KEY = 'debug-hub-device-nicknames'
-
 // Load favorites from localStorage
 const loadFavorites = (): Set<string> => {
   try {
@@ -32,28 +29,6 @@ const saveFavorites = (favorites: Set<string>) => {
   }
 }
 
-// Load device nicknames from localStorage
-const loadNicknames = (): Record<string, string> => {
-  try {
-    const saved = localStorage.getItem(DEVICE_NICKNAMES_KEY)
-    if (saved) {
-      return JSON.parse(saved)
-    }
-  } catch (e) {
-    console.error('Failed to load device nicknames:', e)
-  }
-  return {}
-}
-
-// Save device nicknames to localStorage
-const saveNicknames = (nicknames: Record<string, string>) => {
-  try {
-    localStorage.setItem(DEVICE_NICKNAMES_KEY, JSON.stringify(nicknames))
-  } catch (e) {
-    console.error('Failed to save device nicknames:', e)
-  }
-}
-
 interface DeviceState {
   devices: DeviceListItem[]
   currentDeviceId: string | null
@@ -61,7 +36,6 @@ interface DeviceState {
   isLoading: boolean
   error: string | null
   favoriteDeviceIds: Set<string>
-  deviceNicknames: Record<string, string>
 
   // 批量选择状态
   isSelectMode: boolean
@@ -80,11 +54,6 @@ interface DeviceState {
   removeAllOfflineDevices: () => Promise<void>
   toggleFavorite: (deviceId: string) => void
   isFavorite: (deviceId: string) => boolean
-
-  // 备注名相关
-  setNickname: (deviceId: string, nickname: string) => void
-  getNickname: (deviceId: string) => string | undefined
-  clearNickname: (deviceId: string) => void
 
   // 批量选择相关
   toggleSelectMode: () => void
@@ -108,7 +77,6 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   isLoading: false,
   error: null,
   favoriteDeviceIds: loadFavorites(),
-  deviceNicknames: loadNicknames(),
 
   // 批量选择状态
   isSelectMode: false,
@@ -241,31 +209,6 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
     return get().favoriteDeviceIds.has(deviceId)
   },
 
-  // 备注名相关
-  setNickname: (deviceId: string, nickname: string) => {
-    const { deviceNicknames } = get()
-    const newNicknames = { ...deviceNicknames }
-    if (nickname.trim()) {
-      newNicknames[deviceId] = nickname.trim()
-    } else {
-      delete newNicknames[deviceId]
-    }
-    saveNicknames(newNicknames)
-    set({ deviceNicknames: newNicknames })
-  },
-
-  getNickname: (deviceId: string) => {
-    return get().deviceNicknames[deviceId]
-  },
-
-  clearNickname: (deviceId: string) => {
-    const { deviceNicknames } = get()
-    const newNicknames = { ...deviceNicknames }
-    delete newNicknames[deviceId]
-    saveNicknames(newNicknames)
-    set({ deviceNicknames: newNicknames })
-  },
-
   // 批量选择相关
   toggleSelectMode: () => {
     const { isSelectMode } = get()
@@ -354,4 +297,144 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
     return pluginStates[pluginId] ?? true
   },
 }))
+
+// 设备事件处理（用于 WebSocket 订阅）
+export const deviceEventHandlers = {
+  /**
+   * 处理新设备连接事件
+   */
+  handleDeviceConnected: (data: {
+    deviceId: string
+    deviceName: string
+    sessionId: string
+    timestamp: string
+    pluginStates?: Record<string, boolean>
+  }) => {
+    const { devices, fetchDevices, updatePluginStates } = useDeviceStore.getState()
+    const existingDevice = devices.find(d => d.deviceId === data.deviceId)
+
+    if (existingDevice) {
+      // 设备已存在，更新为在线状态
+      useDeviceStore.setState({
+        devices: devices.map(d =>
+          d.deviceId === data.deviceId
+            ? {
+              ...d,
+              isOnline: true,
+              deviceName: data.deviceName || d.deviceName,
+              lastSeenAt: data.timestamp,
+            }
+            : d
+        ),
+      })
+    } else {
+      // 新设备，重新获取完整列表
+      fetchDevices()
+    }
+
+    // 更新插件启用状态
+    if (data.pluginStates) {
+      updatePluginStates(data.pluginStates)
+    }
+
+    console.log('[DeviceStore] Device connected:', data.deviceName)
+  },
+
+  /**
+   * 处理设备断开事件
+   */
+  handleDeviceDisconnected: (data: { deviceId: string; timestamp: string }) => {
+    const { devices, currentDevice, currentDeviceId } = useDeviceStore.getState()
+
+    // 更新设备列表中的在线状态
+    useDeviceStore.setState({
+      devices: devices.map(d =>
+        d.deviceId === data.deviceId
+          ? { ...d, isOnline: false, lastSeenAt: data.timestamp }
+          : d
+      ),
+      // 如果当前查看的设备断开，也更新详情
+      currentDevice:
+        currentDeviceId === data.deviceId && currentDevice
+          ? { ...currentDevice, isOnline: false, lastSeenAt: data.timestamp }
+          : currentDevice,
+    })
+    console.log('[DeviceStore] Device disconnected:', data.deviceId)
+  },
+
+  /**
+   * 处理设备重连事件
+   */
+  handleDeviceReconnected: (data: {
+    deviceId: string
+    deviceName: string
+    sessionId: string
+    timestamp: string
+  }) => {
+    const { devices, currentDevice, currentDeviceId } = useDeviceStore.getState()
+
+    // 更新设备列表中的在线状态
+    useDeviceStore.setState({
+      devices: devices.map(d =>
+        d.deviceId === data.deviceId
+          ? {
+            ...d,
+            isOnline: true,
+            deviceName: data.deviceName || d.deviceName,
+            lastSeenAt: data.timestamp,
+          }
+          : d
+      ),
+      // 如果当前查看的设备重连，也更新详情
+      currentDevice:
+        currentDeviceId === data.deviceId && currentDevice
+          ? {
+            ...currentDevice,
+            isOnline: true,
+            lastSeenAt: data.timestamp,
+            deviceInfo: {
+              ...currentDevice.deviceInfo,
+              deviceName: data.deviceName || currentDevice.deviceInfo.deviceName,
+            },
+          }
+          : currentDevice,
+    })
+    console.log('[DeviceStore] Device reconnected:', data.deviceName)
+  },
+
+  /**
+   * 处理设备信息更新事件（如设备别名变更）
+   */
+  handleDeviceInfoUpdated: (data: {
+    deviceId: string
+    deviceName: string
+    timestamp: string
+  }) => {
+    const { devices, currentDevice, currentDeviceId } = useDeviceStore.getState()
+
+    // 更新设备列表中的设备名称
+    useDeviceStore.setState({
+      devices: devices.map(d =>
+        d.deviceId === data.deviceId
+          ? {
+            ...d,
+            deviceName: data.deviceName,
+          }
+          : d
+      ),
+      // 如果当前查看的设备更新了信息，也更新详情
+      currentDevice:
+        currentDeviceId === data.deviceId && currentDevice
+          ? {
+            ...currentDevice,
+            deviceInfo: {
+              ...currentDevice.deviceInfo,
+              deviceName: data.deviceName,
+            },
+          }
+          : currentDevice,
+    })
+    console.log('[DeviceStore] Device info updated:', data.deviceName)
+  },
+}
 

@@ -237,6 +237,8 @@ export type RealtimeMessageType =
   | 'performanceEvent'
   | 'deviceConnected'
   | 'deviceDisconnected'
+  | 'deviceReconnected'
+  | 'deviceInfoUpdated'
   | 'breakpointHit'
   | 'pluginStateChange'
 
@@ -416,13 +418,28 @@ export interface DBDescribeTableResponse {
   columns: DBColumnInfo[]
 }
 
+/// SQL 查询错误详情
+export interface DBQueryError {
+  /// 错误类型
+  type: 'syntax_error' | 'table_not_found' | 'column_not_found' | 'access_denied' | 'timeout' | 'invalid_query' | 'internal_error'
+  /// 原始错误消息
+  message: string
+  /// 友好的错误描述
+  description: string
+  /// SQL 语句建议
+  suggestions?: string[]
+}
+
 export interface DBQueryResponse {
+  success: boolean
   dbId: string
   query: string
-  columns: DBColumnInfo[]
-  rows: DBRow[]
-  rowCount: number
-  executionTimeMs: number
+  columns?: DBColumnInfo[]
+  rows?: DBRow[]
+  rowCount?: number
+  executionTimeMs?: number
+  /// 错误信息（当 success 为 false 时）
+  error?: DBQueryError
 }
 
 // ============================================================================

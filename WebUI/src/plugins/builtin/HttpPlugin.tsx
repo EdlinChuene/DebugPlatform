@@ -1,8 +1,8 @@
 // HTTP 请求监控前端插件
-// 专注于 HTTP/HTTPS 请求监控功能
-// 断点/Mock/Chaos 功能已独立为单独插件
+// 包含子功能：Mock 规则、断点调试、混沌工程
 
-import React, { useEffect, useCallback, useState } from 'react'
+import React, { useEffect, useCallback, useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
     FrontendPlugin,
     PluginContext,
@@ -12,10 +12,14 @@ import {
     PluginState,
     BuiltinPluginId,
 } from '../types'
-import { HttpIcon, ArrowUpIcon, ArrowDownIcon, TrashIcon } from '@/components/icons'
+import { PluginRegistry } from '../PluginRegistry'
+import { HttpIcon, ArrowUpIcon, ArrowDownIcon, TrashIcon, MockIcon, BreakpointIcon, ChaosIcon, RequestListIcon, PlugDisabledIcon } from '@/components/icons'
 import { useHTTPStore, isSessionDivider } from '@/stores/httpStore'
 import { useMockStore } from '@/stores/mockStore'
+import { useBreakpointStore } from '@/stores/breakpointStore'
+import { useChaosStore } from '@/stores/chaosStore'
 import { useConnectionStore } from '@/stores/connectionStore'
+import { useDeviceStore } from '@/stores/deviceStore'
 import { useToastStore } from '@/stores/toastStore'
 import { VirtualHTTPEventTable, type ScrollControls } from '@/components/VirtualHTTPEventTable'
 import { GroupedHTTPEventList } from '@/components/GroupedHTTPEventList'
@@ -29,7 +33,13 @@ import { Checkbox } from '@/components/Checkbox'
 import { Toggle } from '@/components/Toggle'
 import clsx from 'clsx'
 
-// 插件实现类
+// 导入子功能视图组件
+import { MockPluginContent } from './HttpMockPlugin'
+import { BreakpointPluginContent } from './HttpBreakpointPlugin'
+import { ChaosPluginContent } from './HttpChaosPlugin'
+
+// HTTP 插件的子标签类型
+type HttpSubTab = 'requests' | 'mock' | 'breakpoint' | 'chaos'
 class HttpPluginImpl implements FrontendPlugin {
     metadata: PluginMetadata = {
         pluginId: BuiltinPluginId.HTTP,
@@ -49,8 +59,11 @@ class HttpPluginImpl implements FrontendPlugin {
         this.pluginContext = context
         this.state = 'loading'
 
-        // 注意：HTTP 事件由 DevicePluginView 统一处理并添加到 httpStore
-        // 不需要在这里重复订阅，避免重复添加事件
+        // 订阅相关事件（包括子功能的事件）
+        this.unsubscribe = context.subscribeToEvents(
+            ['mock_rule_change', 'breakpoint_hit', 'breakpoint_rule_change', 'chaos_triggered', 'chaos_config_change'],
+            (event) => this.handleEvent(event)
+        )
 
         this.state = 'ready'
     }
@@ -67,8 +80,8 @@ class HttpPluginImpl implements FrontendPlugin {
         console.log('[HttpPlugin] Deactivated')
     }
 
-    onEvent(_event: PluginEvent): void {
-        // 事件由 DevicePluginView 统一处理
+    onEvent(event: PluginEvent): void {
+        this.handleEvent(event)
     }
 
     destroy(): void {
@@ -77,20 +90,162 @@ class HttpPluginImpl implements FrontendPlugin {
         this.state = 'uninitialized'
     }
 
+    // 处理子功能事件
+    private handleEvent(event: PluginEvent): void {
+        console.log('[HttpPlugin] Received event:', event.eventType)
+        // 子功能事件由各自的 store 处理，这里只做日志
+    }
+
     // 获取上下文（供外部访问）
     get context(): PluginContext | null {
         return this.pluginContext
     }
 }
 
-// 插件视图组件 - 专注于 HTTP 请求监控
+// 子标签 badge 上下文类型
+interface SubTabBadgeContext {
+    mockRulesCount: number
+    breakpointRulesCount: number
+    breakpointHasPending: boolean
+    chaosHasActive: boolean
+    // 插件开关状态
+    mockPluginEnabled: boolean
+    breakpointPluginEnabled: boolean
+    chaosPluginEnabled: boolean
+}
+
+// 子标签配置
+const SUB_TAB_CONFIG: Array<{
+    id: HttpSubTab
+    label: string
+    icon: React.ReactNode
+    pluginId?: string // 关联的子插件 ID，用于检查是否在插件管理中启用
+    badge?: (context: SubTabBadgeContext) => React.ReactNode
+}> = [
+        {
+            id: 'requests',
+            label: '请求列表',
+            icon: <RequestListIcon size={16} />,
+            // requests 不需要 pluginId，始终显示
+        },
+        {
+            id: 'mock',
+            label: 'Mock',
+            icon: <MockIcon size={16} />,
+            pluginId: BuiltinPluginId.MOCK,
+            badge: ({ mockRulesCount, mockPluginEnabled }) => (
+                <>
+                    {/* 插件禁用时显示禁用指示器 */}
+                    {!mockPluginEnabled && (
+                        <PlugDisabledIcon size={12} className="ml-1 text-text-muted" />
+                    )}
+                    {/* 插件启用时显示规则数量 */}
+                    {mockPluginEnabled && mockRulesCount > 0 && (
+                        <span className="ml-1.5 px-1.5 py-0.5 text-[10px] bg-accent/20 text-accent rounded-full">
+                            {mockRulesCount}
+                        </span>
+                    )}
+                </>
+            ),
+        },
+        {
+            id: 'breakpoint',
+            label: '断点',
+            icon: <BreakpointIcon size={16} />,
+            pluginId: BuiltinPluginId.BREAKPOINT,
+            badge: ({ breakpointRulesCount, breakpointHasPending, breakpointPluginEnabled }) => (
+                <>
+                    {/* 插件禁用时显示禁用指示器 */}
+                    {!breakpointPluginEnabled && (
+                        <PlugDisabledIcon size={12} className="ml-1 text-text-muted" />
+                    )}
+                    {/* 插件启用时显示规则数量 */}
+                    {breakpointPluginEnabled && breakpointRulesCount > 0 && (
+                        <span className="ml-1.5 px-1.5 py-0.5 text-[10px] bg-warning/20 text-warning rounded-full">
+                            {breakpointRulesCount}
+                        </span>
+                    )}
+                    {/* 插件启用且有待处理断点时显示闪烁指示器 */}
+                    {breakpointPluginEnabled && breakpointHasPending && (
+                        <span className="ml-1.5 w-2 h-2 rounded-full bg-warning animate-pulse" />
+                    )}
+                </>
+            ),
+        },
+        {
+            id: 'chaos',
+            label: '故障注入',
+            icon: <ChaosIcon size={16} />,
+            pluginId: BuiltinPluginId.CHAOS,
+            badge: ({ chaosHasActive, chaosPluginEnabled }) => (
+                <>
+                    {/* 插件禁用时显示禁用指示器 */}
+                    {!chaosPluginEnabled && (
+                        <PlugDisabledIcon size={12} className="ml-1 text-text-muted" />
+                    )}
+                    {/* 插件启用且有活跃配置时显示闪烁指示器 */}
+                    {chaosPluginEnabled && chaosHasActive && (
+                        <span className="ml-1.5 w-2 h-2 rounded-full bg-error animate-pulse" />
+                    )}
+                </>
+            ),
+        },
+    ]
+
+// 插件视图组件 - HTTP 请求监控及其子功能（Mock、断点、混沌）
 function HttpPluginView({ context, isActive }: PluginRenderProps) {
     const deviceId = context.deviceId ?? ''
+    const [searchParams, setSearchParams] = useSearchParams()
+    const [pluginUpdateTrigger, setPluginUpdateTrigger] = useState({})
+
+    // 订阅插件状态变化（用于刷新子标签显示）
+    useEffect(() => {
+        return PluginRegistry.subscribe(() => setPluginUpdateTrigger({}))
+    }, [])
+
+    // 根据插件管理中的启用状态过滤子标签
+    const enabledSubTabs = useMemo(() => {
+        return SUB_TAB_CONFIG.filter((tab) => {
+            // 没有 pluginId 的标签（如 requests）始终显示
+            if (!tab.pluginId) return true
+            // 检查子插件是否在插件管理中启用
+            return PluginRegistry.isPluginEnabled(tab.pluginId)
+        })
+    }, [pluginUpdateTrigger]) // 依赖 pluginUpdateTrigger 触发重新计算
+
+    // 是否有子插件标签需要显示（除 requests 外）
+    const hasSubPluginTabs = enabledSubTabs.length > 1
+
+    // 从 URL 读取子标签，默认为 requests
+    const subpluginParam = searchParams.get('subplugin')
+    const activeSubTab: HttpSubTab = useMemo(() => {
+        // 检查 URL 参数是否有效且对应的子插件已启用
+        if (subpluginParam && enabledSubTabs.some((t) => t.id === subpluginParam)) {
+            return subpluginParam as HttpSubTab
+        }
+        // 默认返回第一个启用的子标签
+        return enabledSubTabs[0]?.id ?? 'requests'
+    }, [subpluginParam, enabledSubTabs])
+
+    // 切换子标签时更新 URL
+    const setActiveSubTab = useCallback((tab: HttpSubTab) => {
+        const newParams = new URLSearchParams(searchParams)
+        if (tab === 'requests') {
+            // 默认选项，移除 subplugin 参数
+            newParams.delete('subplugin')
+        } else {
+            newParams.set('subplugin', tab)
+        }
+        setSearchParams(newParams, { replace: true })
+    }, [searchParams, setSearchParams])
 
     // Stores
     const httpStore = useHTTPStore()
     const mockStore = useMockStore()
+    const breakpointStore = useBreakpointStore()
+    const chaosStore = useChaosStore()
     const { isConnected } = useConnectionStore()
+    const { isPluginEnabled } = useDeviceStore()
     const toast = useToastStore()
 
     // UI 状态
@@ -113,6 +268,12 @@ function HttpPluginView({ context, isActive }: PluginRenderProps) {
 
         // 加载 Mock 规则（用于显示请求是否被 Mock）
         mockStore.fetchRules(deviceId)
+
+        // 加载 Breakpoint 规则（用于显示子标签状态）
+        breakpointStore.fetchRules(deviceId)
+
+        // 加载 Chaos 规则（用于显示子标签状态）
+        chaosStore.fetchRules(deviceId)
     }, [deviceId, isActive])
 
     // 选择事件
@@ -183,30 +344,103 @@ function HttpPluginView({ context, isActive }: PluginRenderProps) {
         return null
     }
 
-    // 直接渲染 HTTP 请求内容，不再有子标签
+    // 计算徽章上下文（包含插件开关状态）
+    const badgeContext: SubTabBadgeContext = {
+        mockRulesCount: mockStore.rules.filter((r) => r.enabled).length,
+        breakpointRulesCount: breakpointStore.activeRulesCount(),
+        breakpointHasPending: breakpointStore.pendingHits.length > 0,
+        chaosHasActive: chaosStore.hasActiveRules(),
+        // 插件开关状态（来自 SDK）
+        mockPluginEnabled: isPluginEnabled(BuiltinPluginId.MOCK),
+        breakpointPluginEnabled: isPluginEnabled(BuiltinPluginId.BREAKPOINT),
+        chaosPluginEnabled: isPluginEnabled(BuiltinPluginId.CHAOS),
+    }
+
+    // 渲染子标签栏和内容
     return (
-        <HTTPRequestsContent
-            deviceId={deviceId}
-            httpStore={httpStore}
-            mockStore={mockStore}
-            isConnected={isConnected}
-            onSelectEvent={onSelectEvent}
-            onFavoriteChange={onFavoriteChange}
-            onRefresh={handleRefresh}
-            filteredEvents={filteredEvents}
-            allSelected={allSelected}
-            showBatchDeleteConfirm={showBatchDeleteConfirm}
-            setShowBatchDeleteConfirm={setShowBatchDeleteConfirm}
-            showClearAllConfirm={showClearAllConfirm}
-            setShowClearAllConfirm={setShowClearAllConfirm}
-            isClearingAll={isClearingAll}
-            handleClearAll={handleClearAll}
-            showMoreMenu={showMoreMenu}
-            setShowMoreMenu={setShowMoreMenu}
-            handleExportSelected={handleExportSelected}
-            handleBatchDelete={handleBatchDelete}
-            toast={toast}
-        />
+        <div className="h-full flex flex-col">
+            {/* 子标签栏 - 只有当存在子插件时才显示 */}
+            {hasSubPluginTabs && (
+                <div className="bg-bg-dark flex-shrink-0 px-4 pb-2 border-b border-border">
+                    <div className="flex items-center gap-0.5 p-0.5 bg-bg-medium rounded-lg border border-border w-fit">
+                        {enabledSubTabs.map((tab) => {
+                            // 检查子插件在 SDK 端是否禁用
+                            const isDisabledOnDevice = tab.pluginId
+                                ? !isPluginEnabled(tab.pluginId)
+                                : false
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveSubTab(tab.id)}
+                                    title={isDisabledOnDevice ? `${tab.label}（设备端已禁用）` : undefined}
+                                    className={clsx(
+                                        'flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap',
+                                        activeSubTab === tab.id
+                                            ? 'bg-accent-blue text-white'
+                                            : isDisabledOnDevice
+                                                ? 'text-text-muted opacity-50'
+                                                : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
+                                    )}
+                                >
+                                    <span className="text-xs">{tab.icon}</span>
+                                    <span>{tab.label}</span>
+                                    {tab.badge?.(badgeContext)}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* 内容区域 */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+                {activeSubTab === 'requests' && (
+                    <HTTPRequestsContent
+                        deviceId={deviceId}
+                        httpStore={httpStore}
+                        mockStore={mockStore}
+                        isConnected={isConnected}
+                        onSelectEvent={onSelectEvent}
+                        onFavoriteChange={onFavoriteChange}
+                        onRefresh={handleRefresh}
+                        filteredEvents={filteredEvents}
+                        allSelected={allSelected}
+                        showBatchDeleteConfirm={showBatchDeleteConfirm}
+                        setShowBatchDeleteConfirm={setShowBatchDeleteConfirm}
+                        showClearAllConfirm={showClearAllConfirm}
+                        setShowClearAllConfirm={setShowClearAllConfirm}
+                        isClearingAll={isClearingAll}
+                        handleClearAll={handleClearAll}
+                        showMoreMenu={showMoreMenu}
+                        setShowMoreMenu={setShowMoreMenu}
+                        handleExportSelected={handleExportSelected}
+                        handleBatchDelete={handleBatchDelete}
+                        toast={toast}
+                    />
+                )}
+                {activeSubTab === 'mock' && (
+                    isPluginEnabled(BuiltinPluginId.MOCK) ? (
+                        <MockPluginContent deviceId={deviceId} isActive={true} />
+                    ) : (
+                        <DisabledPluginPlaceholder pluginName="Mock" />
+                    )
+                )}
+                {activeSubTab === 'breakpoint' && (
+                    isPluginEnabled(BuiltinPluginId.BREAKPOINT) ? (
+                        <BreakpointPluginContent deviceId={deviceId} isActive={true} />
+                    ) : (
+                        <DisabledPluginPlaceholder pluginName="断点" />
+                    )
+                )}
+                {activeSubTab === 'chaos' && (
+                    isPluginEnabled(BuiltinPluginId.CHAOS) ? (
+                        <ChaosPluginContent deviceId={deviceId} isActive={true} />
+                    ) : (
+                        <DisabledPluginPlaceholder pluginName="故障注入" />
+                    )
+                )}
+            </div>
+        </div>
     )
 }
 
@@ -262,7 +496,7 @@ function HTTPRequestsContent({
             {/* Toolbar */}
             <div className="bg-bg-medium border-b border-border flex-shrink-0">
                 {/* 第一行：筛选功能 */}
-                <div className="px-4 py-2 flex items-center gap-2 flex-nowrap min-w-0">
+                <div className="px-3 py-1.5 flex items-center gap-2 flex-nowrap min-w-0">
                     {/* 左侧：刷新 - 批量选择 - 方法 - 搜索 - 更多筛选 */}
                     <button
                         onClick={onRefresh}
@@ -455,7 +689,7 @@ function HTTPRequestsContent({
 
                 {/* 第二行：批量操作（仅在选择模式下显示） */}
                 {httpStore.isSelectMode && (
-                    <div className="px-4 py-2 bg-primary/5 border-t border-border flex items-center gap-2">
+                    <div className="px-3 py-1.5 bg-primary/5 border-t border-border flex items-center gap-2">
                         <span className="text-xs text-text-secondary">
                             已选 <span className="text-primary font-medium">{httpStore.selectedIds.size}</span> / {filteredEvents.length} 项
                         </span>
@@ -676,6 +910,18 @@ function HTTPRequestsContent({
                 loading={mockStore.loading}
                 httpOnly={true}
             />
+        </div>
+    )
+}
+
+// 禁用插件占位组件 - 当设备端禁用了子插件时显示
+function DisabledPluginPlaceholder({ pluginName }: { pluginName: string }) {
+    return (
+        <div className="h-full flex flex-col items-center justify-center text-text-muted py-12">
+            <PlugDisabledIcon size={48} className="mb-4 opacity-50" />
+            <p className="text-lg font-medium mb-2 text-text-secondary">{pluginName} 功能已禁用</p>
+            <p className="text-sm text-text-muted">该功能在设备端已被禁用</p>
+            <p className="text-xs text-text-muted mt-2">如需使用，请在 SDK 中启用对应插件</p>
         </div>
     )
 }

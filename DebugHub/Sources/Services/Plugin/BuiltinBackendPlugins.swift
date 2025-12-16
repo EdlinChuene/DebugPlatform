@@ -343,7 +343,7 @@ public final class WebSocketBackendPlugin: BackendPlugin, @unchecked Sendable {
             .filter(\.$sessionId == sessionId)
 
         // 根据方向筛选
-        if let direction = direction, !direction.isEmpty {
+        if let direction, !direction.isEmpty {
             query = query.filter(\.$direction == direction)
         }
 
@@ -620,13 +620,347 @@ public final class DatabaseBackendPlugin: BackendPlugin, @unchecked Sendable {
         )
 
         let response = try await sendCommandAndWaitResponse(command: command, to: deviceId, timeout: 30)
+
+        // 如果执行失败，返回结构化的错误响应而不是抛出异常
         guard response.success, let payload = response.payload else {
-            throw Abort(.internalServerError, reason: response.error?.message ?? "Unknown error")
+            let errorInfo = parseSQLError(
+                originalError: response.error?.message ?? "Unknown error",
+                query: input.query,
+                dbId: dbId
+            )
+            return PluginDBQueryResponse.failure(
+                dbId: dbId,
+                query: input.query,
+                error: errorInfo
+            )
         }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(PluginDBQueryResponse.self, from: payload)
+
+        // 解析原始响应
+        struct RawQueryResponse: Decodable {
+            let dbId: String
+            let query: String
+            let columns: [PluginDBColumnInfo]
+            let rows: [PluginDBRow]
+            let rowCount: Int
+            let executionTimeMs: Double
+        }
+
+        let rawResult = try decoder.decode(RawQueryResponse.self, from: payload)
+        return PluginDBQueryResponse.success(
+            dbId: rawResult.dbId,
+            query: rawResult.query,
+            columns: rawResult.columns,
+            rows: rawResult.rows,
+            rowCount: rawResult.rowCount,
+            executionTimeMs: rawResult.executionTimeMs
+        )
+    }
+
+    /// 解析 SQL 错误并生成友好的错误信息和建议
+    private func parseSQLError(originalError: String, query: String, dbId: String) -> PluginDBQueryError {
+        let lowercasedError = originalError.lowercased()
+        let lowercasedQuery = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 检测错误类型
+        var errorType = "internal_error"
+        var description = "执行 SQL 查询时发生错误"
+        var suggestions: [String] = []
+
+        // 语法错误检测
+        if lowercasedError.contains("syntax error") || lowercasedError.contains("near") {
+            errorType = "syntax_error"
+            description = "SQL 语法错误"
+            suggestions = generateSyntaxSuggestions(query: query, error: originalError)
+        }
+        // 表不存在
+        else if
+            lowercasedError.contains("no such table") ||
+            (lowercasedError.contains("table") && lowercasedError.contains("not")) {
+            errorType = "table_not_found"
+            description = "指定的表不存在"
+            suggestions = generateTableSuggestions(query: query, error: originalError)
+        }
+        // 列不存在
+        else if
+            lowercasedError.contains("no such column") ||
+            (lowercasedError.contains("column") && lowercasedError.contains("not")) {
+            errorType = "column_not_found"
+            description = "指定的列不存在"
+            suggestions = generateColumnSuggestions(query: query, error: originalError)
+        }
+        // 访问被拒绝
+        else if lowercasedError.contains("access denied") || lowercasedError.contains("permission") {
+            errorType = "access_denied"
+            description = "没有权限执行此查询"
+        }
+        // 超时
+        else if lowercasedError.contains("timeout") {
+            errorType = "timeout"
+            description = "查询执行超时"
+            suggestions = ["尝试添加 LIMIT 限制返回行数", "考虑添加索引优化查询性能"]
+        }
+        // 只读数据库
+        else if lowercasedError.contains("readonly") || lowercasedError.contains("read-only") {
+            errorType = "access_denied"
+            description = "数据库为只读模式"
+            suggestions = ["仅支持 SELECT 查询"]
+        }
+        // 无效查询类型
+        else if !lowercasedQuery.hasPrefix("select") {
+            errorType = "invalid_query"
+            description = "仅支持 SELECT 查询"
+            suggestions = generateSelectSuggestion(query: query)
+        }
+
+        // 如果没有生成建议，尝试通用建议
+        if suggestions.isEmpty {
+            suggestions = generateGenericSuggestions(query: query)
+        }
+
+        return PluginDBQueryError(
+            type: errorType,
+            message: originalError,
+            description: description,
+            suggestions: suggestions.isEmpty ? nil : suggestions
+        )
+    }
+
+    /// 生成语法错误建议
+    private func generateSyntaxSuggestions(query: String, error: String) -> [String] {
+        var suggestions: [String] = []
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercasedQuery = trimmedQuery.lowercased()
+
+        // 检查是否缺少 SELECT 关键字
+        if !lowercasedQuery.hasPrefix("select") {
+            if lowercasedQuery.hasPrefix("*") || lowercasedQuery.contains("from") {
+                suggestions.append("SELECT \(trimmedQuery)")
+            }
+        }
+
+        // 检查是否缺少 FROM
+        if lowercasedQuery.hasPrefix("select"), !lowercasedQuery.contains("from") {
+            // 尝试从 error 中提取表名或猜测
+            suggestions.append("在 SELECT 后添加 FROM 子句，例如: SELECT * FROM table_name")
+        }
+
+        // 检查 WHERE 后缺少条件的情况
+        // 匹配 WHERE 后直接跟 LIMIT/ORDER/GROUP/; 或结尾的情况
+        let wherePattern = #"(?i)\bwhere\s+(limit|order|group|;|$)"#
+        if
+            let regex = try? NSRegularExpression(pattern: wherePattern),
+            regex.firstMatch(in: trimmedQuery, range: NSRange(trimmedQuery.startIndex..., in: trimmedQuery)) != nil {
+            suggestions.append("WHERE 子句后需要添加条件，例如: WHERE column = value")
+            // 生成一个移除空 WHERE 的建议
+            if let whereRemoveRegex = try? NSRegularExpression(pattern: #"(?i)\s+where\s+(?=limit|order|group|$)"#) {
+                let fixed = whereRemoveRegex.stringByReplacingMatches(
+                    in: trimmedQuery,
+                    range: NSRange(trimmedQuery.startIndex..., in: trimmedQuery),
+                    withTemplate: " "
+                )
+                if fixed != trimmedQuery {
+                    suggestions.append(fixed)
+                }
+            }
+        }
+
+        // 检查 ORDER BY 后缺少列名
+        let orderByPattern = #"(?i)\border\s+by\s*(limit|group|where|;|$)"#
+        if
+            let regex = try? NSRegularExpression(pattern: orderByPattern),
+            regex.firstMatch(in: trimmedQuery, range: NSRange(trimmedQuery.startIndex..., in: trimmedQuery)) != nil {
+            suggestions.append("ORDER BY 后需要指定列名，例如: ORDER BY column_name ASC")
+        }
+
+        // 检查 GROUP BY 后缺少列名
+        let groupByPattern = #"(?i)\bgroup\s+by\s*(limit|order|having|where|;|$)"#
+        if
+            let regex = try? NSRegularExpression(pattern: groupByPattern),
+            regex.firstMatch(in: trimmedQuery, range: NSRange(trimmedQuery.startIndex..., in: trimmedQuery)) != nil {
+            suggestions.append("GROUP BY 后需要指定列名，例如: GROUP BY column_name")
+        }
+
+        // 检查 LIMIT 后缺少数字
+        let limitPattern = #"(?i)\blimit\s*(order|group|where|;|$)"#
+        if
+            let regex = try? NSRegularExpression(pattern: limitPattern),
+            regex.firstMatch(in: trimmedQuery, range: NSRange(trimmedQuery.startIndex..., in: trimmedQuery)) != nil {
+            suggestions.append("LIMIT 后需要指定数量，例如: LIMIT 100")
+        }
+
+        // 检查重复的 SELECT 关键字
+        let duplicateSelectPattern = #"(?i)\bselect\s+select\b"#
+        if
+            let regex = try? NSRegularExpression(pattern: duplicateSelectPattern),
+            regex.firstMatch(in: trimmedQuery, range: NSRange(trimmedQuery.startIndex..., in: trimmedQuery)) != nil {
+            let fixed = trimmedQuery.replacingOccurrences(
+                of: #"(?i)\bselect\s+select\b"#,
+                with: "SELECT",
+                options: .regularExpression
+            )
+            suggestions.append("检测到重复的 SELECT 关键字")
+            suggestions.append(fixed)
+        }
+
+        // 检查常见拼写错误 - 使用单词边界匹配避免误替换
+        let commonTypos: [(String, String)] = [
+            // SELECT 拼写错误
+            (#"\bslect\b"#, "SELECT"),
+            (#"\bselet\b"#, "SELECT"),
+            (#"\bselct\b"#, "SELECT"),
+            (#"\bselectt\b"#, "SELECT"),
+            // FROM 拼写错误
+            (#"\bfomr\b"#, "FROM"),
+            (#"\bform\b"#, "FROM"),
+            (#"\bfrmo\b"#, "FROM"),
+            // WHERE 拼写错误
+            (#"\bwhre\b"#, "WHERE"),
+            (#"\bwehre\b"#, "WHERE"),
+            (#"\bwher\b"#, "WHERE"),
+            // ORDER 拼写错误
+            (#"\bordre\b"#, "ORDER"),
+            (#"\boder\b"#, "ORDER"),
+            // GROUP 拼写错误
+            (#"\bgruop\b"#, "GROUP"),
+            (#"\bgourp\b"#, "GROUP"),
+            (#"\bgropu\b"#, "GROUP"),
+            // LIMIT 拼写错误
+            (#"\blimt\b"#, "LIMIT"),
+            (#"\blimti\b"#, "LIMIT"),
+            // DISTINCT 拼写错误
+            (#"\bdistint\b"#, "DISTINCT"),
+            (#"\bdistict\b"#, "DISTINCT"),
+            (#"\bdistnct\b"#, "DISTINCT"),
+            // JOIN 拼写错误
+            (#"\bjion\b"#, "JOIN"),
+            (#"\bjoni\b"#, "JOIN"),
+            // HAVING 拼写错误
+            (#"\bhavign\b"#, "HAVING"),
+            (#"\bhaivng\b"#, "HAVING"),
+        ]
+
+        for (typoPattern, correct) in commonTypos {
+            if
+                let regex = try? NSRegularExpression(pattern: typoPattern, options: .caseInsensitive),
+                regex.firstMatch(
+                    in: lowercasedQuery,
+                    range: NSRange(lowercasedQuery.startIndex..., in: lowercasedQuery)
+                ) != nil {
+                let fixed = regex.stringByReplacingMatches(
+                    in: trimmedQuery,
+                    range: NSRange(trimmedQuery.startIndex..., in: trimmedQuery),
+                    withTemplate: correct
+                )
+                if fixed != trimmedQuery {
+                    suggestions.append(fixed)
+                }
+                break
+            }
+        }
+
+        // 检查引号匹配
+        let singleQuotes = query.count(where: { $0 == "'" })
+        let doubleQuotes = query.count(where: { $0 == "\"" })
+        if singleQuotes % 2 != 0 {
+            suggestions.append("检查单引号是否成对: 当前有 \(singleQuotes) 个单引号")
+        }
+        if doubleQuotes % 2 != 0 {
+            suggestions.append("检查双引号是否成对: 当前有 \(doubleQuotes) 个双引号")
+        }
+
+        // 检查括号匹配
+        let openParens = query.count(where: { $0 == "(" })
+        let closeParens = query.count(where: { $0 == ")" })
+        if openParens != closeParens {
+            suggestions.append("检查括号是否成对: 有 \(openParens) 个左括号和 \(closeParens) 个右括号")
+        }
+
+        return suggestions
+    }
+
+    /// 生成表相关建议
+    private func generateTableSuggestions(query: String, error: String) -> [String] {
+        var suggestions: [String] = []
+
+        // 尝试从错误中提取表名
+        let pattern = #"no such table:?\s*(\w+)"#
+        if
+            let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+            let match = regex.firstMatch(in: error, options: [], range: NSRange(error.startIndex..., in: error)),
+            let range = Range(match.range(at: 1), in: error) {
+            let tableName = String(error[range])
+            suggestions.append("表 '\(tableName)' 不存在，请检查表名是否正确")
+            suggestions.append("使用左侧表列表查看可用的表名")
+        } else {
+            suggestions.append("请检查表名是否正确拼写")
+            suggestions.append("使用左侧表列表查看可用的表名")
+        }
+
+        return suggestions
+    }
+
+    /// 生成列相关建议
+    private func generateColumnSuggestions(query: String, error: String) -> [String] {
+        var suggestions: [String] = []
+
+        // 尝试从错误中提取列名
+        let pattern = #"no such column:?\s*(\w+)"#
+        if
+            let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+            let match = regex.firstMatch(in: error, options: [], range: NSRange(error.startIndex..., in: error)),
+            let range = Range(match.range(at: 1), in: error) {
+            let columnName = String(error[range])
+            suggestions.append("列 '\(columnName)' 不存在，请检查列名是否正确")
+        }
+
+        suggestions.append("点击左侧表名查看该表的所有列")
+        suggestions.append("尝试使用 SELECT * 查询所有列")
+
+        return suggestions
+    }
+
+    /// 生成 SELECT 建议
+    private func generateSelectSuggestion(query: String) -> [String] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        var suggestions: [String] = []
+
+        let lowercased = trimmed.lowercased()
+
+        // 不支持的 SQL 语句类型
+        let unsupportedCommands = ["insert", "update", "delete", "drop", "alter", "create", "truncate", "replace"]
+        let isUnsupportedCommand = unsupportedCommands.contains { lowercased.hasPrefix($0) }
+
+        if isUnsupportedCommand {
+            suggestions.append("此工具仅支持 SELECT 查询，不支持数据修改操作")
+        } else if lowercased.hasPrefix("*") || lowercased.contains(" from ") {
+            // 看起来像是缺少 SELECT 的查询
+            suggestions.append("SELECT \(trimmed)")
+        } else {
+            // 提供通用建议
+            suggestions.append("请使用 SELECT 语句查询数据")
+            suggestions.append("示例: SELECT * FROM table_name LIMIT 100")
+        }
+
+        return suggestions
+    }
+
+    /// 生成通用建议
+    private func generateGenericSuggestions(query: String) -> [String] {
+        var suggestions: [String] = []
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 基本 SELECT 语句模板
+        if trimmed.isEmpty {
+            suggestions.append("SELECT * FROM table_name LIMIT 100")
+        } else {
+            suggestions.append("确保 SQL 语句以 SELECT 开头")
+            suggestions.append("基本语法: SELECT column1, column2 FROM table_name WHERE condition")
+        }
+
+        return suggestions
     }
 
     // MARK: - Helpers
@@ -698,6 +1032,7 @@ public final class MockBackendPlugin: BackendPlugin, @unchecked Sendable {
 
         let rules = try await MockRuleModel.query(on: req.db)
             .filter(\.$deviceId == deviceId)
+            .sort(\.$createdAt, .descending)  // 按创建时间倒序，最新的在前
             .all()
 
         return rules.map { $0.toDTO() }
@@ -850,7 +1185,7 @@ public final class BreakpointBackendPlugin: BackendPlugin, @unchecked Sendable {
 
         let rules = try await BreakpointRuleModel.query(on: req.db)
             .filter(\.$deviceId == deviceId)
-            .sort(\.$priority, .descending)
+            .sort(\.$createdAt, .descending) // 按创建时间倒序，最新的在前
             .all()
 
         return rules.map { PluginBreakpointRuleDTO(from: $0) }
@@ -1011,7 +1346,7 @@ public final class ChaosBackendPlugin: BackendPlugin, @unchecked Sendable {
 
         let rules = try await ChaosRuleModel.query(on: req.db)
             .filter(\.$deviceId == deviceId)
-            .sort(\.$priority, .descending)
+            .sort(\.$createdAt, .descending) // 按创建时间倒序，最新的在前
             .all()
 
         return rules.map { $0.toDTO() }
@@ -1306,12 +1641,66 @@ struct PluginDBRow: Content {
 }
 
 struct PluginDBQueryResponse: Content {
+    let success: Bool
     let dbId: String
     let query: String
-    let columns: [PluginDBColumnInfo]
-    let rows: [PluginDBRow]
-    let rowCount: Int
-    let executionTimeMs: Double
+    let columns: [PluginDBColumnInfo]?
+    let rows: [PluginDBRow]?
+    let rowCount: Int?
+    let executionTimeMs: Double?
+    /// 错误信息
+    let error: PluginDBQueryError?
+
+    /// 成功响应
+    static func success(
+        dbId: String,
+        query: String,
+        columns: [PluginDBColumnInfo],
+        rows: [PluginDBRow],
+        rowCount: Int,
+        executionTimeMs: Double
+    ) -> PluginDBQueryResponse {
+        PluginDBQueryResponse(
+            success: true,
+            dbId: dbId,
+            query: query,
+            columns: columns,
+            rows: rows,
+            rowCount: rowCount,
+            executionTimeMs: executionTimeMs,
+            error: nil
+        )
+    }
+
+    /// 失败响应
+    static func failure(
+        dbId: String,
+        query: String,
+        error: PluginDBQueryError
+    ) -> PluginDBQueryResponse {
+        PluginDBQueryResponse(
+            success: false,
+            dbId: dbId,
+            query: query,
+            columns: nil,
+            rows: nil,
+            rowCount: nil,
+            executionTimeMs: nil,
+            error: error
+        )
+    }
+}
+
+/// SQL 查询错误详情
+struct PluginDBQueryError: Content {
+    /// 错误类型：syntax_error, table_not_found, column_not_found, access_denied, timeout, internal_error
+    let type: String
+    /// 原始错误消息
+    let message: String
+    /// 友好的错误描述
+    let description: String
+    /// SQL 语句建议（如果能推断出用户意图）
+    let suggestions: [String]?
 }
 
 struct PluginDBSQLResponse: Content {

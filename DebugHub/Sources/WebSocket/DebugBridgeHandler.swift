@@ -125,6 +125,12 @@ final class DebugBridgeHandler: @unchecked Sendable {
                     handlePluginStateChange(pluginId: pluginId, isEnabled: isEnabled, deviceId: deviceId)
                 }
 
+            case let .updateDeviceInfo(deviceInfo):
+                if let deviceId = deviceIdHolder.deviceId {
+                    print("[DebugBridge] Received device info update from \(deviceId): \(deviceInfo.deviceName)")
+                    handleDeviceInfoUpdate(deviceInfo: deviceInfo, deviceId: deviceId)
+                }
+
             default:
                 print("[DebugBridge] Received unknown message type")
             }
@@ -212,10 +218,18 @@ final class DebugBridgeHandler: @unchecked Sendable {
                 RealtimeStreamHandler.shared.broadcast(events: result.extraEvents, deviceId: deviceId)
             }
 
-            // 广播原始事件给实时流订阅者（带序号）
-            RealtimeStreamHandler.shared.broadcast(events: events, deviceId: deviceId, seqNumMap: result.seqNumMap)
+            // 过滤掉 performance 事件，避免重复广播
+            // performance 事件会通过 PerformanceBackendPlugin 处理并广播
+            let nonPerformanceEvents = events.filter {
+                if case .performance = $0 { return false }
+                return true
+            }
+
+            // 广播非 performance 事件给实时流订阅者（带序号）
+            RealtimeStreamHandler.shared.broadcast(events: nonPerformanceEvents, deviceId: deviceId, seqNumMap: result.seqNumMap)
 
             // 将 performance 事件路由到 PerformanceBackendPlugin
+            // PerformanceBackendPlugin 会负责处理并广播这些事件
             for event in events {
                 if case let .performance(perfEvent) = event {
                     await routePerformanceEvent(perfEvent, deviceId: deviceId)
@@ -333,6 +347,19 @@ final class DebugBridgeHandler: @unchecked Sendable {
             pluginId: pluginId,
             isEnabled: isEnabled,
             deviceId: deviceId
+        )
+    }
+
+    private func handleDeviceInfoUpdate(deviceInfo: DeviceInfoDTO, deviceId: String) {
+        // 更新 DeviceSession 中的设备信息
+        if let session = DeviceRegistry.shared.getSession(deviceId: deviceId) {
+            session.updateDeviceInfo(deviceInfo)
+        }
+
+        // 广播给 WebUI
+        RealtimeStreamHandler.shared.broadcastDeviceInfoUpdated(
+            deviceId: deviceId,
+            deviceName: deviceInfo.deviceName
         )
     }
 

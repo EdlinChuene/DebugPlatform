@@ -71,7 +71,7 @@ struct DeviceRegistrationResult {
 // MARK: - Device Session
 
 final class DeviceSession {
-    let deviceInfo: DeviceInfoDTO
+    var deviceInfo: DeviceInfoDTO
     let webSocket: WebSocket
     let connectedAt: Date
     let sessionId: String
@@ -95,6 +95,11 @@ final class DeviceSession {
     func updatePluginStates(_ states: [String: Bool]) {
         self.pluginStates = states
     }
+
+    /// 更新设备信息（如设备别名变更）
+    func updateDeviceInfo(_ newDeviceInfo: DeviceInfoDTO) {
+        self.deviceInfo = newDeviceInfo
+    }
 }
 
 // MARK: - Device Registry
@@ -112,6 +117,9 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
 
     /// 数据库引用（由外部设置）
     var database: Database?
+
+    /// 新设备连接事件回调
+    var onDeviceConnected: ((String, String, String, [String: Bool]) -> Void)? // deviceId, deviceName, sessionId, pluginStates
 
     /// 断开事件回调
     var onDeviceDisconnected: ((String) -> Void)?
@@ -195,7 +203,9 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
             onDeviceReconnected?(deviceInfo.deviceId, deviceInfo.deviceName, sessionId)
         } else if isNewConnection {
             connectionType = .newConnection
-            // 只有新连接才记录到数据库
+            // 新设备连接：广播连接事件
+            onDeviceConnected?(deviceInfo.deviceId, deviceInfo.deviceName, sessionId, pluginStates)
+            // 记录到数据库
             Task {
                 await self.recordSessionStart(deviceInfo: deviceInfo, sessionId: sessionId)
             }
@@ -424,6 +434,8 @@ enum BridgeMessageDTO: Codable {
     case pluginEvent(PluginEventDTO)
     // 插件状态变化
     case pluginStateChange(pluginId: String, isEnabled: Bool)
+    // 设备信息更新（如别名变更）
+    case updateDeviceInfo(DeviceInfoDTO)
     case error(code: Int, message: String)
 
     private enum CodingKeys: String, CodingKey {
@@ -448,6 +460,7 @@ enum BridgeMessageDTO: Codable {
         case pluginCommand
         case pluginEvent
         case pluginStateChange
+        case updateDeviceInfo
         case error
     }
 
@@ -503,6 +516,9 @@ enum BridgeMessageDTO: Codable {
         case .pluginStateChange:
             let payload = try container.decode(PluginStateChangePayload.self, forKey: .payload)
             self = .pluginStateChange(pluginId: payload.pluginId, isEnabled: payload.isEnabled)
+        case .updateDeviceInfo:
+            let deviceInfo = try container.decode(DeviceInfoDTO.self, forKey: .payload)
+            self = .updateDeviceInfo(deviceInfo)
         case .error:
             let payload = try container.decode(ErrorPayload.self, forKey: .payload)
             self = .error(code: payload.code, message: payload.message)
@@ -560,6 +576,9 @@ enum BridgeMessageDTO: Codable {
         case let .pluginStateChange(pluginId, isEnabled):
             try container.encode(MessageType.pluginStateChange, forKey: .type)
             try container.encode(PluginStateChangePayload(pluginId: pluginId, isEnabled: isEnabled), forKey: .payload)
+        case let .updateDeviceInfo(deviceInfo):
+            try container.encode(MessageType.updateDeviceInfo, forKey: .type)
+            try container.encode(deviceInfo, forKey: .payload)
         case let .error(code, message):
             try container.encode(MessageType.error, forKey: .type)
             try container.encode(ErrorPayload(code: code, message: message), forKey: .payload)

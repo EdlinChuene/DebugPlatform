@@ -7,6 +7,7 @@ import type { PluginContext, PluginRenderProps, PluginEvent } from '@/plugins/ty
 import { useToastStore } from '@/stores/toastStore'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { realtimeService } from '@/services/realtime'
+import { PlugDisabledIcon } from '@/components/icons'
 
 // API 基础路径
 const API_BASE = '/api'
@@ -32,10 +33,15 @@ interface PluginTabInfo {
 
 /**
  * 获取所有启用的插件的标签信息
+ * 子插件（isSubPlugin: true）不会出现在父标签栏中，它们在各自父插件的子标签中显示
  */
 export function getPluginTabs(): PluginTabInfo[] {
     return PluginRegistry.getAll()
-        .filter((plugin) => PluginRegistry.isPluginEnabled(plugin.metadata.pluginId))
+        .filter((plugin) => {
+            // 过滤掉子插件（它们在父插件的子标签中显示）
+            if (plugin.metadata.isSubPlugin) return false
+            return PluginRegistry.isPluginEnabled(plugin.metadata.pluginId)
+        })
         .map((plugin) => ({
             pluginId: plugin.metadata.pluginId,
             displayName: plugin.metadata.displayName,
@@ -209,7 +215,7 @@ export function PluginRenderer({ deviceId, activePluginId, className }: PluginRe
     if (isPluginDisabledOnDevice && activePlugin) {
         return (
             <div className={`flex flex-col items-center justify-center h-full text-text-tertiary ${className}`}>
-                <div className="text-5xl mb-4">🔒</div>
+                <PlugDisabledIcon size={48} className="mb-4 text-text-muted" />
                 <div className="text-lg mb-2">插件在设备端已禁用</div>
                 <div className="text-sm text-text-muted max-w-md text-center">
                     插件 "{activePlugin.metadata.displayName}" 在 DebugProbe SDK 中已被禁用，
@@ -281,16 +287,16 @@ export function PluginTabBar({ activePluginId, onTabChange, className }: PluginT
                         onClick={() => onTabChange(tab.pluginId)}
                         title={isDisabledOnDevice ? `${tab.displayName}（设备端已禁用）` : `⌘${index + 1}`}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors relative whitespace-nowrap ${activePluginId === tab.pluginId
-                                ? 'bg-primary text-bg-darkest'
-                                : isDisabledOnDevice
-                                    ? 'text-text-muted opacity-50 cursor-not-allowed'
-                                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
+                            ? 'bg-primary text-bg-darkest'
+                            : isDisabledOnDevice
+                                ? 'text-text-muted opacity-50 cursor-not-allowed'
+                                : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
                             }`}
                     >
                         <span className="text-sm">{tab.icon}</span>
                         <span>{tab.displayName}</span>
                         {isDisabledOnDevice && (
-                            <span className="text-xs ml-1">🔒</span>
+                            <PlugDisabledIcon size={12} className="ml-1 text-text-muted" />
                         )}
                     </button>
                 )

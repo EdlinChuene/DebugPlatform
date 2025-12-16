@@ -628,3 +628,23 @@ import type { ServerStats } from '@/types'
 export async function getServerStats(): Promise<ServerStats> {
   return fetchJSON(`${API_BASE}/stats`)
 }
+
+// ============================================================================
+// 系统工具 API
+// ============================================================================
+
+export interface RevealResponse {
+  success: boolean
+  message: string
+}
+
+/**
+ * 在 Finder 中显示指定路径
+ * @param path 要显示的文件/目录路径
+ */
+export async function revealInFinder(path: string): Promise<RevealResponse> {
+  return fetchJSON(`${API_BASE}/sys/reveal`, {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  })
+}

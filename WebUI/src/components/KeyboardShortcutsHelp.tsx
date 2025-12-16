@@ -15,7 +15,7 @@ const shortcuts = [
   },
   {
     category: '操作', items: [
-      { keys: ['⌘/Ctrl', 'K'], description: '搜索' },
+      { keys: ['⌘/Ctrl', 'K / F'], description: '全局搜索' },
       { keys: ['⌘/Ctrl', 'R'], description: '刷新列表' },
       { keys: ['⌘/Ctrl', 'L'], description: '清屏' },
       { keys: ['⌘/Ctrl', 'E'], description: '导出数据' },

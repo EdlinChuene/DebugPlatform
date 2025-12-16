@@ -1,7 +1,7 @@
 // 性能监控前端插件
 // 实时展示 CPU、内存、FPS 等性能指标
 
-import React, { useEffect, useCallback, useState, useMemo } from 'react'
+import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react'
 import {
     FrontendPlugin,
     PluginContext,
@@ -29,6 +29,8 @@ import {
     type Alert,
     type AlertRule,
     type AlertSeverity,
+    type AppLaunchHistoryItem,
+    type AppLaunchStats,
 } from '@/stores/performanceStore'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { useToastStore } from '@/stores/toastStore'
@@ -46,6 +48,25 @@ import {
     AreaChart,
     ReferenceLine,
 } from 'recharts'
+
+// 格式化时间，包含毫秒
+function formatTimeWithMs(dateString: string): string {
+    const date = new Date(dateString)
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    const seconds = String(date.getSeconds()).padStart(2, '0')
+    const ms = String(date.getMilliseconds()).padStart(3, '0')
+    return `${hours}:${minutes}:${seconds}.${ms}`
+}
+
+// 格式化日期时间，包含毫秒
+function formatDateTimeWithMs(dateString: string): string {
+    const date = new Date(dateString)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day} ${formatTimeWithMs(dateString)}`
+}
 
 // 插件 ID
 const PERFORMANCE_PLUGIN_ID = 'performance'
@@ -166,6 +187,7 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
         store.fetchAlerts(deviceId)
         store.fetchJankEvents(deviceId)
         store.fetchTrends(deviceId, 60)
+        store.fetchAppLaunchData(deviceId)
     }, [deviceId, isActive])
 
     // 自动刷新定时器
@@ -379,6 +401,9 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
                         lastMetrics={store.lastMetrics}
                         isLoading={store.isLoading}
                         appLaunchMetrics={store.appLaunchMetrics}
+                        appLaunchHistory={store.appLaunchHistory}
+                        appLaunchStats={store.appLaunchStats}
+                        isLoadingAppLaunch={store.isLoadingAppLaunch}
                     />
                 ) : activeTab === 'trends' ? (
                     <TrendsContent
@@ -433,12 +458,95 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
     )
 }
 
+// App 启动历史趋势图表组件
+function AppLaunchHistoryChart({ history }: { history: AppLaunchHistoryItem[] }) {
+    // 准备图表数据，按时间正序排列
+    const chartData = useMemo(() => {
+        return [...history]
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .map((item, index) => ({
+                index: index + 1,
+                time: new Date(item.timestamp).toLocaleDateString('zh-CN', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                }),
+                total: item.totalTime,
+                preMain: item.preMainTime ?? 0,
+                mainToLaunch: item.mainToLaunchTime ?? 0,
+                launchToFirstFrame: item.launchToFirstFrameTime ?? 0,
+            }))
+    }, [history])
+
+    // 自定义 Tooltip
+    const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ color: string; name: string; value: number }>; label?: string }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-bg-darkest border border-border rounded-lg p-2 text-xs shadow-lg">
+                    <p className="text-text-tertiary mb-1">{label}</p>
+                    {payload.map((entry, index) => (
+                        <p key={index} style={{ color: entry.color }}>
+                            {entry.name}: {entry.value.toFixed(0)}ms
+                        </p>
+                    ))}
+                </div>
+            )
+        }
+        return null
+    }
+
+    return (
+        <div className="h-[140px]">
+            <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <defs>
+                        <linearGradient id="launchTotalGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                        </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis
+                        dataKey="time"
+                        tick={{ fontSize: 10, fill: '#888' }}
+                        tickLine={false}
+                        axisLine={false}
+                        interval="preserveStartEnd"
+                    />
+                    <YAxis
+                        tick={{ fontSize: 10, fill: '#888' }}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value) => `${value}ms`}
+                        width={50}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                        type="monotone"
+                        dataKey="total"
+                        name="总耗时"
+                        stroke="#8b5cf6"
+                        strokeWidth={2}
+                        fill="url(#launchTotalGradient)"
+                        dot={{ r: 3, fill: '#8b5cf6' }}
+                        activeDot={{ r: 5, fill: '#8b5cf6' }}
+                    />
+                </AreaChart>
+            </ResponsiveContainer>
+        </div>
+    )
+}
+
 // 概览内容
 function OverviewContent({
     metrics,
     lastMetrics,
     isLoading,
     appLaunchMetrics,
+    appLaunchHistory,
+    appLaunchStats,
+    isLoadingAppLaunch: _isLoadingAppLaunch,
 }: {
     metrics: PerformanceMetrics[]
     lastMetrics: PerformanceMetrics | null
@@ -448,8 +556,11 @@ function OverviewContent({
         preMainTime?: number
         mainToLaunchTime?: number
         launchToFirstFrameTime?: number
-        lastRecordedAt: string
+        timestamp: string
     } | null
+    appLaunchHistory: AppLaunchHistoryItem[]
+    appLaunchStats: AppLaunchStats | null
+    isLoadingAppLaunch: boolean
 }) {
     // 最新指标
     const latest = lastMetrics ?? metrics[metrics.length - 1]
@@ -517,44 +628,112 @@ function OverviewContent({
 
     return (
         <div className="p-4 space-y-4">
-            {/* 应用启动时间 */}
-            {appLaunchMetrics && (
+            {/* 应用启动时间 - 重新设计的版块 */}
+            {(appLaunchMetrics || appLaunchHistory.length > 0) && (
                 <div className="bg-gradient-to-r from-purple-100/80 to-indigo-100/80 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-lg p-4 border border-purple-200 dark:border-purple-500/20">
-                    <h3 className="text-sm font-medium text-purple-600 dark:text-purple-300 mb-3">🚀 应用启动时间</h3>
-                    {/* 总启动时间 */}
-                    <div className="flex items-center gap-2 mb-3">
-                        <span className="text-text-muted text-xs">总耗时:</span>
-                        <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                            {appLaunchMetrics.totalTime > 0 ? `${appLaunchMetrics.totalTime.toFixed(0)}ms` : '--'}
-                        </span>
-                    </div>
-                    {/* 分阶段详情 */}
-                    <div className="grid grid-cols-3 gap-4 text-xs">
-                        <div>
-                            <div className="text-text-muted">PreMain</div>
-                            <div className="text-lg font-semibold text-purple-600 dark:text-purple-400">
-                                {appLaunchMetrics.preMainTime != null ? `${appLaunchMetrics.preMainTime.toFixed(0)}ms` : '--'}
-                            </div>
-                            <div className="text-[10px] text-text-muted mt-0.5">进程启动→main()</div>
+                    <h3 className="text-sm font-medium text-purple-600 dark:text-purple-300 mb-4">🚀 应用启动时间</h3>
+
+                    <div className="flex gap-6">
+                        {/* 左侧：最新启动数据 */}
+                        <div className="flex-shrink-0 w-[280px]">
+                            {appLaunchMetrics ? (
+                                <>
+                                    {/* 总启动时间 */}
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <span className="text-text-muted text-xs">总耗时:</span>
+                                        <span className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                                            {appLaunchMetrics.totalTime > 0 ? `${appLaunchMetrics.totalTime.toFixed(0)}ms` : '--'}
+                                        </span>
+                                    </div>
+                                    {/* 分阶段详情 */}
+                                    <div className="grid grid-cols-3 gap-3 text-xs">
+                                        <div>
+                                            <div className="text-text-muted">PreMain</div>
+                                            <div className="text-base font-semibold text-purple-600 dark:text-purple-400">
+                                                {appLaunchMetrics.preMainTime != null ? `${appLaunchMetrics.preMainTime.toFixed(0)}ms` : '--'}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-text-muted">Main→Launch</div>
+                                            <div className="text-base font-semibold text-indigo-600 dark:text-indigo-400">
+                                                {appLaunchMetrics.mainToLaunchTime != null ? `${appLaunchMetrics.mainToLaunchTime.toFixed(0)}ms` : '--'}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-text-muted">Launch→首帧</div>
+                                            <div className="text-base font-semibold text-blue-600 dark:text-blue-400">
+                                                {appLaunchMetrics.launchToFirstFrameTime != null ? `${appLaunchMetrics.launchToFirstFrameTime.toFixed(0)}ms` : '--'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 text-[10px] text-text-muted">
+                                        记录于: {appLaunchMetrics.timestamp ? new Date(appLaunchMetrics.timestamp).toLocaleString() : '--'}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="text-text-muted text-sm">暂无启动数据</div>
+                            )}
                         </div>
-                        <div>
-                            <div className="text-text-muted">Main→Launch</div>
-                            <div className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">
-                                {appLaunchMetrics.mainToLaunchTime != null ? `${appLaunchMetrics.mainToLaunchTime.toFixed(0)}ms` : '--'}
-                            </div>
-                            <div className="text-[10px] text-text-muted mt-0.5">main()→didFinish</div>
-                        </div>
-                        <div>
-                            <div className="text-text-muted">Launch→首帧</div>
-                            <div className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                                {appLaunchMetrics.launchToFirstFrameTime != null ? `${appLaunchMetrics.launchToFirstFrameTime.toFixed(0)}ms` : '--'}
-                            </div>
-                            <div className="text-[10px] text-text-muted mt-0.5">didFinish→首帧渲染</div>
+
+                        {/* 右侧：历史趋势图表 */}
+                        <div className="flex-1 min-w-0">
+                            {appLaunchHistory.length > 0 ? (
+                                <AppLaunchHistoryChart history={appLaunchHistory} />
+                            ) : (
+                                <div className="h-[140px] flex items-center justify-center text-text-muted text-xs">
+                                    暂无历史数据
+                                </div>
+                            )}
                         </div>
                     </div>
-                    <div className="mt-2 text-xs text-text-muted">
-                        记录于: {appLaunchMetrics.lastRecordedAt ? new Date(appLaunchMetrics.lastRecordedAt).toLocaleString() : '--'}
-                    </div>
+
+                    {/* 底部统计数据 */}
+                    {appLaunchStats && (
+                        <div className="mt-4 pt-3 border-t border-purple-200/50 dark:border-purple-500/20">
+                            <div className="grid grid-cols-7 gap-3 text-xs">
+                                <div>
+                                    <div className="text-text-muted">启动次数</div>
+                                    <div className="font-semibold text-text-primary">{appLaunchStats.count}</div>
+                                </div>
+                                <div>
+                                    <div className="text-text-muted">平均</div>
+                                    <div className="font-semibold text-purple-600 dark:text-purple-400">
+                                        {appLaunchStats.avgTotalTime.toFixed(0)}ms
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-text-muted">最小</div>
+                                    <div className="font-semibold text-status-success">
+                                        {appLaunchStats.minTotalTime.toFixed(0)}ms
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-text-muted">最大</div>
+                                    <div className="font-semibold text-red-500">
+                                        {appLaunchStats.maxTotalTime.toFixed(0)}ms
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-text-muted">P50</div>
+                                    <div className="font-semibold text-indigo-600 dark:text-indigo-400">
+                                        {appLaunchStats.p50TotalTime.toFixed(0)}ms
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-text-muted">P90</div>
+                                    <div className="font-semibold text-orange-500">
+                                        {appLaunchStats.p90TotalTime.toFixed(0)}ms
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-text-muted">P95</div>
+                                    <div className="font-semibold text-red-500">
+                                        {appLaunchStats.p95TotalTime.toFixed(0)}ms
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -735,12 +914,6 @@ function OverviewContent({
                     )}
                 </div>
             )}
-
-            {/* 性能趋势图表 - 使用 recharts */}
-            <div className="bg-bg-medium rounded-lg p-4">
-                <h3 className="text-sm font-medium text-text-secondary mb-3">📈 性能趋势</h3>
-                <PerformanceCharts metrics={metrics} />
-            </div>
         </div>
     )
 }
@@ -1166,6 +1339,52 @@ function JanksContent({
     onPageChange: (page: number) => void
 }) {
     const totalPages = Math.ceil(total / pageSize)
+    const [selectedJank, setSelectedJank] = useState<JankEvent | null>(null)
+
+    // 列宽状态
+    const [columnWidths, setColumnWidths] = useState({
+        index: 50,
+        time: 120,
+        duration: 100,
+        droppedFrames: 80,
+        // stackTrace 弹性宽度
+    })
+    const [isResizing, setIsResizing] = useState(false)
+    const resizeState = useRef<{ columnKey: string; startX: number; startWidth: number } | null>(null)
+
+    // 开始调整列宽
+    const startColumnResize = useCallback((e: React.MouseEvent, columnKey: string) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const startWidth = columnWidths[columnKey as keyof typeof columnWidths] || 100
+        resizeState.current = { columnKey, startX: e.clientX, startWidth }
+        setIsResizing(true)
+    }, [columnWidths])
+
+    // 列宽调整的鼠标移动和抬起事件
+    useEffect(() => {
+        if (!isResizing) return
+
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!resizeState.current) return
+            const { columnKey, startX, startWidth } = resizeState.current
+            const delta = e.clientX - startX
+            const newWidth = Math.max(60, Math.min(400, startWidth + delta))
+            setColumnWidths(prev => ({ ...prev, [columnKey]: newWidth }))
+        }
+
+        const handleMouseUp = () => {
+            setIsResizing(false)
+            resizeState.current = null
+        }
+
+        document.addEventListener('mousemove', handleMouseMove)
+        document.addEventListener('mouseup', handleMouseUp)
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [isResizing])
 
     if (isLoading && events.length === 0) {
         return (
@@ -1184,16 +1403,43 @@ function JanksContent({
         )
     }
 
+    // 列分割线组件
+    const ColumnDivider = ({ columnKey }: { columnKey?: string }) => (
+        <div
+            className={clsx(
+                'absolute right-0 top-0 bottom-0 w-px bg-border',
+                columnKey && 'cursor-col-resize hover:bg-primary/50 transition-colors',
+                isResizing && resizeState.current?.columnKey === columnKey && 'bg-primary w-0.5'
+            )}
+            onMouseDown={columnKey ? (e) => startColumnResize(e, columnKey) : undefined}
+        >
+            {columnKey && <div className="absolute -left-1.5 -right-1.5 top-0 bottom-0" />}
+        </div>
+    )
+
     return (
         <div className="flex flex-col h-full">
             {/* 列表 */}
-            <div className="flex-1 overflow-auto">
-                <table className="w-full text-sm">
+            <div className={clsx('flex-1 overflow-auto', isResizing && 'select-none')}>
+                <table className="text-sm table-fixed" style={{ minWidth: '100%' }}>
                     <thead className="bg-bg-medium sticky top-0">
                         <tr>
-                            <th className="px-3 py-2 text-left text-text-tertiary font-medium">时间</th>
-                            <th className="px-3 py-2 text-left text-text-tertiary font-medium">持续时间</th>
-                            <th className="px-3 py-2 text-left text-text-tertiary font-medium">丢帧数</th>
+                            <th className="px-3 py-2 text-left text-text-tertiary font-medium relative" style={{ width: columnWidths.index }}>
+                                #
+                                <ColumnDivider columnKey="index" />
+                            </th>
+                            <th className="px-3 py-2 text-left text-text-tertiary font-medium relative" style={{ width: columnWidths.time }}>
+                                时间
+                                <ColumnDivider columnKey="time" />
+                            </th>
+                            <th className="px-3 py-2 text-left text-text-tertiary font-medium relative" style={{ width: columnWidths.duration }}>
+                                持续时间
+                                <ColumnDivider columnKey="duration" />
+                            </th>
+                            <th className="px-3 py-2 text-left text-text-tertiary font-medium relative" style={{ width: columnWidths.droppedFrames }}>
+                                丢帧数
+                                <ColumnDivider columnKey="droppedFrames" />
+                            </th>
                             <th className="px-3 py-2 text-left text-text-tertiary font-medium">
                                 <span className="flex items-center gap-1">
                                     调用栈
@@ -1203,12 +1449,20 @@ function JanksContent({
                         </tr>
                     </thead>
                     <tbody>
-                        {events.map((event) => (
-                            <tr key={event.id} className="border-b border-border hover:bg-bg-medium">
-                                <td className="px-3 py-2 text-text-secondary">
-                                    {new Date(event.timestamp).toLocaleTimeString()}
+                        {events.map((event, idx) => (
+                            <tr
+                                key={event.id}
+                                className="border-b border-border hover:bg-bg-medium cursor-pointer select-none transition-colors"
+                                onDoubleClick={() => setSelectedJank(event)}
+                                title="双击查看完整详情"
+                            >
+                                <td className="px-3 py-2 text-text-muted text-center whitespace-nowrap border-r border-border" style={{ width: columnWidths.index }}>
+                                    {(page - 1) * pageSize + idx + 1}
                                 </td>
-                                <td className="px-3 py-2">
+                                <td className="px-3 py-2 text-text-secondary whitespace-nowrap border-r border-border" style={{ width: columnWidths.time }}>
+                                    {formatTimeWithMs(event.timestamp)}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap border-r border-border" style={{ width: columnWidths.duration }}>
                                     <span
                                         className={clsx(
                                             'px-2 py-0.5 rounded text-xs font-medium',
@@ -1222,10 +1476,19 @@ function JanksContent({
                                         {formatDuration(event.duration)}
                                     </span>
                                 </td>
-                                <td className="px-3 py-2 text-text-secondary">{event.droppedFrames}</td>
-                                <td className="px-3 py-2 text-text-muted truncate max-w-xs" title={event.stackTrace || '未捕获调用栈'}>
+                                <td className="px-3 py-2 text-text-secondary text-center whitespace-nowrap border-r border-border" style={{ width: columnWidths.droppedFrames }}>{event.droppedFrames}</td>
+                                <td className="px-3 py-2 text-text-muted">
                                     {event.stackTrace ? (
-                                        <span className="text-text-secondary">{event.stackTrace}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-text-secondary truncate max-w-md" title="双击查看完整调用栈">
+                                                {event.stackTrace.split('\n')[0] || event.stackTrace.substring(0, 60)}
+                                            </span>
+                                            {event.stackTrace.includes('\n') && (
+                                                <span className="text-[10px] text-text-tertiary whitespace-nowrap">
+                                                    +{event.stackTrace.split('\n').length - 1} 帧
+                                                </span>
+                                            )}
+                                        </div>
                                     ) : (
                                         <span className="text-text-muted italic">未启用</span>
                                     )}
@@ -1240,7 +1503,7 @@ function JanksContent({
             {totalPages > 1 && (
                 <div className="flex items-center justify-between px-3 py-2 border-t border-border">
                     <span className="text-xs text-text-muted">
-                        共 {total} 条
+                        共 {total} 条，双击查看详情
                     </span>
                     <div className="flex items-center gap-1">
                         <button
@@ -1263,6 +1526,164 @@ function JanksContent({
                     </div>
                 </div>
             )}
+
+            {/* 卡顿详情弹窗 */}
+            {selectedJank && (
+                <JankDetailModal
+                    jank={selectedJank}
+                    onClose={() => setSelectedJank(null)}
+                />
+            )}
+        </div>
+    )
+}
+
+// 卡顿详情弹窗
+function JankDetailModal({
+    jank,
+    onClose,
+}: {
+    jank: JankEvent
+    onClose: () => void
+}) {
+    // 解析调用栈为结构化数据
+    const stackFrames = useMemo(() => {
+        if (!jank.stackTrace) return []
+        // 按换行符分割调用栈
+        return jank.stackTrace.split('\n').filter(line => line.trim())
+    }, [jank.stackTrace])
+
+    // 关闭快捷键
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose()
+            }
+        }
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [onClose])
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+            {/* 背景遮罩 */}
+            <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={onClose}
+            />
+
+            {/* 弹窗内容 */}
+            <div className="relative bg-bg-dark border border-border rounded-xl shadow-2xl max-w-3xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+                {/* 标题栏 */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                        <PerformanceIcon size={20} />
+                        卡顿事件详情
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        className="p-1 rounded hover:bg-bg-light transition-colors text-text-muted hover:text-text-primary"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                {/* 基本信息 */}
+                <div className="px-6 py-4 border-b border-border bg-bg-medium/50">
+                    <div className="grid grid-cols-3 gap-4">
+                        <div>
+                            <span className="text-text-muted text-xs block mb-1">发生时间</span>
+                            <span className="text-text-primary font-medium">
+                                {formatDateTimeWithMs(jank.timestamp)}
+                            </span>
+                        </div>
+                        <div>
+                            <span className="text-text-muted text-xs block mb-1">持续时间</span>
+                            <span
+                                className={clsx(
+                                    'px-2 py-0.5 rounded text-sm font-medium inline-block',
+                                    jank.duration > 500
+                                        ? 'bg-status-error-bg text-status-error'
+                                        : jank.duration > 200
+                                            ? 'bg-status-warning-bg text-status-warning'
+                                            : 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400'
+                                )}
+                            >
+                                {formatDuration(jank.duration)}
+                            </span>
+                        </div>
+                        <div>
+                            <span className="text-text-muted text-xs block mb-1">丢帧数</span>
+                            <span className="text-text-primary font-medium">
+                                {jank.droppedFrames} 帧
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 调用栈 */}
+                <div className="flex-1 overflow-auto px-6 py-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="text-text-muted text-xs font-medium">
+                            调用栈 ({stackFrames.length} 帧)
+                        </span>
+                        {jank.stackTrace && (
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(jank.stackTrace || '')
+                                }}
+                                className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+                            >
+                                复制调用栈
+                            </button>
+                        )}
+                    </div>
+
+                    {stackFrames.length > 0 ? (
+                        <div className="bg-bg-darkest rounded-lg border border-border overflow-hidden">
+                            <div className="overflow-auto max-h-[40vh]">
+                                <pre className="text-xs text-text-secondary p-4 font-mono whitespace-pre-wrap break-all">
+                                    {stackFrames.map((frame, index) => (
+                                        <div
+                                            key={index}
+                                            className={clsx(
+                                                'py-0.5',
+                                                index === 0 && 'text-accent-primary font-medium'
+                                            )}
+                                        >
+                                            <span className="text-text-muted mr-2 select-none">
+                                                {String(index).padStart(2, '0')}
+                                            </span>
+                                            {frame}
+                                        </div>
+                                    ))}
+                                </pre>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-bg-darkest rounded-lg border border-border p-8 text-center">
+                            <span className="text-text-muted text-sm">
+                                未捕获调用栈
+                            </span>
+                            <p className="text-text-tertiary text-xs mt-2">
+                                需要在 SDK 配置中启用 captureStackTrace 选项
+                            </p>
+                        </div>
+                    )}
+                </div>
+
+                {/* 底部操作栏 */}
+                <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-sm rounded-lg bg-bg-light hover:bg-bg-medium text-text-secondary transition-colors"
+                    >
+                        关闭
+                    </button>
+                </div>
+            </div>
         </div>
     )
 }

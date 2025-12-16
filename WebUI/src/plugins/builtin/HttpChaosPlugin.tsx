@@ -9,6 +9,7 @@ import {
     deleteChaosRule,
     deleteAllChaosRules,
 } from '@/services/api'
+import { useChaosStore } from '@/stores/chaosStore'
 import clsx from 'clsx'
 import {
     ChaosIcon,
@@ -35,7 +36,7 @@ import {
 type ChaosTypeKind = ChaosType['type']
 
 // 插件实现类
-class ChaosPluginImpl implements FrontendPlugin {
+class HttpChaosPluginImpl implements FrontendPlugin {
     metadata: PluginMetadata = {
         pluginId: BuiltinPluginId.CHAOS,
         displayName: 'Chaos',
@@ -43,6 +44,8 @@ class ChaosPluginImpl implements FrontendPlugin {
         description: '混沌工程测试',
         icon: <ChaosIcon size={16} />,
         dependencies: [BuiltinPluginId.HTTP],
+        isSubPlugin: true, // 作为 HTTP 的子插件
+        parentPluginId: BuiltinPluginId.HTTP,
     }
 
     state: PluginState = 'uninitialized'
@@ -94,14 +97,34 @@ class ChaosPluginImpl implements FrontendPlugin {
     }
 }
 
-// 插件视图组件
+// 插件视图组件 - 包装器
 function ChaosPluginView({ context, isActive }: PluginRenderProps) {
-    const deviceId = context.deviceId
+    if (!isActive || !context.deviceId) return null
+    return <ChaosPluginContent deviceId={context.deviceId} isActive={isActive} />
+}
 
+// 导出内容组件供 HttpPlugin 使用
+export function ChaosPluginContent({ deviceId, isActive }: { deviceId: string; isActive: boolean }) {
     const [rules, setRules] = useState<ChaosRule[]>([])
     const [loading, setLoading] = useState(false)
     const [editingRule, setEditingRule] = useState<Partial<ChaosRule> | null>(null)
     const [showEditor, setShowEditor] = useState(false)
+
+    // 从 store 获取编辑状态
+    const {
+        editingRule: storeEditingRule,
+        isEditorOpen: storeIsEditorOpen,
+        closeEditor: storeCloseEditor,
+    } = useChaosStore()
+
+    // 监听 store 中的编辑状态变化
+    useEffect(() => {
+        if (storeIsEditorOpen && storeEditingRule) {
+            setEditingRule({ ...storeEditingRule })
+            setShowEditor(true)
+            storeCloseEditor() // 清除 store 状态
+        }
+    }, [storeIsEditorOpen, storeEditingRule, storeCloseEditor])
 
     const fetchRules = useCallback(async () => {
         if (!deviceId) return
@@ -197,10 +220,6 @@ function ChaosPluginView({ context, isActive }: PluginRenderProps) {
 
     // 统计启用的规则数量
     const enabledCount = useMemo(() => rules.filter(r => r.enabled).length, [rules])
-
-    if (!isActive || !deviceId) {
-        return null
-    }
 
     return (
         <div className="h-full flex flex-col">
@@ -631,4 +650,4 @@ function ChaosRuleEditor({
     )
 }
 
-export const ChaosPlugin = new ChaosPluginImpl()
+export const HttpChaosPlugin = new HttpChaosPluginImpl()

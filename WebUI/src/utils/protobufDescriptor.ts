@@ -154,18 +154,103 @@ export function decodeBlob(
         const object = MessageType.toObject(message, {
             longs: String,      // 将 long 转为字符串
             enums: String,      // 将枚举转为字符串
-            bytes: String,      // 将嵌套 bytes 转为 base64
+            bytes: Array,       // 将嵌套 bytes 转为数组（后续手动处理）
             defaults: false,    // 不包含默认值
             arrays: true,       // 始终初始化数组
             objects: true,      // 始终初始化对象
         })
 
-        return { success: true, data: object }
+        // 后处理：将 bytes 字段转为友好格式
+        const processed = processDecodedObject(object)
+
+        return { success: true, data: processed }
     } catch (error) {
         return {
             success: false,
             error: error instanceof Error ? error.message : String(error),
         }
+    }
+}
+
+/**
+ * 后处理解码对象，将 bytes 数组转为友好格式
+ */
+function processDecodedObject(obj: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {}
+
+    for (const [key, value] of Object.entries(obj)) {
+        if (value === null || value === undefined) {
+            result[key] = value
+            continue
+        }
+
+        // 检查是否是 bytes 数组（Uint8Array 或普通数组）
+        if (value instanceof Uint8Array || (Array.isArray(value) && isLikelyBytesArray(value))) {
+            result[key] = formatBytesValue(value as number[] | Uint8Array)
+        } else if (Array.isArray(value)) {
+            // 处理数组中的每个元素
+            result[key] = value.map(item => {
+                if (item instanceof Uint8Array || (Array.isArray(item) && isLikelyBytesArray(item))) {
+                    return formatBytesValue(item as number[] | Uint8Array)
+                } else if (typeof item === 'object' && item !== null) {
+                    return processDecodedObject(item as Record<string, unknown>)
+                }
+                return item
+            })
+        } else if (typeof value === 'object') {
+            result[key] = processDecodedObject(value as Record<string, unknown>)
+        } else {
+            result[key] = value
+        }
+    }
+
+    return result
+}
+
+/**
+ * 检查数组是否像 bytes 数组（所有元素是 0-255 的数字）
+ */
+function isLikelyBytesArray(arr: unknown[]): boolean {
+    if (arr.length === 0) return false
+    // 检查前几个元素
+    const checkCount = Math.min(arr.length, 10)
+    for (let i = 0; i < checkCount; i++) {
+        const item = arr[i]
+        if (typeof item !== 'number' || item < 0 || item > 255 || !Number.isInteger(item)) {
+            return false
+        }
+    }
+    return true
+}
+
+/**
+ * 格式化 bytes 值为友好格式
+ */
+function formatBytesValue(bytes: number[] | Uint8Array): string {
+    const arr = bytes instanceof Uint8Array ? Array.from(bytes) : bytes
+
+    // 尝试作为 UTF-8 字符串解码
+    try {
+        const uint8 = new Uint8Array(arr)
+        const decoded = new TextDecoder('utf-8', { fatal: true }).decode(uint8)
+        // 检查是否是可打印字符串
+        const { nonPrintableRatio } = analyzeString(decoded)
+        if (nonPrintableRatio < 0.1) {
+            // 超过 90% 可打印，作为字符串返回
+            return decoded
+        }
+    } catch {
+        // 解码失败，不是有效 UTF-8
+    }
+
+    // 作为二进制数据显示
+    if (arr.length <= 32) {
+        // 短数据显示 hex
+        return `[Bytes: ${arr.map(b => b.toString(16).padStart(2, '0')).join(' ')}]`
+    } else {
+        // 长数据只显示长度和前几个字节
+        const preview = arr.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join(' ')
+        return `[Bytes: ${arr.length} bytes, hex: ${preview}...]`
     }
 }
 
@@ -248,6 +333,73 @@ function isPrintable(str: string): boolean {
 }
 
 /**
+ * 自动检测 BLOB 数据匹配的 protobuf 消息类型
+ * 遍历所有可用类型，返回第一个成功解析的类型
+ * @returns 匹配的消息类型，若无匹配返回 null
+ */
+export function autoDetectMessageType(
+    descriptor: ProtobufDescriptor,
+    blobData: string | Uint8Array
+): string | null {
+    // 转换数据
+    let bytes: Uint8Array
+    if (typeof blobData === 'string') {
+        try {
+            const binaryString = atob(blobData)
+            bytes = new Uint8Array(binaryString.length)
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i)
+            }
+        } catch {
+            return null
+        }
+    } else {
+        bytes = blobData
+    }
+
+    // 空数据无法检测
+    if (bytes.length === 0) {
+        return null
+    }
+
+    // 遍历所有消息类型尝试解析
+    for (const messageType of descriptor.messageTypes) {
+        try {
+            const MessageType = descriptor.root.lookupType(messageType)
+            const message = MessageType.decode(bytes)
+
+            // 验证解码结果不为空对象
+            const object = MessageType.toObject(message, {
+                longs: String,
+                enums: String,
+                bytes: String,
+                defaults: false,
+                arrays: true,
+                objects: true,
+            })
+
+            // 检查解码后的对象是否有有意义的数据
+            // 空对象或者只有默认值的对象不算匹配
+            const keys = Object.keys(object)
+            if (keys.length > 0) {
+                // 进一步验证：重新编码后长度应该接近原始数据
+                // 这可以排除一些误报
+                const reEncoded = MessageType.encode(message).finish()
+                // 允许 50% 的误差（因为 defaults 可能不同）
+                if (reEncoded.length > 0 && reEncoded.length <= bytes.length * 2) {
+                    return messageType
+                }
+            }
+        } catch {
+            // 解析失败，继续尝试下一个类型
+            continue
+        }
+    }
+
+    return null
+}
+
+/**
  * 格式化解码后的消息为可读字符串
  */
 export function formatDecodedMessage(data: Record<string, unknown>, indent = 0): string {
@@ -286,6 +438,30 @@ export function formatDecodedMessage(data: Record<string, unknown>, indent = 0):
 
 function formatValue(value: unknown): string {
     if (typeof value === 'string') {
+        // 检查是否是 Base64 编码的二进制数据
+        if (isLikelyBase64Binary(value)) {
+            const byteLength = Math.floor(value.length * 3 / 4)
+            return `[Binary: ${byteLength} bytes, Base64: ${value.slice(0, 50)}${value.length > 50 ? '...' : ''}]`
+        }
+
+        // 检查字符串是否主要是乱码（非打印字符比例过高）
+        const { nonPrintableRatio, totalChecked } = analyzeString(value)
+        if (nonPrintableRatio > 0.2 && totalChecked > 10) {
+            // 如果超过 20% 是非打印字符，当作二进制处理
+            return `[Binary string: ${value.length} chars, contains ${Math.round(nonPrintableRatio * 100)}% non-printable]`
+        }
+
+        // 检查是否包含非打印字符，需要转义
+        if (nonPrintableRatio > 0) {
+            // 转义非打印字符
+            const escaped = escapeNonPrintable(value)
+            // 如果转义后太长，截断显示
+            if (escaped.length > 200) {
+                return `"${escaped.slice(0, 200)}..." (${value.length} chars)`
+            }
+            return `"${escaped}"`
+        }
+
         // 检查是否是时间戳
         const num = Number(value)
         if (!isNaN(num)) {
@@ -296,7 +472,85 @@ function formatValue(value: unknown): string {
                 return `${value} (${new Date(num * 1000).toISOString()})`
             }
         }
+
+        // 如果字符串太长，截断显示
+        if (value.length > 500) {
+            return `"${value.slice(0, 500)}..." (${value.length} chars)`
+        }
         return `"${value}"`
     }
     return String(value)
+}
+
+/** 分析字符串中的非打印字符比例 */
+function analyzeString(str: string): { nonPrintableRatio: number; totalChecked: number } {
+    const sampleSize = Math.min(str.length, 500)
+    let nonPrintable = 0
+
+    for (let i = 0; i < sampleSize; i++) {
+        const code = str.charCodeAt(i)
+        // 非打印字符：控制字符（除了换行、回车、制表符）
+        if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+            nonPrintable++
+        }
+        // 非法 Unicode 代理对
+        else if (code >= 0xD800 && code <= 0xDFFF) {
+            nonPrintable++
+        }
+        // 私用区和特殊字符
+        else if (code >= 0xE000 && code <= 0xF8FF) {
+            nonPrintable++
+        }
+    }
+
+    return {
+        nonPrintableRatio: sampleSize > 0 ? nonPrintable / sampleSize : 0,
+        totalChecked: sampleSize,
+    }
+}
+
+/** 检测字符串是否可能是 Base64 编码的二进制数据 */
+function isLikelyBase64Binary(str: string): boolean {
+    // 太短不可能是有意义的 Base64
+    if (str.length < 20) return false
+    // 检查是否是有效的 Base64 字符
+    if (!/^[A-Za-z0-9+/]+=*$/.test(str)) return false
+    // 长度必须是 4 的倍数
+    if (str.length % 4 !== 0) return false
+
+    // 尝试解码并检查是否包含大量非打印字符
+    try {
+        const decoded = atob(str)
+        let nonPrintable = 0
+        const sampleSize = Math.min(decoded.length, 100)
+        for (let i = 0; i < sampleSize; i++) {
+            const code = decoded.charCodeAt(i)
+            if (code < 32 || code > 126) {
+                nonPrintable++
+            }
+        }
+        // 如果超过 30% 是非打印字符，认为是二进制
+        return nonPrintable / sampleSize > 0.3
+    } catch {
+        return false
+    }
+}
+
+/** 转义非打印字符 */
+function escapeNonPrintable(str: string): string {
+    let result = ''
+    for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i)
+        if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+            result += `\\x${code.toString(16).padStart(2, '0')}`
+        } else if (code >= 0xD800 && code <= 0xDFFF) {
+            result += `\\u${code.toString(16).padStart(4, '0')}`
+        } else if (code >= 0xE000 && code <= 0xF8FF) {
+            // 私用区字符用 Unicode 转义
+            result += `\\u${code.toString(16).padStart(4, '0')}`
+        } else {
+            result += str[i]
+        }
+    }
+    return result
 }

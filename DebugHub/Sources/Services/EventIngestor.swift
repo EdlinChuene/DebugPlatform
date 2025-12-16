@@ -184,18 +184,34 @@ final class EventIngestor: @unchecked Sendable {
         switch event.kind {
         case let .sessionCreated(session):
             print("[EventIngestor] WS sessionCreated: id=\(session.id), url=\(session.url.prefix(80))...")
-            let model = try WSSessionModel(
-                id: session.id,
-                deviceId: deviceId,
-                url: session.url,
-                requestHeaders: String(data: encoder.encode(session.requestHeaders), encoding: .utf8) ?? "{}",
-                subprotocols: String(data: encoder.encode(session.subprotocols), encoding: .utf8) ?? "[]",
-                connectTime: session.connectTime,
-                disconnectTime: session.disconnectTime,
-                closeCode: session.closeCode,
-                closeReason: session.closeReason
-            )
-            try await model.save(on: db)
+            
+            // 检查 session 是否已存在（处理重连场景）
+            if let existing = try await WSSessionModel.find(session.id, on: db) {
+                // 已存在，更新信息
+                existing.url = session.url
+                existing.requestHeaders = try String(data: encoder.encode(session.requestHeaders), encoding: .utf8) ?? "{}"
+                existing.subprotocols = try String(data: encoder.encode(session.subprotocols), encoding: .utf8) ?? "[]"
+                existing.connectTime = session.connectTime
+                existing.disconnectTime = session.disconnectTime
+                existing.closeCode = session.closeCode
+                existing.closeReason = session.closeReason
+                try await existing.save(on: db)
+                print("[EventIngestor] Updated existing WS session: \(session.id)")
+            } else {
+                // 不存在，创建新记录
+                let model = try WSSessionModel(
+                    id: session.id,
+                    deviceId: deviceId,
+                    url: session.url,
+                    requestHeaders: String(data: encoder.encode(session.requestHeaders), encoding: .utf8) ?? "{}",
+                    subprotocols: String(data: encoder.encode(session.subprotocols), encoding: .utf8) ?? "[]",
+                    connectTime: session.connectTime,
+                    disconnectTime: session.disconnectTime,
+                    closeCode: session.closeCode,
+                    closeReason: session.closeReason
+                )
+                try await model.save(on: db)
+            }
             return WSIngestResult(extraEvent: nil, frameId: nil, seqNum: nil)
 
         case let .sessionClosed(session):
@@ -225,21 +241,28 @@ final class EventIngestor: @unchecked Sendable {
                     closeCode: nil,
                     closeReason: nil
                 )
-                try await placeholderSession.save(on: db)
-                print("[EventIngestor] Auto-created session: \(frame.sessionId), url: \(sessionUrl)")
+                
+                // 使用 try? 忽略重复主键错误（竞态条件下可能另一个请求已经创建了）
+                do {
+                    try await placeholderSession.save(on: db)
+                    print("[EventIngestor] Auto-created session: \(frame.sessionId), url: \(sessionUrl)")
 
-                // 生成一个 sessionCreated 事件用于广播
-                let sessionDTO = WSEventDTO.Session(
-                    id: frame.sessionId,
-                    url: sessionUrl,
-                    requestHeaders: [:],
-                    subprotocols: [],
-                    connectTime: frame.timestamp,
-                    disconnectTime: nil,
-                    closeCode: nil,
-                    closeReason: nil
-                )
-                extraSessionEvent = .webSocket(WSEventDTO(kind: .sessionCreated(sessionDTO)))
+                    // 生成一个 sessionCreated 事件用于广播
+                    let sessionDTO = WSEventDTO.Session(
+                        id: frame.sessionId,
+                        url: sessionUrl,
+                        requestHeaders: [:],
+                        subprotocols: [],
+                        connectTime: frame.timestamp,
+                        disconnectTime: nil,
+                        closeCode: nil,
+                        closeReason: nil
+                    )
+                    extraSessionEvent = .webSocket(WSEventDTO(kind: .sessionCreated(sessionDTO)))
+                } catch {
+                    // 忽略重复主键错误，session 可能已被另一个请求创建
+                    print("[EventIngestor] Session already exists (race condition): \(frame.sessionId)")
+                }
             }
 
             let seqNum = await SequenceNumberManager.shared.nextSeqNum(for: deviceId, type: .wsFrame, db: db)

@@ -9,6 +9,7 @@ import { RulesPage } from '@/pages/RulesPage'
 import { ToastContainer } from '@/components/ToastContainer'
 import { BreakpointHitNotification } from '@/components/BreakpointHitNotification'
 import { RefreshIndicator } from '@/components/RefreshIndicator'
+import { GlobalSearch } from '@/components/GlobalSearch'
 import { useThemeStore } from '@/stores/themeStore'
 import { startHealthCheck, stopHealthCheck, setOnServerOfflineCallback } from '@/stores/connectionStore'
 import { useDeviceStore } from '@/stores/deviceStore'
@@ -76,6 +77,7 @@ export function App() {
   return (
     <BrowserRouter>
       <AppContent />
+      <GlobalSearch />
       <BreakpointHitNotification />
       <ToastContainer />
     </BrowserRouter>

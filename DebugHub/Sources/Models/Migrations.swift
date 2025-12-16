@@ -351,3 +351,24 @@ struct AddSequenceNumber: AsyncMigration {
             .update()
     }
 }
+
+// MARK: - Create App Launch Event Table
+
+/// App 启动耗时记录表
+struct CreateAppLaunchEvent: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("app_launch_events")
+            .id()
+            .field("device_id", .string, .required)
+            .field("total_time", .double, .required)
+            .field("pre_main_time", .double)
+            .field("main_to_launch_time", .double)
+            .field("launch_to_first_frame_time", .double)
+            .field("timestamp", .datetime, .required)
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("app_launch_events").delete()
+    }
+}

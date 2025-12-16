@@ -1,7 +1,7 @@
 // DevicePluginView.tsx
 // 基于插件系统的设备详情视图
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import { useDeviceStore } from '@/stores/deviceStore'
@@ -14,6 +14,7 @@ import { useWSStore } from '@/stores/wsStore'
 import { useMockStore } from '@/stores/mockStore'
 import { useBreakpointStore } from '@/stores/breakpointStore'
 import { usePerformanceStore } from '@/stores/performanceStore'
+import { useGlobalSearchStore } from '@/stores/globalSearchStore'
 import { PluginRenderer, PluginTabBar, getPluginTabs } from '@/plugins/PluginRenderer'
 import { PluginRegistry } from '@/plugins/PluginRegistry'
 import { KeyboardShortcutsHelp } from '@/components/KeyboardShortcutsHelp'
@@ -29,6 +30,7 @@ import {
     ClearIcon,
     StarIcon,
     IPhoneIcon,
+    SearchIcon,
 } from '@/components/icons'
 import { realtimeService, parseHTTPEvent, parseLogEvent } from '@/services/realtime'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -59,7 +61,7 @@ export function DevicePluginView() {
     const [activePluginId, setActivePluginId] = useState(getDefaultPluginId)
 
     // Stores
-    const { currentDevice, selectDevice, clearSelection, clearDeviceData, toggleFavorite, isFavorite, refreshDevice, deviceNicknames, setNickname, updatePluginStates } =
+    const { currentDevice, selectDevice, clearSelection, clearDeviceData, toggleFavorite, isFavorite, refreshDevice, updatePluginStates } =
         useDeviceStore()
     const { setConnected, setInDeviceDetail } = useConnectionStore()
     const toggleTheme = useThemeStore((s) => s.toggleTheme)
@@ -77,9 +79,19 @@ export function DevicePluginView() {
     const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
     const [showClearDeviceDialog, setShowClearDeviceDialog] = useState(false)
     const [showMoreMenu, setShowMoreMenu] = useState(false)
-    const [isEditingNickname, setIsEditingNickname] = useState(false)
-    const [nicknameInput, setNicknameInput] = useState('')
     const [isRefreshing, setIsRefreshing] = useState(false)
+    const [pluginUpdateTrigger, setPluginUpdateTrigger] = useState({})
+
+    // 订阅插件状态变化
+    useEffect(() => {
+        return PluginRegistry.subscribe(() => setPluginUpdateTrigger({}))
+    }, [])
+
+    // 检查 HTTP 是否有启用的子插件（Mock、Breakpoint、Chaos）
+    const hasHttpSubPlugins = useMemo(() => {
+        const httpSubPluginIds = ['mock', 'breakpoint', 'chaos']
+        return httpSubPluginIds.some((id) => PluginRegistry.isPluginEnabled(id))
+    }, [pluginUpdateTrigger])
 
     // 刷新设备信息
     const handleRefreshDevice = useCallback(async () => {
@@ -100,9 +112,6 @@ export function DevicePluginView() {
             setIsRefreshing(false)
         }
     }, [refreshDevice])
-
-    // 获取当前设备的备注名
-    const currentNickname = deviceId ? deviceNicknames[deviceId] : undefined
 
     // 更新 URL 参数
     const setActivePlugin = useCallback(
@@ -144,16 +153,8 @@ export function DevicePluginView() {
     }, [activePluginId, setActivePlugin])
 
     // 键盘快捷键
+    // 注意：Cmd/Ctrl + K 或 Cmd/Ctrl + F 由 GlobalSearch 组件全局处理
     useKeyboardShortcuts([
-        {
-            key: 'k',
-            ctrl: true,
-            description: '搜索',
-            action: () => {
-                const searchInput = document.querySelector<HTMLInputElement>('[data-search-input]')
-                searchInput?.focus()
-            },
-        },
         {
             key: 'r',
             ctrl: true,
@@ -368,71 +369,39 @@ export function DevicePluginView() {
             <ListLoadingOverlay isLoading={isRefreshing} text="刷新设备信息..." />
 
             {/* Header */}
-            <header className="px-4 py-2 bg-bg-dark border-b border-border">
-                <div className="flex items-center gap-3">
+            <header className="px-4 py-1.5 bg-bg-dark border-b border-border">
+                <div className="flex items-center gap-2">
                     {/* 返回按钮 */}
                     <button
                         onClick={handleBack}
-                        className="flex items-center gap-1.5 text-text-secondary hover:text-text-primary transition-colors group px-2 py-1.5 rounded hover:bg-bg-light"
+                        className="flex items-center gap-1 text-text-secondary hover:text-text-primary transition-colors group px-1.5 py-1 rounded hover:bg-bg-light"
                     >
                         <span className="group-hover:-translate-x-0.5 transition-transform">
-                            <BackIcon size={16} />
+                            <BackIcon size={14} />
                         </span>
-                        <span className="text-sm font-medium">返回</span>
+                        <span className="text-xs font-medium">返回</span>
                     </button>
 
-                    <div className="h-5 w-px bg-border" />
+                    <div className="h-4 w-px bg-border" />
 
                     {/* 设备信息 - 紧凑单行 */}
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-border flex-shrink-0">
-                            {currentDevice ? getPlatformIcon(currentDevice.deviceInfo.platform, 18, undefined, currentDevice.deviceInfo.isSimulator) : <IPhoneIcon size={18} />}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center border border-border flex-shrink-0">
+                            {currentDevice ? getPlatformIcon(currentDevice.deviceInfo.platform, 14, undefined, currentDevice.deviceInfo.isSimulator) : <IPhoneIcon size={14} />}
                         </div>
-                        <div className="flex items-center gap-2 min-w-0">
-                            {/* 设备名称 / 备注名 */}
-                            {isEditingNickname ? (
-                                <input
-                                    type="text"
-                                    value={nicknameInput}
-                                    onChange={(e) => setNicknameInput(e.target.value)}
-                                    onBlur={() => {
-                                        if (deviceId) {
-                                            setNickname(deviceId, nicknameInput)
-                                        }
-                                        setIsEditingNickname(false)
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            if (deviceId) {
-                                                setNickname(deviceId, nicknameInput)
-                                            }
-                                            setIsEditingNickname(false)
-                                        } else if (e.key === 'Escape') {
-                                            setIsEditingNickname(false)
-                                        }
-                                    }}
-                                    className="text-base font-semibold text-text-primary bg-bg-light border border-primary rounded px-2 py-0.5 outline-none"
-                                    autoFocus
-                                    placeholder="输入备注名..."
-                                />
-                            ) : (
-                                <div
-                                    className="flex items-center gap-1 cursor-pointer group/name"
-                                    onClick={() => {
-                                        setNicknameInput(currentNickname || '')
-                                        setIsEditingNickname(true)
-                                    }}
-                                    title="点击编辑备注名"
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            {/* 设备名称 */}
+                            <h1 className="text-sm font-semibold text-text-primary truncate">
+                                {currentDevice?.deviceInfo.deviceName || '加载中...'}
+                            </h1>
+                            {/* 设备 ID 后 4 位 */}
+                            {deviceId && (
+                                <span
+                                    className="text-xs px-1.5 py-0.5 rounded bg-bg-light text-text-muted font-mono flex-shrink-0"
+                                    title={`设备 ID: ${deviceId}`}
                                 >
-                                    <h1 className="text-base font-semibold text-text-primary truncate group-hover/name:text-primary transition-colors">
-                                        {currentNickname || currentDevice?.deviceInfo.deviceName || '加载中...'}
-                                    </h1>
-                                    {currentNickname && (
-                                        <span className="text-xs text-text-muted truncate">
-                                            ({currentDevice?.deviceInfo.deviceName})
-                                        </span>
-                                    )}
-                                </div>
+                                    #{deviceId.slice(-4).toUpperCase()}
+                                </span>
                             )}
                             {currentDevice?.deviceInfo.isSimulator && (
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 flex-shrink-0">
@@ -478,7 +447,7 @@ export function DevicePluginView() {
                             <button
                                 onClick={handleRefreshDevice}
                                 disabled={isRefreshing}
-                                className="btn btn-primary !px-2 !py-1 text-xs disabled:opacity-50"
+                                className="btn btn-primary !px-1.5 !py-0.5 !text-2xs disabled:opacity-50"
                                 title="刷新设备信息"
                             >
                                 {isRefreshing ? '刷新中...' : '刷新'}
@@ -487,25 +456,34 @@ export function DevicePluginView() {
                     </div>
 
                     {/* 工具按钮 */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-0.5">
+                        {/* 搜索按钮 */}
+                        <button
+                            onClick={() => useGlobalSearchStore.getState().open()}
+                            className="btn btn-ghost p-1.5 rounded"
+                            title="全局搜索 (⌘K / ⌘F)"
+                        >
+                            <SearchIcon size={14} />
+                        </button>
+
                         {/* 插件管理 */}
                         <PluginManager />
 
                         <button
                             onClick={() => setShowShortcutsHelp(true)}
-                            className="btn btn-ghost p-2 rounded"
+                            className="btn btn-ghost p-1.5 rounded"
                             title="快捷键 (Ctrl+/)"
                         >
-                            <KeyboardIcon size={16} />
+                            <KeyboardIcon size={14} />
                         </button>
 
                         <div className="relative">
                             <button
                                 onClick={() => setShowMoreMenu(!showMoreMenu)}
-                                className="btn btn-ghost p-2 rounded"
+                                className="btn btn-ghost p-1.5 rounded"
                                 title="更多操作"
                             >
-                                <MoreIcon size={16} />
+                                <MoreIcon size={14} />
                             </button>
                             {showMoreMenu && (
                                 <>
@@ -534,7 +512,12 @@ export function DevicePluginView() {
             </header>
 
             {/* Plugin Tab Bar - 带连接活动指示器 */}
-            <div className="px-4 py-2 bg-bg-dark border-b border-border flex items-center justify-between gap-4">
+            <div className={clsx(
+                "px-4 py-1.5 bg-bg-dark flex items-center justify-between gap-4",
+                // HTTP 插件有子标签时，选中时不显示底部边框，让子标签区域与父标签融合
+                // 如果没有启用的子插件，则显示底部边框
+                (activePluginId !== 'http' || !hasHttpSubPlugins) && "border-b border-border"
+            )}>
                 <PluginTabBar activePluginId={activePluginId} onTabChange={setActivePlugin} />
 
                 {/* 常驻连接活动 */}

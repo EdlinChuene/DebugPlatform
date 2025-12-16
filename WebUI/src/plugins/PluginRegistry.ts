@@ -241,10 +241,11 @@ class PluginRegistryImpl {
     }
 
     // 获取插件 Tab 配置（用于动态生成 Tab）
+    // 子插件（isSubPlugin=true）不会出现在 Tab 栏
     getTabConfigs(): PluginTabConfig[] {
         return Array.from(this.plugins.values())
             .sort((a, b) => a.tabOrder - b.tabOrder)
-            .filter((r) => r.plugin.isEnabled)
+            .filter((r) => r.plugin.isEnabled && !r.plugin.metadata.isSubPlugin)
             .map((r) => ({
                 pluginId: r.plugin.metadata.pluginId,
                 label: r.plugin.metadata.displayName,

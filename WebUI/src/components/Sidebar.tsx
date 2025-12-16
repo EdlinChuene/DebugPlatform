@@ -6,7 +6,7 @@ import { useHTTPStore } from '@/stores/httpStore'
 import { useWSStore } from '@/stores/wsStore'
 import { useRuleStore } from '@/stores/ruleStore'
 import { getPlatformIcon } from '@/utils/deviceIcons'
-import { HttpIcon, WebSocketIcon, LogIcon, SearchIcon, IPhoneIcon, StarIcon, ClearIcon, ChevronDownIcon, DebugHubLogo, BookIcon, CheckIcon, PackageIcon, ColorfulTrafficLightIcon, HighlightIcon, TagIcon, ChevronRightIcon } from '@/components/icons'
+import { HttpIcon, WebSocketIcon, LogIcon, SearchIcon, IPhoneIcon, ClearIcon, DebugHubLogo, BookIcon, CheckIcon, PackageIcon, ColorfulTrafficLightIcon, HighlightIcon, TagIcon, ChevronRightIcon } from '@/components/icons'
 import { ServerStatsPanel } from './ServerStatsPanel'
 import { ThemeToggle } from './ThemeToggle'
 import clsx from 'clsx'
@@ -67,7 +67,7 @@ export function Sidebar() {
   }, [isResizing, sidebarWidth])
 
   // Device Store
-  const { devices, fetchDevices, currentDeviceId, selectDevice, favoriteDeviceIds, toggleFavorite, deviceNicknames } = useDeviceStore()
+  const { devices, fetchDevices, currentDeviceId, selectDevice } = useDeviceStore()
 
   // HTTP Store (for Domain List) - 支持多选
   const { events, toggleDomain, clearDomains, filters: httpFilters } = useHTTPStore()
@@ -77,9 +77,6 @@ export function Sidebar() {
 
   // Rule Store - for domain highlighting/hiding and traffic rules
   const { rules, getDomainRule, createOrUpdateRule, deleteRule, fetchRules } = useRuleStore()
-
-  // Show all devices toggle
-  const [showAllDevices, setShowAllDevices] = useState(false)
 
   // Get current plugin from URL
   const currentPlugin = useMemo(() => {
@@ -335,16 +332,11 @@ export function Sidebar() {
     return filteredDomainTree.map(({ domain, count }) => ({ domain, count }))
   }, [filteredDomainTree])
 
-  // Filter devices: show current device + favorites, or all if toggled
+  // Filter devices: show only current selected device
   const displayedDevices = useMemo(() => {
-    if (showAllDevices) return devices
-    return devices.filter(d =>
-      d.deviceId === currentDeviceId || favoriteDeviceIds.has(d.deviceId)
-    )
-  }, [devices, currentDeviceId, favoriteDeviceIds, showAllDevices])
-
-  // Count of hidden devices
-  const hiddenDevicesCount = devices.length - displayedDevices.length
+    if (!currentDeviceId) return []
+    return devices.filter(d => d.deviceId === currentDeviceId)
+  }, [devices, currentDeviceId])
 
   const handleDeviceClick = (deviceId: string) => {
     selectDevice(deviceId)
@@ -356,11 +348,6 @@ export function Sidebar() {
     } else {
       navigate(`/device/${deviceId}`)
     }
-  }
-
-  const handleToggleFavorite = (e: React.MouseEvent, deviceId: string) => {
-    e.stopPropagation()
-    toggleFavorite(deviceId)
   }
 
   const handleDomainClick = (domain: string) => {
@@ -546,164 +533,110 @@ export function Sidebar() {
           </Link>
         </div>
 
-        {/* Device List Section */}
-        <div className="px-3 pt-4 pb-3">
-          <div className="px-2 mb-3 text-xs font-semibold text-text-secondary uppercase tracking-wider flex justify-between items-center">
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 hover:text-primary transition-colors"
-              title="查看设备列表"
-            >
-              <IPhoneIcon size={14} />
-              设备列表
-            </button>
-            <div className="flex items-center gap-2">
-              {hiddenDevicesCount > 0 && !showAllDevices && (
-                <button
-                  onClick={() => setShowAllDevices(true)}
-                  className="text-2xs text-text-muted hover:text-primary transition-colors"
-                  title="显示所有设备"
-                >
-                  +{hiddenDevicesCount} 更多
-                </button>
-              )}
-              {showAllDevices && (
-                <button
-                  onClick={() => setShowAllDevices(false)}
-                  className="text-2xs text-text-muted hover:text-primary transition-colors"
-                  title="只显示收藏设备"
-                >
-                  收起
-                </button>
-              )}
+        {/* Device List Section - 仅显示当前选中设备 */}
+        {currentDeviceId && (
+          <div className="px-3 pt-4 pb-3">
+            <div className="px-2 mb-3 text-xs font-semibold text-text-secondary uppercase tracking-wider flex justify-between items-center">
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-2 hover:text-primary transition-colors"
+                title="查看设备列表"
+              >
+                <IPhoneIcon size={14} />
+                当前设备
+              </button>
               <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-2xs font-bold">{devices.length}</span>
             </div>
-          </div>
 
-          <div className="space-y-1">
-            {displayedDevices.map(device => {
-              const isFavorite = favoriteDeviceIds.has(device.deviceId)
-              const isSelected = currentDeviceId === device.deviceId
-              const isOffline = !device.isOnline
-              return (
-                <div
-                  key={device.deviceId}
-                  onClick={() => handleDeviceClick(device.deviceId)}
-                  className={clsx(
-                    "group relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors",
-                    isSelected
-                      ? "bg-primary/15"
-                      : isOffline
-                        ? "text-text-muted hover:bg-bg-light/50"
-                        : "text-text-secondary hover:bg-bg-light hover:text-text-primary"
-                  )}
-                >
-                  {/* 选中指示条 - 无圆角，宽度 3px */}
-                  {isSelected && (
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary" />
-                  )}
-                  <div className="relative flex-shrink-0">
-                    <div className={clsx(
-                      "w-9 h-9 rounded-lg flex items-center justify-center",
+            <div className="space-y-1">
+              {displayedDevices.map(device => {
+                const isSelected = currentDeviceId === device.deviceId
+                const isOffline = !device.isOnline
+                return (
+                  <div
+                    key={device.deviceId}
+                    onClick={() => handleDeviceClick(device.deviceId)}
+                    className={clsx(
+                      "group relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors",
                       isSelected
-                        ? "bg-primary/20"
+                        ? "bg-primary/15"
                         : isOffline
-                          ? "bg-bg-medium/50"
-                          : "bg-bg-medium"
-                    )}>
-                      {getPlatformIcon(device.platform, 18, undefined, device.isSimulator)}
-                    </div>
-                    {device.isOnline ? (
-                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-bg-dark rounded-full" />
-                    ) : (
-                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-gray-500 border-2 border-bg-dark rounded-full" />
+                          ? "text-text-muted hover:bg-bg-light/50"
+                          : "text-text-secondary hover:bg-bg-light hover:text-text-primary"
                     )}
-                  </div>
-                  <div className={clsx("min-w-0 flex-1", isOffline && "opacity-60")}>
-                    {/* 设备名/备注名 */}
-                    <div className={clsx(
-                      "font-medium truncate text-xs flex items-center gap-1.5",
-                      isSelected ? "text-primary" : "text-text-primary"
-                    )}>
-                      {deviceNicknames[device.deviceId] || device.deviceName}
-                      {device.isSimulator && (
-                        <span className="text-2xs px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium">模拟器</span>
+                  >
+                    {/* 选中指示条 - 无圆角，宽度 3px */}
+                    {isSelected && (
+                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary" />
+                    )}
+                    <div className="relative flex-shrink-0">
+                      <div className={clsx(
+                        "w-9 h-9 rounded-lg flex items-center justify-center",
+                        isSelected
+                          ? "bg-primary/20"
+                          : isOffline
+                            ? "bg-bg-medium/50"
+                            : "bg-bg-medium"
+                      )}>
+                        {getPlatformIcon(device.platform, 18, undefined, device.isSimulator)}
+                      </div>
+                      {device.isOnline ? (
+                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-bg-dark rounded-full" />
+                      ) : (
+                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-gray-500 border-2 border-bg-dark rounded-full" />
                       )}
                     </div>
-                    {/* 如果有备注名，显示原设备名 */}
-                    {deviceNicknames[device.deviceId] && (
+                    <div className={clsx("min-w-0 flex-1", isOffline && "opacity-60")}>
+                      {/* 设备名 */}
                       <div className={clsx(
-                        "text-2xs truncate",
-                        isSelected ? "text-accent-blue/70" : "text-text-muted/70"
+                        "font-medium truncate text-xs flex items-center gap-1.5",
+                        isSelected ? "text-primary" : "text-text-primary"
                       )}>
                         {device.deviceName}
-                      </div>
-                    )}
-                    <div className={clsx(
-                      "text-2xs truncate",
-                      isSelected ? "text-accent-blue/70" : "text-text-muted"
-                    )} title={device.deviceModel}>
-                      {device.deviceModel} · {device.platform} <span className="opacity-60">{device.systemVersion}</span>
-                    </div>
-                    {/* App 信息 - 与设备信息用分割线隔开 */}
-                    <div className={clsx(
-                      "text-2xs truncate mt-1 pt-1 border-t border-border flex items-center gap-1",
-                      isSelected ? "text-accent-blue/70" : "text-text-muted"
-                    )}>
-                      {/* App 图标 */}
-                      <div className="w-3.5 h-3.5 rounded overflow-hidden bg-bg-light flex items-center justify-center flex-shrink-0">
-                        {device.appIcon ? (
-                          <img
-                            src={`data:image/png;base64,${device.appIcon}`}
-                            alt={device.appName}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <PackageIcon size={8} className="text-text-muted" />
+                        {/* 设备 ID 后 4 位 */}
+                        <span
+                          className="text-2xs px-1 py-0.5 rounded bg-bg-light text-text-muted font-mono"
+                          title={`设备 ID: ${device.deviceId}`}
+                        >
+                          #{device.deviceId.slice(-4).toUpperCase()}
+                        </span>
+                        {device.isSimulator && (
+                          <span className="text-2xs px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium">模拟器</span>
                         )}
                       </div>
-                      <span className="truncate">{device.appName}</span>
-                      <span className="opacity-60 flex-shrink-0">{device.appVersion}</span>
+                      <div className={clsx(
+                        "text-2xs truncate",
+                        isSelected ? "text-accent-blue/70" : "text-text-muted"
+                      )} title={device.deviceModel}>
+                        {device.deviceModel} · {device.platform} <span className="opacity-60">{device.systemVersion}</span>
+                      </div>
+                      {/* App 信息 - 与设备信息用分割线隔开 */}
+                      <div className={clsx(
+                        "text-2xs truncate mt-1 pt-1 border-t border-border flex items-center gap-1",
+                        isSelected ? "text-accent-blue/70" : "text-text-muted"
+                      )}>
+                        {/* App 图标 */}
+                        <div className="w-3.5 h-3.5 rounded overflow-hidden bg-bg-light flex items-center justify-center flex-shrink-0">
+                          {device.appIcon ? (
+                            <img
+                              src={`data:image/png;base64,${device.appIcon}`}
+                              alt={device.appName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <PackageIcon size={8} className="text-text-muted" />
+                          )}
+                        </div>
+                        <span className="truncate">{device.appName}</span>
+                        <span className="opacity-60 flex-shrink-0">{device.appVersion}</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={(e) => handleToggleFavorite(e, device.deviceId)}
-                      className={clsx(
-                        "p-1.5 rounded transition-all",
-                        isFavorite
-                          ? "text-yellow-400 hover:text-yellow-300"
-                          : "text-text-muted opacity-0 group-hover:opacity-100 hover:text-yellow-400"
-                      )}
-                      title={isFavorite ? "取消收藏" : "收藏设备"}
-                    >
-                      <StarIcon size={14} filled={isFavorite} />
-                    </button>
-                    <ChevronDownIcon size={14} className="opacity-0 group-hover:opacity-100 transition-opacity -rotate-90 text-text-muted" />
-                  </div>
-                </div>
-              )
-            })}
-
-            {displayedDevices.length === 0 && devices.length > 0 && (
-              <div className="px-4 py-4 text-center text-xs text-text-muted">
-                <button
-                  onClick={() => setShowAllDevices(true)}
-                  className="text-primary hover:underline"
-                >
-                  显示全部 {devices.length} 个设备
-                </button>
-              </div>
-            )}
-
-            {devices.length === 0 && !isServerOnline && (
-              <div className="px-4 py-6 text-center text-xs text-text-muted bg-bg-light/20 rounded-lg border border-dashed border-border">
-                <HttpIcon size={32} className="block mb-2 opacity-50 mx-auto" />
-                等待服务连接...
-              </div>
-            )}
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Separator - 与侧边栏同宽，紧贴设备列表 */}
         {currentDeviceId && shouldShowDomains && (

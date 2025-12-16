@@ -9,13 +9,24 @@ import { useRef, useEffect, useCallback, useMemo, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { LogEvent, LogLevel } from '@/types'
 import { formatSmartTime, getLogLevelClass } from '@/utils/format'
+import { useResizableColumns, ColumnResizeHandle, ColumnDivider, type ColumnConfig } from '@/hooks/useResizableColumns'
 import clsx from 'clsx'
 import { LogIcon } from './icons'
 import { Checkbox } from './Checkbox'
 import { LoadMoreButton } from './LoadMoreButton'
 
 // 最小行高度（像素）
-const MIN_ROW_HEIGHT = 44
+const MIN_ROW_HEIGHT = 36
+
+// Log 表格列配置
+const LOG_COLUMNS: ColumnConfig[] = [
+  { id: 'indicator', label: '', defaultWidth: 4, minWidth: 4, maxWidth: 4, resizable: false },
+  { id: 'index', label: '#', defaultWidth: 48, minWidth: 40, maxWidth: 80, resizable: false },
+  { id: 'time', label: '时间', defaultWidth: 112, minWidth: 80, maxWidth: 180, resizable: true },
+  { id: 'level', label: '级别', defaultWidth: 80, minWidth: 60, maxWidth: 100, resizable: true },
+  { id: 'category', label: '分类', defaultWidth: 128, minWidth: 80, maxWidth: 200, resizable: true },
+  { id: 'message', label: '消息内容', flex: true, minWidth: 150, resizable: true },
+]
 
 // 滚动控制回调接口
 export interface LogScrollControls {
@@ -30,6 +41,7 @@ interface Props {
   autoScroll: boolean
   selectedId?: string | null
   onSelect?: (id: string | null) => void
+  onDoubleClick?: (event: LogEvent) => void
   isSelectMode?: boolean
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
@@ -56,6 +68,7 @@ export function VirtualLogList({
   autoScroll,
   selectedId,
   onSelect,
+  onDoubleClick,
   isSelectMode = false,
   selectedIds = new Set(),
   onToggleSelect,
@@ -70,6 +83,12 @@ export function VirtualLogList({
   const lastFirstItemRef = useRef<string | null>(null)
   const [isAtTop, setIsAtTop] = useState(true)
   const [isAtBottom, setIsAtBottom] = useState(false)
+
+  // 可调整列宽
+  const { getColumnStyle, isResizing, startResize } = useResizableColumns({
+    storageKey: 'log-table',
+    columns: LOG_COLUMNS,
+  })
 
   // 生成稳定的 key
   const virtualizerKey = useMemo(() => {
@@ -165,11 +184,18 @@ export function VirtualLogList({
       }
     }
 
+    const handleDoubleClick = () => {
+      if (!isSelectMode) {
+        onDoubleClick?.(event)
+      }
+    }
+
     return (
       <div
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         className={clsx(
-          'flex border-b border-border transition-all duration-150 cursor-pointer py-2 min-h-[44px]',
+          'flex items-start border-b border-border transition-all duration-150 cursor-pointer py-1.5 min-h-[36px]',
           // 选中状态（非批量选择模式）
           isSelected && 'bg-selected',
           // 批量选中
@@ -180,19 +206,19 @@ export function VirtualLogList({
         )}
       >
         {/* Level indicator bar */}
-        <div className={clsx('w-1 self-stretch flex-shrink-0', levelStyle.bg)} />
+        <div style={getColumnStyle('indicator')} className={clsx('self-stretch', levelStyle.bg)} />
 
         {/* 序号列 */}
-        <div className={clsx(
-          'w-12 px-2 whitespace-nowrap flex-shrink-0 text-xs font-mono text-center pt-0.5',
-          isSelected ? 'text-white/80' : 'text-text-muted'
+        <div style={getColumnStyle('index')} className={clsx(
+          'px-2 whitespace-nowrap text-2xs font-mono text-center leading-5',
+          isSelected ? 'text-selected-text-muted' : 'text-text-muted'
         )}>
           {rowNumber}
         </div>
 
         {/* Checkbox */}
         {isSelectMode && (
-          <div className="w-10 px-3 flex-shrink-0 flex items-start pt-0.5" onClick={(e) => e.stopPropagation()}>
+          <div className="w-10 px-2 flex-shrink-0 flex items-center h-5" onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={isChecked}
               onChange={() => onToggleSelect?.(event.id)}
@@ -201,18 +227,18 @@ export function VirtualLogList({
         )}
 
         {/* Time */}
-        <div className={clsx(
-          'w-28 px-3 whitespace-nowrap flex-shrink-0 text-xs pt-0.5',
-          isSelected ? 'text-white' : 'text-text-muted'
+        <div style={getColumnStyle('time')} className={clsx(
+          'px-2 whitespace-nowrap text-2xs leading-5',
+          isSelected ? 'text-selected-text-secondary' : 'text-text-muted'
         )}>
           {formatSmartTime(event.timestamp)}
         </div>
 
         {/* Level Badge */}
-        <div className="w-20 px-2 flex-shrink-0 pt-0.5">
+        <div style={getColumnStyle('level')} className="px-2 leading-5">
           <span
             className={clsx(
-              'inline-flex items-center justify-center px-2 py-0.5 rounded text-2xs font-bold',
+              'inline-flex items-center justify-center px-1.5 py-0.5 rounded text-2xs font-bold',
               levelStyle.bg,
               levelStyle.color
             )}
@@ -222,42 +248,60 @@ export function VirtualLogList({
         </div>
 
         {/* Category */}
-        <div className={clsx(
-          'w-32 px-3 truncate flex-shrink-0 text-xs font-medium pt-0.5',
-          isSelected ? 'text-white' : 'text-primary'
+        <div style={getColumnStyle('category')} className={clsx(
+          'px-2 truncate text-2xs font-medium leading-5',
+          isSelected ? 'text-selected-text-primary' : 'text-primary'
         )} title={event.category || event.subsystem || '-'}>
           {event.category || event.subsystem || '-'}
         </div>
 
         {/* Message - 完整显示，支持换行 */}
-        <div className={clsx(
-          'flex-1 px-3 text-xs whitespace-pre-wrap break-words',
-          isSelected ? 'text-white' : 'text-text-primary'
+        <div style={getColumnStyle('message')} className={clsx(
+          'px-2 text-2xs whitespace-pre-wrap break-words min-w-0 leading-5',
+          isSelected ? 'text-selected-text-primary' : 'text-text-primary'
         )}>
           {event.message}
         </div>
       </div>
     )
-  }, [selectedId, isSelectMode, selectedIds, onSelect, onToggleSelect])
+  }, [selectedId, isSelectMode, selectedIds, onSelect, onToggleSelect, onDoubleClick, getColumnStyle])
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className={clsx('h-full flex flex-col overflow-hidden', isResizing && 'select-none')}>
       {/* Table Header */}
       <div className="flex-shrink-0 bg-bg-medium border-b border-border">
         <div className="flex items-center text-xs font-semibold text-text-secondary uppercase tracking-wider">
           {/* Level indicator placeholder */}
-          <div className="w-1 flex-shrink-0" />
+          <div style={getColumnStyle('indicator')} className="relative">
+            <ColumnDivider />
+          </div>
           {/* 序号列 */}
-          <div className="w-12 px-2 py-2 text-center">#</div>
+          <div style={getColumnStyle('index')} className="relative px-2 py-1.5 text-center">
+            #
+            <ColumnDivider />
+          </div>
           {isSelectMode && (
-            <div className="w-10 px-3 py-2 flex-shrink-0">
+            <div className="relative w-10 px-2 py-1.5 flex-shrink-0">
               <span className="sr-only">选择</span>
+              <ColumnDivider />
             </div>
           )}
-          <div className="w-28 px-3 py-2">时间</div>
-          <div className="w-20 px-2 py-2">级别</div>
-          <div className="w-32 px-3 py-2">分类</div>
-          <div className="flex-1 px-3 py-2">消息内容</div>
+          <div style={getColumnStyle('time')} className="relative px-2 py-1.5">
+            时间
+            <ColumnResizeHandle onMouseDown={(e) => startResize('time', e.clientX)} isResizing={isResizing} />
+          </div>
+          <div style={getColumnStyle('level')} className="relative px-2 py-1.5">
+            级别
+            <ColumnResizeHandle onMouseDown={(e) => startResize('level', e.clientX)} isResizing={isResizing} />
+          </div>
+          <div style={getColumnStyle('category')} className="relative px-2 py-1.5">
+            分类
+            <ColumnResizeHandle onMouseDown={(e) => startResize('category', e.clientX)} isResizing={isResizing} />
+          </div>
+          <div style={getColumnStyle('message')} className="relative px-2 py-1.5 min-w-0">
+            消息内容
+            <ColumnResizeHandle onMouseDown={(e) => startResize('message', e.clientX)} isResizing={isResizing} />
+          </div>
         </div>
       </div>
 

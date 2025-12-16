@@ -43,6 +43,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(CreateJankEvent())
     app.migrations.add(CreateAlert())
     app.migrations.add(AddSequenceNumber())
+    app.migrations.add(CreateAppLaunchEvent())
 
     // 运行迁移
     try app.autoMigrate().wait()
@@ -50,6 +51,16 @@ func configure(_ app: Application) throws {
     // 设置 DeviceRegistry 的数据库引用并注册生命周期
     DeviceRegistry.shared.database = app.db
     app.lifecycle.use(DeviceRegistry.shared)
+
+    // 设置新设备连接回调
+    DeviceRegistry.shared.onDeviceConnected = { deviceId, deviceName, sessionId, pluginStates in
+        RealtimeStreamHandler.shared.broadcastDeviceConnected(
+            deviceId: deviceId,
+            deviceName: deviceName,
+            sessionId: sessionId,
+            pluginStates: pluginStates
+        )
+    }
 
     // 设置设备断开回调（延迟后触发）
     DeviceRegistry.shared.onDeviceDisconnected = { deviceId in
@@ -70,6 +81,9 @@ func configure(_ app: Application) throws {
 
     // 注册实时流处理器（生命周期管理，用于优雅关闭连接）
     app.lifecycle.use(RealtimeStreamHandler.shared)
+
+    // 配置并启动 Stats 广播服务
+    StatsBroadcastService.shared.configure(app: app)
 
     // 注册并启动插件系统
     registerBuiltinPlugins()
@@ -178,6 +192,9 @@ func routes(_ app: Application) throws {
 
     // WebUI 插件状态 API
     try api.register(collection: WebUIPluginController())
+
+    // 系统工具 API
+    try api.register(collection: SystemToolController())
 
     // Token 验证 API
     api.post("auth", "verify") { req async throws -> TokenVerifyResponse in

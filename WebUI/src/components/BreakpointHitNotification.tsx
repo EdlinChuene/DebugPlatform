@@ -21,13 +21,15 @@ export function BreakpointHitNotification() {
         setLastCount(pendingHits.length)
     }, [pendingHits.length, lastCount])
 
-    // 判断是否已在 breakpoint 插件页面（用户可以直接看到断点面板）
+    // 判断是否已在 breakpoint 子标签页面（用户可以直接看到断点面板）
+    // HTTP 插件的断点功能通过 plugin=http&subplugin=breakpoint 访问
     const isInBreakpointPlugin = location.pathname.includes('/device/') &&
-        searchParams.get('plugin') === 'breakpoint'
+        searchParams.get('plugin') === 'http' &&
+        searchParams.get('subplugin') === 'breakpoint'
 
     const handleNavigate = useCallback(() => {
-        // 通过 URL 参数切换到 breakpoint 插件
-        setSearchParams({ plugin: 'breakpoint' })
+        // 通过 URL 参数切换到 HTTP 插件的断点子标签
+        setSearchParams({ plugin: 'http', subplugin: 'breakpoint' })
         setDismissed(true)
     }, [setSearchParams])
 

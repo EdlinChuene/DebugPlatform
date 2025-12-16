@@ -226,13 +226,26 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
             // 保存到数据库
             try await saveJankEventToDB(jankEvent, deviceId: deviceId)
 
-            // 广播到 WebUI
-            let wsEvent: [String: Any] = [
-                "type": "jank_event",
-                "deviceId": deviceId,
-                "data": jankEvent.toDictionary(),
-            ]
-            context?.broadcastToWebUI(wsEvent, deviceId: deviceId)
+            // 构建 PerformanceEventDTO 并通过 RealtimeStreamHandler 广播
+            // 这样 WebUI 可以通过标准的 performanceEvent 消息接收
+            let perfEventDTO = PerformanceEventDTO(
+                id: jankEvent.id,
+                eventType: "jank",
+                timestamp: jankEvent.timestamp,
+                metrics: nil,
+                jank: PerfJankEventDTO(
+                    id: jankEvent.id,
+                    timestamp: jankEvent.timestamp,
+                    duration: jankEvent.duration,
+                    droppedFrames: jankEvent.droppedFrames,
+                    stackTrace: jankEvent.stackTrace
+                ),
+                alert: nil,
+                appLaunch: nil
+            )
+
+            // 通过 RealtimeStreamHandler 广播给 WebUI
+            RealtimeStreamHandler.shared.broadcast(events: [.performance(perfEventDTO)], deviceId: deviceId)
 
         } catch {
             context?.logger.error("Failed to process jank event: \(error)")
@@ -276,6 +289,9 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
             // 保存到内存缓存
             addAppLaunchToCache(launchMetrics, deviceId: deviceId)
 
+            // 保存到数据库（不依赖 WebUI 是否打开）
+            await saveAppLaunchToDB(launchMetrics, deviceId: deviceId)
+
             // 构建 PerformanceEventDTO 并通过 RealtimeStreamHandler 广播
             // 这样 WebUI 可以通过标准的 performanceEvent 消息接收
             let perfEventDTO = PerformanceEventDTO(
@@ -312,6 +328,27 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
 
         } catch {
             context?.logger.error("Failed to process app launch event: \(error)")
+        }
+    }
+
+    /// 保存 App 启动时间到数据库
+    private func saveAppLaunchToDB(_ metrics: AppLaunchMetricsDTO, deviceId: String) async {
+        guard let db = context?.database else { return }
+
+        let model = AppLaunchEventModel(
+            deviceId: deviceId,
+            totalTime: metrics.totalTime,
+            preMainTime: metrics.preMainTime,
+            mainToLaunchTime: metrics.mainToLaunchTime,
+            launchToFirstFrameTime: metrics.launchToFirstFrameTime,
+            timestamp: metrics.timestamp
+        )
+
+        do {
+            try await model.save(on: db)
+            context?.logger.info("App launch event saved to database [device: \(deviceId)]")
+        } catch {
+            context?.logger.error("Failed to save app launch event to database: \(error)")
         }
     }
 
@@ -607,17 +644,68 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
         )
     }
 
-    /// 获取 App 启动时间指标
+    /// 获取 App 启动时间指标（包含历史和统计）
     func getAppLaunchMetrics(req: Request) async throws -> AppLaunchResponse {
         guard let deviceId = req.parameters.get("deviceId") else {
             throw Abort(.badRequest, reason: "Missing deviceId")
         }
 
+        // 从内存获取最新启动数据
         let launchMetrics = getAppLaunchFromCache(deviceId: deviceId)
+
+        // 从数据库获取历史数据（最近 100 条，按时间倒序）
+        let historyModels = try await AppLaunchEventModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .sort(\.$timestamp, .descending)
+            .limit(100)
+            .all()
+
+        let history = historyModels.map { model in
+            AppLaunchHistoryItem(
+                id: model.id?.uuidString ?? UUID().uuidString,
+                totalTime: model.totalTime,
+                preMainTime: model.preMainTime,
+                mainToLaunchTime: model.mainToLaunchTime,
+                launchToFirstFrameTime: model.launchToFirstFrameTime,
+                timestamp: model.timestamp
+            )
+        }
+
+        // 计算统计指标
+        var stats: AppLaunchStats?
+        if !historyModels.isEmpty {
+            let totalTimes = historyModels.map { $0.totalTime }.sorted()
+            let count = totalTimes.count
+
+            // 计算百分位数
+            let p50Index = count / 2
+            let p90Index = Int(Double(count) * 0.9)
+            let p95Index = Int(Double(count) * 0.95)
+
+            // 计算各阶段平均值
+            let preMainTimes = historyModels.compactMap { $0.preMainTime }
+            let mainToLaunchTimes = historyModels.compactMap { $0.mainToLaunchTime }
+            let launchToFirstFrameTimes = historyModels.compactMap { $0.launchToFirstFrameTime }
+
+            stats = AppLaunchStats(
+                count: count,
+                avgTotalTime: totalTimes.reduce(0, +) / Double(count),
+                minTotalTime: totalTimes.first ?? 0,
+                maxTotalTime: totalTimes.last ?? 0,
+                p50TotalTime: totalTimes[min(p50Index, count - 1)],
+                p90TotalTime: totalTimes[min(p90Index, count - 1)],
+                p95TotalTime: totalTimes[min(p95Index, count - 1)],
+                avgPreMainTime: preMainTimes.isEmpty ? nil : preMainTimes.reduce(0, +) / Double(preMainTimes.count),
+                avgMainToLaunchTime: mainToLaunchTimes.isEmpty ? nil : mainToLaunchTimes.reduce(0, +) / Double(mainToLaunchTimes.count),
+                avgLaunchToFirstFrameTime: launchToFirstFrameTimes.isEmpty ? nil : launchToFirstFrameTimes.reduce(0, +) / Double(launchToFirstFrameTimes.count)
+            )
+        }
 
         return AppLaunchResponse(
             deviceId: deviceId,
-            launchMetrics: launchMetrics
+            launchMetrics: launchMetrics,
+            history: history,
+            stats: stats
         )
     }
 
@@ -1241,7 +1329,33 @@ public struct PerformanceStatusResponse: Content {
 
 public struct AppLaunchResponse: Content {
     public let deviceId: String
-    public let launchMetrics: AppLaunchMetricsDTO?
+    public let launchMetrics: AppLaunchMetricsDTO? // 最新一次启动
+    public let history: [AppLaunchHistoryItem] // 历史启动记录
+    public let stats: AppLaunchStats? // 统计指标
+}
+
+/// 历史启动记录项
+public struct AppLaunchHistoryItem: Content {
+    public let id: String
+    public let totalTime: Double
+    public let preMainTime: Double?
+    public let mainToLaunchTime: Double?
+    public let launchToFirstFrameTime: Double?
+    public let timestamp: Date
+}
+
+/// 启动耗时统计指标
+public struct AppLaunchStats: Content {
+    public let count: Int // 总启动次数
+    public let avgTotalTime: Double // 平均总耗时
+    public let minTotalTime: Double // 最小总耗时
+    public let maxTotalTime: Double // 最大总耗时
+    public let p50TotalTime: Double // P50 耗时
+    public let p90TotalTime: Double // P90 耗时
+    public let p95TotalTime: Double // P95 耗时
+    public let avgPreMainTime: Double? // 平均 pre-main 耗时
+    public let avgMainToLaunchTime: Double? // 平均 main-to-launch 耗时
+    public let avgLaunchToFirstFrameTime: Double? // 平均 launch-to-first-frame 耗时
 }
 
 public struct PerformanceConfigInput: Content {
@@ -1756,5 +1870,53 @@ public struct CreateAlert: AsyncMigration {
 
     public func revert(on database: Database) async throws {
         try await database.schema(AlertModel.schema).delete()
+    }
+}
+
+// MARK: - App Launch Event Model
+
+/// App 启动耗时数据库模型
+public final class AppLaunchEventModel: Model, @unchecked Sendable {
+    public static let schema = "app_launch_events"
+
+    @ID(key: .id)
+    public var id: UUID?
+
+    @Field(key: "device_id")
+    public var deviceId: String
+
+    @Field(key: "total_time")
+    public var totalTime: Double
+
+    @OptionalField(key: "pre_main_time")
+    public var preMainTime: Double?
+
+    @OptionalField(key: "main_to_launch_time")
+    public var mainToLaunchTime: Double?
+
+    @OptionalField(key: "launch_to_first_frame_time")
+    public var launchToFirstFrameTime: Double?
+
+    @Field(key: "timestamp")
+    public var timestamp: Date
+
+    public init() {}
+
+    public init(
+        id: UUID? = nil,
+        deviceId: String,
+        totalTime: Double,
+        preMainTime: Double? = nil,
+        mainToLaunchTime: Double? = nil,
+        launchToFirstFrameTime: Double? = nil,
+        timestamp: Date
+    ) {
+        self.id = id
+        self.deviceId = deviceId
+        self.totalTime = totalTime
+        self.preMainTime = preMainTime
+        self.mainToLaunchTime = mainToLaunchTime
+        self.launchToFirstFrameTime = launchToFirstFrameTime
+        self.timestamp = timestamp
     }
 }

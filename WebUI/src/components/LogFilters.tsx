@@ -3,6 +3,7 @@ import type { LogLevel } from '@/types'
 import { SEARCH_HELP } from '@/utils/logSearch'
 import clsx from 'clsx'
 import { XMarkIcon, WarningIcon, InfoIcon, BugIcon, FileTextIcon } from './icons'
+import { GroupedFilterSelect } from './GroupedFilterSelect'
 
 interface Props {
   minLevel: LogLevel
@@ -58,9 +59,9 @@ export function LogFilters({
   }, [])
 
   return (
-    <div className="flex flex-wrap items-center gap-4">
+    <div className="flex flex-wrap items-center gap-3">
       {/* Level Filters - 单选层级模式 */}
-      <div className="flex gap-1">
+      <div className="flex gap-0.5">
         {logLevels.map(({ level, label, icon, bgClass, textClass }) => {
           const isActive = level === minLevel
 
@@ -70,7 +71,7 @@ export function LogFilters({
               onClick={() => onMinLevelChange(level)}
               title={`显示 ${label} 及更高级别日志`}
               className={clsx(
-                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap',
+                'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap',
                 isActive
                   ? `${bgClass} ${textClass} shadow-sm`
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
@@ -85,33 +86,21 @@ export function LogFilters({
 
       <div className="w-px h-6 bg-border" />
 
-      {/* Subsystem Filter */}
-      <select
+      {/* Subsystem Filter - 使用分组筛选器 */}
+      <GroupedFilterSelect
+        options={subsystems}
         value={selectedSubsystem}
-        onChange={(e) => onSubsystemChange(e.target.value)}
-        className="select text-sm"
-      >
-        <option value="">所有 Subsystem</option>
-        {subsystems.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+        placeholder="所有 Subsystem"
+        onChange={onSubsystemChange}
+      />
 
-      {/* Category Filter */}
-      <select
+      {/* Category Filter - 使用分组筛选器 */}
+      <GroupedFilterSelect
+        options={categories}
         value={selectedCategory}
-        onChange={(e) => onCategoryChange(e.target.value)}
-        className="select text-sm"
-      >
-        <option value="">所有 Category</option>
-        {categories.map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
+        placeholder="所有 Category"
+        onChange={onCategoryChange}
+      />
 
       {/* Search */}
       <div className="flex-1 flex items-center gap-2 min-w-[200px] max-w-[600px]">

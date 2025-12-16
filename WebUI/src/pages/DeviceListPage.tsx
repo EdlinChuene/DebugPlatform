@@ -4,10 +4,10 @@ import { useConnectionStore } from '@/stores/connectionStore'
 import { DeviceCard } from '@/components/DeviceCard'
 import { ListLoadingOverlay } from '@/components/ListLoadingOverlay'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { IPhoneIcon, ClearIcon, OnlineIcon, PackageIcon, UnhealthyXIcon, CheckIcon } from '@/components/icons'
+import { IPhoneIcon, ClearIcon, StarIcon, CheckIcon, OnlineIcon, PackageIcon, UnhealthyXIcon } from '@/components/icons'
 import clsx from 'clsx'
 
-type FilterType = 'all' | 'online' | 'offline'
+type FilterType = 'all' | 'favorites'
 
 export function DeviceListPage() {
   const {
@@ -20,6 +20,7 @@ export function DeviceListPage() {
     toggleSelectId,
     selectAllOffline,
     batchRemoveSelected,
+    favoriteDeviceIds,
   } = useDeviceStore()
   const { isServerOnline } = useConnectionStore()
   const [filter, setFilter] = useState<FilterType>('all')
@@ -28,6 +29,7 @@ export function DeviceListPage() {
 
   const onlineCount = devices.filter(d => d.isOnline).length
   const offlineCount = devices.filter(d => !d.isOnline).length
+  const favoriteCount = devices.filter(d => favoriteDeviceIds.has(d.deviceId)).length
 
   // 计算是否全选了所有离线设备
   const offlineDeviceIds = devices.filter(d => !d.isOnline).map(d => d.deviceId)
@@ -35,21 +37,17 @@ export function DeviceListPage() {
 
   const filteredDevices = useMemo(() => {
     switch (filter) {
-      case 'online':
-        return devices.filter(d => d.isOnline)
-      case 'offline':
-        return devices.filter(d => !d.isOnline)
+      case 'favorites':
+        return devices.filter(d => favoriteDeviceIds.has(d.deviceId))
       default:
         return devices
     }
-  }, [devices, filter])
+  }, [devices, filter, favoriteDeviceIds])
 
   useEffect(() => {
+    // 初始加载设备列表
+    // 全局 WebSocket (connectionStore) 已经处理设备事件订阅
     fetchDevices()
-
-    // 定期刷新设备列表
-    const interval = setInterval(fetchDevices, 5000)
-    return () => clearInterval(interval)
   }, [fetchDevices])
 
   const handleBatchRemove = async () => {
@@ -92,26 +90,16 @@ export function DeviceListPage() {
                 全部 ({devices.length})
               </button>
               <button
-                onClick={() => setFilter('online')}
+                onClick={() => setFilter('favorites')}
                 className={clsx(
-                  'px-3 py-1.5 text-xs font-medium rounded transition-colors',
-                  filter === 'online'
-                    ? 'bg-green-500 text-white'
+                  'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1',
+                  filter === 'favorites'
+                    ? 'bg-yellow-500 text-bg-darkest'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
                 )}
               >
-                在线 ({onlineCount})
-              </button>
-              <button
-                onClick={() => setFilter('offline')}
-                className={clsx(
-                  'px-3 py-1.5 text-xs font-medium rounded transition-colors',
-                  filter === 'offline'
-                    ? 'bg-gray-500 text-white'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'
-                )}
-              >
-                离线 ({offlineCount})
+                <StarIcon size={12} filled={filter === 'favorites'} />
+                仅收藏 ({favoriteCount})
               </button>
             </div>
 
@@ -227,10 +215,10 @@ function EmptyState({ isLoading, filter, totalCount }: { isLoading: boolean; fil
         <div className="glass-card p-12 text-center max-w-md">
           <IPhoneIcon size={48} className="mx-auto mb-4 text-text-muted opacity-50" />
           <h2 className="text-xl font-semibold text-text-primary mb-2">
-            没有{filter === 'online' ? '在线' : '离线'}设备
+            没有{filter === 'favorites' ? '收藏的' : ''}设备
           </h2>
           <p className="text-text-muted">
-            {filter === 'online' ? '当前没有设备在线' : '所有设备都在线'}
+            {filter === 'favorites' ? '点击设备卡片上的星标收藏设备' : '当前没有可显示的设备'}
           </p>
         </div>
       </div>

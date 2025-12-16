@@ -3,9 +3,9 @@ import type { DeviceListItem } from '@/types'
 import { formatRelativeTime } from '@/utils/format'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { getPlatformIcon } from '@/utils/deviceIcons'
-import { StarIcon, PackageIcon, CheckIcon, PencilIcon } from '@/components/icons'
+import { StarIcon, PackageIcon, CheckIcon } from '@/components/icons'
 import clsx from 'clsx'
-import { useState, type CSSProperties } from 'react'
+import { type CSSProperties } from 'react'
 
 interface Props {
   device: DeviceListItem
@@ -17,29 +17,13 @@ interface Props {
 
 export function DeviceCard({ device, style, isSelectMode, isSelected, onToggleSelect }: Props) {
   const navigate = useNavigate()
-  const { favoriteDeviceIds, toggleFavorite, deviceNicknames, setNickname } = useDeviceStore()
+  const { favoriteDeviceIds, toggleFavorite } = useDeviceStore()
   const isFavorite = favoriteDeviceIds.has(device.deviceId)
   const isOffline = !device.isOnline
-  const nickname = deviceNicknames[device.deviceId]
-
-  // 编辑备注状态
-  const [isEditingNickname, setIsEditingNickname] = useState(false)
-  const [nicknameInput, setNicknameInput] = useState(nickname || '')
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation()
     toggleFavorite(device.deviceId)
-  }
-
-  const handleEditNickname = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setNicknameInput(nickname || '')
-    setIsEditingNickname(true)
-  }
-
-  const handleSaveNickname = () => {
-    setNickname(device.deviceId, nicknameInput.trim())
-    setIsEditingNickname(false)
   }
 
   const handleClick = () => {
@@ -98,8 +82,12 @@ export function DeviceCard({ device, style, isSelectMode, isSelected, onToggleSe
           {/* 第一行：设备信息 */}
           <div className="flex items-center gap-2">
             <h3 className="font-medium text-sm text-text-primary group-hover:text-primary transition-colors truncate">
-              {nickname || device.deviceName}
+              {device.deviceName}
             </h3>
+            {/* 设备 ID 后 4 位，便于多设备区分 */}
+            <span className="text-2xs px-1 py-0.5 rounded bg-bg-light text-text-muted font-mono flex-shrink-0" title={`设备 ID: ${device.deviceId}`}>
+              #{device.deviceId.slice(-4).toUpperCase()}
+            </span>
             {device.isSimulator && (
               <span className="text-2xs px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 flex-shrink-0">
                 模拟器
@@ -111,12 +99,6 @@ export function DeviceCard({ device, style, isSelectMode, isSelected, onToggleSe
               </span>
             )}
           </div>
-          {/* 如果有备注名，显示原设备名 */}
-          {nickname && (
-            <p className="text-xs text-text-muted truncate">
-              {device.deviceName}
-            </p>
-          )}
           <p className="text-xs text-text-muted truncate mt-0.5">
             {device.deviceModel} · {device.platform} {device.systemVersion}
           </p>
@@ -151,19 +133,6 @@ export function DeviceCard({ device, style, isSelectMode, isSelected, onToggleSe
         {/* 操作按钮组 - 非选择模式下显示 */}
         {!isSelectMode && (
           <div className="flex items-center gap-0.5">
-            {/* 编辑备注按钮 */}
-            <button
-              onClick={handleEditNickname}
-              className={clsx(
-                'p-1 rounded transition-all flex-shrink-0',
-                nickname
-                  ? 'text-primary hover:text-primary/80'
-                  : 'text-text-muted opacity-0 group-hover:opacity-100 hover:text-primary'
-              )}
-              title="编辑备注"
-            >
-              <PencilIcon size={14} />
-            </button>
             {/* 收藏按钮 */}
             <button
               onClick={handleToggleFavorite}
@@ -180,54 +149,6 @@ export function DeviceCard({ device, style, isSelectMode, isSelected, onToggleSe
           </div>
         )}
       </div>
-
-      {/* 编辑备注弹框 */}
-      {isEditingNickname && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={(e) => {
-              e.stopPropagation()
-              setIsEditingNickname(false)
-            }}
-          />
-          <div
-            className="absolute right-2 top-2 z-50 bg-bg-dark border border-border rounded-lg shadow-xl p-3 min-w-[200px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <label className="block text-xs text-text-secondary mb-1.5">设备备注</label>
-            <input
-              type="text"
-              value={nicknameInput}
-              onChange={(e) => setNicknameInput(e.target.value)}
-              placeholder="输入备注名称"
-              className="w-full px-2 py-1.5 text-sm bg-bg-medium border border-border rounded text-text-primary focus:outline-none focus:border-primary"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleSaveNickname()
-                } else if (e.key === 'Escape') {
-                  setIsEditingNickname(false)
-                }
-              }}
-            />
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => setIsEditingNickname(false)}
-                className="flex-1 px-2 py-1 text-xs text-text-muted hover:text-text-primary bg-bg-light rounded"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSaveNickname}
-                className="flex-1 px-2 py-1 text-xs text-white bg-primary hover:bg-primary/90 rounded"
-              >
-                保存
-              </button>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   )
 }

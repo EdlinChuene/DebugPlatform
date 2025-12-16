@@ -35,6 +35,12 @@ export default {
           secondary: 'var(--color-text-secondary)',
           muted: 'var(--color-text-muted)',
         },
+        // 选中状态文字颜色（列表选中行使用）
+        'selected-text': {
+          primary: 'var(--color-selected-text-primary)',
+          secondary: 'var(--color-selected-text-secondary)',
+          muted: 'var(--color-selected-text-muted)',
+        },
         // 边框
         border: {
           DEFAULT: 'var(--color-border)',

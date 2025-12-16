@@ -6,7 +6,7 @@
 //
 
 import { create } from 'zustand'
-import type { DBInfo, DBTableInfo, DBColumnInfo, DBTablePageResult, DBQueryResponse } from '@/types'
+import type { DBInfo, DBTableInfo, DBColumnInfo, DBTablePageResult, DBQueryResponse, DBQueryError } from '@/types'
 import * as api from '@/services/api'
 
 // 数据库排序方式
@@ -48,7 +48,7 @@ interface DBState {
     queryInput: string
     queryResult: DBQueryResponse | null
     queryLoading: boolean
-    queryError: string | null
+    queryError: DBQueryError | string | null  // 支持结构化错误或简单字符串
 
     // Actions
     loadDatabases: (deviceId: string) => Promise<void>
@@ -328,8 +328,20 @@ export const useDBStore = create<DBState>((set, get) => ({
         set({ queryLoading: true, queryError: null, queryResult: null })
         try {
             const result = await api.executeQuery(deviceId, selectedDb, queryInput)
-            set({ queryResult: result, queryLoading: false })
+
+            // 检查响应是否成功
+            if (!result.success && result.error) {
+                // SQL 执行失败，设置结构化错误
+                set({
+                    queryError: result.error,
+                    queryLoading: false,
+                })
+            } else {
+                // 成功
+                set({ queryResult: result, queryLoading: false })
+            }
         } catch (error) {
+            // 网络错误或其他异常
             set({
                 queryError: error instanceof Error ? error.message : 'Query execution failed',
                 queryLoading: false,

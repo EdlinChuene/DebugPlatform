@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useRuleStore } from '@/stores/ruleStore'
 import { TrafficRule } from '@/types'
 import { BackIcon, SettingsIcon, LogIcon, StarIcon, ClearIcon, TagIcon, EditIcon, TrashIcon } from '@/components/icons'
@@ -11,10 +11,25 @@ export function RulesPage() {
     const [editingRule, setEditingRule] = useState<Partial<TrafficRule> | null>(null)
     const [showEditor, setShowEditor] = useState(false)
     const [showClearConfirm, setShowClearConfirm] = useState(false)
+    const [searchParams, setSearchParams] = useSearchParams()
 
     useEffect(() => {
         fetchRules()
     }, [])
+
+    // 处理 URL 参数中的规则编辑请求
+    useEffect(() => {
+        const editRuleId = searchParams.get('editRule')
+        if (editRuleId && rules.length > 0) {
+            const rule = rules.find(r => r.id === editRuleId)
+            if (rule) {
+                setEditingRule({ ...rule })
+                setShowEditor(true)
+                // 清除 URL 参数
+                setSearchParams({}, { replace: true })
+            }
+        }
+    }, [searchParams, rules, setSearchParams])
 
     const handleCreateNew = () => {
         setEditingRule({

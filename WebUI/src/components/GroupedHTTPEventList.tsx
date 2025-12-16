@@ -427,7 +427,7 @@ export function GroupedHTTPEventList({
                 {/* 序号列 */}
                 <div className={clsx(
                     'w-10 flex-shrink-0 flex items-center justify-center text-xs font-mono',
-                    isSelected ? 'text-white/80' : 'text-text-muted'
+                    isSelected ? 'text-selected-text-muted' : 'text-text-muted'
                 )}>
                     {rowNumber}
                 </div>
@@ -451,7 +451,7 @@ export function GroupedHTTPEventList({
                 {/* Time */}
                 <div className={clsx(
                     'px-3 py-3.5 w-[90px] flex-shrink-0',
-                    isSelected ? 'text-white' : 'text-text-muted'
+                    isSelected ? 'text-selected-text-secondary' : 'text-text-muted'
                 )}>
                     <span className="text-sm font-mono">{formatSmartTime(event.startTime)}</span>
                 </div>
@@ -484,7 +484,7 @@ export function GroupedHTTPEventList({
                 <div className="px-3 py-3.5 flex-1 min-w-0 overflow-hidden">
                     <span className={clsx(
                         'text-sm truncate',
-                        isSelected ? 'text-white font-medium' : 'text-text-primary'
+                        isSelected ? 'text-selected-text-primary font-medium' : 'text-text-primary'
                     )} title={event.url}>
                         {(() => {
                             try {

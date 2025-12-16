@@ -21,7 +21,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { MockRule } from '@/types'
 
 // 插件实现类
-class MockPluginImpl implements FrontendPlugin {
+class HttpMockPluginImpl implements FrontendPlugin {
     metadata: PluginMetadata = {
         pluginId: BuiltinPluginId.MOCK,
         displayName: 'Mock',
@@ -29,6 +29,8 @@ class MockPluginImpl implements FrontendPlugin {
         description: 'Mock 规则管理',
         icon: <MockIcon size={16} />,
         dependencies: [BuiltinPluginId.HTTP],
+        isSubPlugin: true, // 作为 HTTP 的子插件
+        parentPluginId: BuiltinPluginId.HTTP,
     }
 
     state: PluginState = 'uninitialized'
@@ -85,11 +87,16 @@ class MockPluginImpl implements FrontendPlugin {
     }
 }
 
-// 插件视图组件
+// 插件视图组件 - 包装器
 function MockPluginView({ context, isActive }: PluginRenderProps) {
-    const deviceId = context.deviceId
+    if (!isActive || !context.deviceId) return null
+    return <MockPluginContent deviceId={context.deviceId} isActive={isActive} />
+}
 
+// 导出内容组件供 HttpPlugin 使用
+export function MockPluginContent({ deviceId, isActive }: { deviceId: string; isActive: boolean }) {
     // 从 mockStore 获取状态
+
     const {
         rules,
         loading,
@@ -175,10 +182,6 @@ function MockPluginView({ context, isActive }: PluginRenderProps) {
             toast.show('error', '保存失败')
         }
     }, [deviceId, editingRule, createRule, updateRule, closeEditor, toast])
-
-    if (!isActive) {
-        return null
-    }
 
     return (
         <div className="h-full flex flex-col">
@@ -278,4 +281,4 @@ function MockPluginView({ context, isActive }: PluginRenderProps) {
     )
 }
 
-export const MockPlugin = new MockPluginImpl()
+export const HttpMockPlugin = new HttpMockPluginImpl()

@@ -19,6 +19,7 @@ struct RealtimeMessage: Content {
         case deviceConnected
         case deviceDisconnected
         case deviceReconnected
+        case deviceInfoUpdated
         case breakpointHit
         case pluginStateChange
     }
@@ -175,6 +176,29 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         let message = RealtimeMessage(type: .deviceReconnected, deviceId: deviceId, payload: payload)
         broadcastMessage(message)
         print("[RealtimeStream] Broadcasted device reconnected: \(deviceName)")
+    }
+
+    /// 广播设备信息更新事件（如设备别名变更）
+    func broadcastDeviceInfoUpdated(deviceId: String, deviceName: String) {
+        let event = DeviceSessionEvent(
+            sessionId: "",
+            deviceId: deviceId,
+            deviceName: deviceName,
+            timestamp: Date()
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        guard
+            let payloadData = try? encoder.encode(event),
+            let payload = String(data: payloadData, encoding: .utf8) else {
+            return
+        }
+
+        let message = RealtimeMessage(type: .deviceInfoUpdated, deviceId: deviceId, payload: payload)
+        broadcastMessage(message)
+        print("[RealtimeStream] Broadcasted device info updated: \(deviceName)")
     }
 
     /// 广播断点命中事件
@@ -404,5 +428,23 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         let message = RealtimeMessage(type: .pluginStateChange, deviceId: deviceId, payload: payloadString)
         broadcastMessage(message)
         print("[RealtimeStream] Broadcasted plugin state change: \(pluginId) -> \(isEnabled)")
+    }
+
+    /// 广播服务器统计数据更新
+    /// - Parameter stats: 服务器统计数据
+    func broadcastServerStats<T: Encodable>(_ stats: T) {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        guard
+            let payloadData = try? encoder.encode(stats),
+            let payloadString = String(data: payloadData, encoding: .utf8) else {
+            print("[RealtimeStream] Failed to encode server stats")
+            return
+        }
+
+        // 服务器 stats 使用空 deviceId（全局广播）
+        let message = RealtimeMessage(type: .stats, deviceId: "", payload: payloadString)
+        broadcastMessage(message)
     }
 }

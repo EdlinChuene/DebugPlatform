@@ -5,18 +5,130 @@
 // Copyright © 2025 Sun. All rights reserved.
 //
 
-import { useEffect, useCallback, useState, useRef, useMemo } from 'react'
+import React, { useEffect, useCallback, useState, useRef, useMemo } from 'react'
 import clsx from 'clsx'
 import { useDBStore } from '@/stores/dbStore'
 import { useProtobufStore } from '@/stores/protobufStore'
 import { ProtobufConfigPanel } from './ProtobufConfigPanel'
 import { BlobCell, isBase64Blob } from './BlobCell'
 import { ListLoadingOverlay } from './ListLoadingOverlay'
-import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, EditIcon, ClipboardIcon, PackageIcon, SearchIcon, XIcon, FolderIcon, CheckIcon } from './icons'
-import type { DatabaseLocation, DBInfo } from '@/types'
-
+import { useDraggable } from '@/hooks/useDraggable'
+import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, ClipboardIcon, PackageIcon, SearchIcon, XIcon, FolderIcon, CheckIcon } from './icons'
+import { revealInFinder } from '@/services/api'
+import { useToastStore } from '@/stores/toastStore'
+import type { DatabaseLocation, DBInfo, DBQueryError } from '@/types'
 interface DBInspectorProps {
     deviceId: string
+}
+
+// SQL 查询错误类型图标映射
+const errorTypeIcons: Record<string, React.FC<{ size?: number; className?: string }>> = {
+    syntax_error: WarningIcon,
+    table_not_found: DatabaseIcon,
+    column_not_found: DatabaseIcon,
+    access_denied: LockIcon,
+    timeout: LogIcon,
+    invalid_query: WarningIcon,
+    internal_error: WarningIcon,
+}
+
+// SQL 查询错误类型标题映射
+const errorTypeTitles: Record<string, string> = {
+    syntax_error: '语法错误',
+    table_not_found: '表不存在',
+    column_not_found: '列不存在',
+    access_denied: '访问被拒绝',
+    timeout: '查询超时',
+    invalid_query: '无效查询',
+    internal_error: '内部错误',
+}
+
+/// SQL 查询错误展示组件
+interface SQLQueryErrorDisplayProps {
+    error: DBQueryError | string
+    onApplySuggestion?: (suggestion: string) => void
+}
+
+function SQLQueryErrorDisplay({ error, onApplySuggestion }: SQLQueryErrorDisplayProps) {
+    // 如果是简单字符串错误，使用原来的简单样式
+    if (typeof error === 'string') {
+        return (
+            <div className="mt-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
+                {error}
+            </div>
+        )
+    }
+
+    const ErrorIcon = errorTypeIcons[error.type] || WarningIcon
+    const errorTitle = errorTypeTitles[error.type] || '查询错误'
+
+    return (
+        <div className="mt-2 bg-red-500/10 border border-red-500/20 rounded-lg overflow-hidden">
+            {/* 错误标题区域 */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-red-500/20 bg-red-500/5">
+                <ErrorIcon size={14} className="text-red-400 flex-shrink-0" />
+                <span className="text-xs font-medium text-red-400">{errorTitle}</span>
+            </div>
+
+            {/* 错误描述 */}
+            <div className="px-3 py-2 space-y-2">
+                <p className="text-xs text-red-300">{error.description}</p>
+
+                {/* 原始错误消息（可折叠） */}
+                <details className="group">
+                    <summary className="text-xs text-red-400/70 cursor-pointer hover:text-red-400 select-none">
+                        查看详细错误
+                    </summary>
+                    <pre className="mt-1 p-2 bg-red-500/5 rounded text-xs text-red-400/80 font-mono whitespace-pre-wrap break-all">
+                        {error.message}
+                    </pre>
+                </details>
+            </div>
+
+            {/* 建议区域 */}
+            {error.suggestions && error.suggestions.length > 0 && (
+                <div className="px-3 py-2 border-t border-red-500/20 bg-amber-500/5">
+                    <div className="flex items-center gap-1.5 mb-2">
+                        <LightningIcon size={12} className="text-amber-400" />
+                        <span className="text-xs font-medium text-amber-400">建议</span>
+                    </div>
+                    <ul className="space-y-1.5">
+                        {error.suggestions.map((suggestion, idx) => {
+                            // 检查建议是否看起来像 SQL 语句（以 SELECT 开头或包含 FROM 等关键字）
+                            const isSQLSuggestion = /^(SELECT|INSERT|UPDATE|DELETE)\s/i.test(suggestion.trim()) ||
+                                (suggestion.includes('SELECT') && suggestion.includes('FROM'))
+
+                            return (
+                                <li key={idx} className="flex items-start gap-2">
+                                    <span className="text-amber-500/60 text-xs mt-0.5">•</span>
+                                    <div className="flex-1 min-w-0">
+                                        {isSQLSuggestion ? (
+                                            <div className="flex items-center gap-2">
+                                                <code className="flex-1 px-2 py-1 bg-amber-500/10 rounded text-xs font-mono text-amber-300 break-all">
+                                                    {suggestion}
+                                                </code>
+                                                {onApplySuggestion && (
+                                                    <button
+                                                        onClick={() => onApplySuggestion(suggestion)}
+                                                        className="flex-shrink-0 px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 rounded text-xs text-amber-300 transition-colors"
+                                                        title="应用此建议"
+                                                    >
+                                                        应用
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-amber-300/90">{suggestion}</span>
+                                        )}
+                                    </div>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </div>
+            )}
+        </div>
+    )
 }
 
 export function DBInspector({ deviceId }: DBInspectorProps) {
@@ -73,10 +185,55 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
     const { descriptorMeta, getColumnConfig } = useProtobufStore()
     const [showProtobufConfig, setShowProtobufConfig] = useState(false)
 
+    // 当前表的描述符数量
+    const currentTableDescriptorCount = useMemo(() => {
+        if (!selectedDb || !selectedTable) return 0
+        return descriptorMeta.filter(d => d.dbId === selectedDb && d.tableName === selectedTable).length
+    }, [descriptorMeta, selectedDb, selectedTable])
+
     // 列筛选状态：columnName -> filterValue
     const [columnFilters, setColumnFilters] = useState<Record<string, string>>({})
     // 展开的筛选列
     const [expandedFilterColumn, setExpandedFilterColumn] = useState<string | null>(null)
+
+    // 动态列宽状态：columnName -> width
+    const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
+    const [isResizing, setIsResizing] = useState(false)
+    const resizeState = useRef<{ columnName: string; startX: number; startWidth: number } | null>(null)
+
+    // 开始调整列宽
+    const startColumnResize = useCallback((e: React.MouseEvent, columnName: string) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const startWidth = columnWidths[columnName] || 150
+        resizeState.current = { columnName, startX: e.clientX, startWidth }
+        setIsResizing(true)
+    }, [columnWidths])
+
+    // 列宽调整的鼠标移动和抬起事件
+    useEffect(() => {
+        if (!isResizing) return
+
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!resizeState.current) return
+            const { columnName, startX, startWidth } = resizeState.current
+            const delta = e.clientX - startX
+            const newWidth = Math.max(80, Math.min(600, startWidth + delta))
+            setColumnWidths(prev => ({ ...prev, [columnName]: newWidth }))
+        }
+
+        const handleMouseUp = () => {
+            setIsResizing(false)
+            resizeState.current = null
+        }
+
+        document.addEventListener('mousemove', handleMouseMove)
+        document.addEventListener('mouseup', handleMouseUp)
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [isResizing])
 
     // 数据库路径弹窗状态
     const [pathPopupDbId, setPathPopupDbId] = useState<string | null>(null)
@@ -88,6 +245,20 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
         columnName: string
         position: { x: number; y: number }
     } | null>(null)
+
+    // 单元格详情弹窗拖动
+    const {
+        position: cellPopupPosition,
+        isDragging: cellPopupDragging,
+        dragHandleProps: cellPopupDragHandleProps,
+        resetPosition: resetCellPopupPosition,
+    } = useDraggable()
+
+    // 关闭单元格详情弹窗
+    const closeCellDetailPopup = useCallback(() => {
+        setCellDetailPopup(null)
+        resetCellPopupPosition()
+    }, [resetCellPopupPosition])
 
     // 跟踪 deviceId 变化
     const prevDeviceIdRef = useRef(deviceId)
@@ -128,6 +299,20 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
             document.removeEventListener('mousedown', handleClickOutside)
         }
     }, [pathPopupDbId])
+
+    // 单元格详情弹窗：ESC 键关闭
+    useEffect(() => {
+        if (!cellDetailPopup) return
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                closeCellDetailPopup()
+            }
+        }
+
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [cellDetailPopup, closeCellDetailPopup])
 
     // 设备切换时重置状态并重新加载
     useEffect(() => {
@@ -269,6 +454,23 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
         setPathCopied(true)
         setTimeout(() => setPathCopied(false), 2000)
     }, [getDisplayPath, copyToClipboard])
+
+    const toast = useToastStore()
+
+    // 在 Finder 中显示数据库文件
+    const handleRevealInFinder = useCallback(async (path: string) => {
+        try {
+            const result = await revealInFinder(path)
+            if (result.success) {
+                toast.show('success', '已在 Finder 中显示')
+            } else {
+                toast.show('error', result.message)
+            }
+        } catch (err) {
+            toast.show('error', '无法在 Finder 中显示')
+            console.error('Failed to reveal in Finder:', err)
+        }
+    }, [toast])
 
     // 根据筛选条件过滤数据（客户端筛选）
     const filteredRows = useMemo(() => {
@@ -456,30 +658,45 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                         <div className="text-xs text-text-primary font-mono break-all bg-bg-light p-2 rounded">
                                             {getDisplayPath(db)}
                                         </div>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                handleCopyPath(db)
-                                            }}
-                                            className={clsx(
-                                                'mt-2 w-full flex items-center justify-center gap-1 px-2 py-1 rounded text-xs transition-colors',
-                                                pathCopied
-                                                    ? 'bg-accent-green/20 text-accent-green'
-                                                    : 'bg-bg-light text-text-secondary hover:bg-bg-lighter'
+                                        <div className="mt-2 flex gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    handleCopyPath(db)
+                                                }}
+                                                className={clsx(
+                                                    'flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-xs transition-colors',
+                                                    pathCopied
+                                                        ? 'bg-accent-green/20 text-accent-green'
+                                                        : 'bg-bg-light text-text-secondary hover:bg-bg-lighter'
+                                                )}
+                                            >
+                                                {pathCopied ? (
+                                                    <>
+                                                        <CheckIcon size={12} />
+                                                        已复制
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <ClipboardIcon size={12} />
+                                                        复制路径
+                                                    </>
+                                                )}
+                                            </button>
+                                            {/* 仅 macOS 显示"在 Finder 中展示"按钮 */}
+                                            {navigator.platform.toLowerCase().includes('mac') && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        handleRevealInFinder(getDisplayPath(db))
+                                                    }}
+                                                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-xs bg-bg-light text-text-secondary hover:bg-bg-lighter transition-colors"
+                                                >
+                                                    <FolderIcon size={12} />
+                                                    在 Finder 中显示
+                                                </button>
                                             )}
-                                        >
-                                            {pathCopied ? (
-                                                <>
-                                                    <CheckIcon size={12} />
-                                                    已复制
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <ClipboardIcon size={12} />
-                                                    复制路径
-                                                </>
-                                            )}
-                                        </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -495,28 +712,14 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                         </h3>
                         <div className="flex items-center gap-1">
                             {selectedDb && (
-                                <>
-                                    <button
-                                        onClick={() => selectedDb && loadTables(deviceId, selectedDb)}
-                                        disabled={tablesLoading}
-                                        className="px-2 py-1 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
-                                        title="刷新当前数据库的所有表"
-                                    >
-                                        刷新
-                                    </button>
-                                    <button
-                                        onClick={() => setQueryMode(!queryMode)}
-                                        className={clsx(
-                                            'px-2 py-1 bg-bg-light rounded text-xs transition-colors',
-                                            queryMode
-                                                ? 'bg-accent-blue/20 text-accent-blue'
-                                                : 'text-text-secondary hover:bg-bg-lighter'
-                                        )}
-                                        title="SQL 查询"
-                                    >
-                                        {'SQL 查询'}
-                                    </button>
-                                </>
+                                <button
+                                    onClick={() => selectedDb && loadTables(deviceId, selectedDb)}
+                                    disabled={tablesLoading}
+                                    className="px-2 py-1 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors disabled:opacity-50"
+                                    title="刷新当前数据库的所有表"
+                                >
+                                    刷新
+                                </button>
                             )}
                         </div>
                     </div>
@@ -557,114 +760,9 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                 </div>
             </div>
 
-            {/* 右侧 - 表数据或 SQL 查询 */}
+            {/* 右侧 - 表数据（带可选 SQL 查询面板） */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                {queryMode ? (
-                    // SQL 查询模式
-                    <>
-                        {/* 查询输入区 */}
-                        <div className="p-4 border-b border-border bg-bg-dark/50">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-text-muted">SQL 查询</span>
-                                    <span className="text-xs text-text-muted/50">（仅支持 SELECT）</span>
-                                </div>
-                                <button
-                                    onClick={() => setQueryMode(false)}
-                                    className="px-2 py-1 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors"
-                                    title="关闭 SQL 查询"
-                                >
-                                    关闭
-                                </button>
-                            </div>
-                            <textarea
-                                value={queryInput}
-                                onChange={(e) => setQueryInput(e.target.value)}
-                                placeholder="SELECT * FROM table_name LIMIT 100"
-                                className="w-full h-24 px-3 py-2 bg-bg-light border border-border rounded-lg text-sm font-mono text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-primary/50"
-                                onKeyDown={(e) => {
-                                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                                        executeQuery(deviceId)
-                                    }
-                                }}
-                            />
-                            <div className="flex items-center justify-between mt-2">
-                                <span className="text-xs text-text-muted">
-                                    {queryResult && (
-                                        <>
-                                            {queryResult.rowCount} 行 • {queryResult.executionTimeMs.toFixed(2)} ms
-                                        </>
-                                    )}
-                                </span>
-                                <button
-                                    onClick={() => executeQuery(deviceId)}
-                                    disabled={queryLoading || !queryInput.trim()}
-                                    className="px-4 py-1.5 bg-primary text-white rounded text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                                >
-                                    {queryLoading ? '执行中...' : '执行 (⌘↵)'}
-                                </button>
-                            </div>
-                            {queryError && (
-                                <div className="mt-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
-                                    {queryError}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 查询结果 */}
-                        <div className="flex-1 overflow-auto">
-                            {queryLoading ? (
-                                <div className="flex items-center justify-center h-full">
-                                    <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
-                                </div>
-                            ) : queryResult ? (
-                                <table className="w-full text-xs">
-                                    <thead className="sticky top-0 bg-bg-dark">
-                                        <tr>
-                                            {queryResult.columns.map((col) => (
-                                                <th
-                                                    key={col.name}
-                                                    className="px-3 py-2 text-left font-medium text-text-muted border-b border-border"
-                                                >
-                                                    {col.name}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="font-mono">
-                                        {queryResult.rows.map((row, idx) => (
-                                            <tr
-                                                key={idx}
-                                                className="border-b border-border hover:bg-bg-light/30 transition-colors"
-                                            >
-                                                {queryResult.columns.map((col) => (
-                                                    <td
-                                                        key={col.name}
-                                                        className="px-3 py-2 text-text-secondary max-w-xs truncate"
-                                                        title={row.values[col.name] ?? ''}
-                                                    >
-                                                        {row.values[col.name] === null ? (
-                                                            <span className="text-text-muted italic">NULL</span>
-                                                        ) : (
-                                                            row.values[col.name]
-                                                        )}
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            ) : (
-                                <div className="flex items-center justify-center h-full text-text-muted">
-                                    <div className="text-center flex flex-col items-center">
-                                        <EditIcon size={36} className="mb-3 opacity-50" />
-                                        <p className="text-sm">输入 SQL 查询语句并执行</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </>
-                ) : selectedTable ? (
+                {selectedTable ? (
                     <>
                         {/* 工具栏 */}
                         <div className="px-4 py-2 border-b border-border bg-bg-dark/50 flex items-center justify-between">
@@ -683,13 +781,13 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                         'px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1 whitespace-nowrap',
                                         showProtobufConfig
                                             ? 'bg-purple-500/20 text-purple-400'
-                                            : descriptorMeta.length > 0
+                                            : currentTableDescriptorCount > 0
                                                 ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'
                                                 : 'bg-bg-light text-text-secondary hover:bg-bg-lighter'
                                     )}
                                     title="Protobuf 配置"
                                 >
-                                    <PackageIcon size={12} /> Protobuf {descriptorMeta.length > 0 && `(${descriptorMeta.length})`}
+                                    <PackageIcon size={12} /> Protobuf {currentTableDescriptorCount > 0 && `(${currentTableDescriptorCount})`}
                                 </button>
                                 <button
                                     onClick={() => setShowSchema(!showSchema)}
@@ -704,11 +802,18 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                 </button>
                                 <button
                                     onClick={() => {
-                                        setQueryInput(`SELECT * FROM ${selectedTable} LIMIT 100`)
-                                        setQueryMode(true)
+                                        if (!queryMode) {
+                                            setQueryInput(`SELECT * FROM ${selectedTable} LIMIT 100`)
+                                        }
+                                        setQueryMode(!queryMode)
                                     }}
-                                    className="px-3 py-1.5 bg-bg-light text-text-secondary rounded text-xs hover:bg-bg-lighter transition-colors flex items-center gap-1"
-                                    title="查询当前表"
+                                    className={clsx(
+                                        'px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1',
+                                        queryMode
+                                            ? 'bg-accent-blue/20 text-accent-blue'
+                                            : 'bg-bg-light text-text-secondary hover:bg-bg-lighter'
+                                    )}
+                                    title="SQL 查询"
                                 >
                                     SQL 查询
                                 </button>
@@ -762,60 +867,200 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                             </div>
                         )}
 
+                        {/* SQL 查询面板 */}
+                        {queryMode && (
+                            <div className="border-b border-border bg-bg-dark/30">
+                                {/* 查询输入区 */}
+                                <div className="px-4 py-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-text-muted">SQL 查询</span>
+                                            <span className="text-xs text-text-muted/50">（仅支持 SELECT）</span>
+                                        </div>
+                                        <button
+                                            onClick={() => setQueryMode(false)}
+                                            className="p-1 rounded hover:bg-bg-light transition-colors text-text-muted hover:text-text-primary"
+                                            title="关闭 SQL 查询"
+                                        >
+                                            <XIcon size={14} />
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        value={queryInput}
+                                        onChange={(e) => setQueryInput(e.target.value)}
+                                        placeholder="SELECT * FROM table_name LIMIT 100"
+                                        className="w-full h-20 px-3 py-2 bg-bg-light border border-border rounded-lg text-xs font-mono text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-primary/50"
+                                        onKeyDown={(e) => {
+                                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                                                executeQuery(deviceId)
+                                            }
+                                        }}
+                                    />
+                                    <div className="flex items-center justify-between mt-2">
+                                        <span className="text-xs text-text-muted">
+                                            {queryResult && queryResult.success && queryResult.rowCount != null && queryResult.executionTimeMs != null && (
+                                                <>
+                                                    {queryResult.rowCount} 行 • {queryResult.executionTimeMs.toFixed(2)} ms
+                                                </>
+                                            )}
+                                        </span>
+                                        <button
+                                            onClick={() => executeQuery(deviceId)}
+                                            disabled={queryLoading || !queryInput.trim()}
+                                            className="px-3 py-1 bg-primary text-white rounded text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                                        >
+                                            {queryLoading ? '执行中...' : '执行 (⌘↵)'}
+                                        </button>
+                                    </div>
+                                    {queryError && (
+                                        <SQLQueryErrorDisplay
+                                            error={queryError}
+                                            onApplySuggestion={(suggestion) => setQueryInput(suggestion)}
+                                        />
+                                    )}
+                                </div>
+
+                                {/* 查询结果 */}
+                                {(queryLoading || queryResult) && (
+                                    <div className="max-h-[200px] overflow-auto border-t border-border">
+                                        {queryLoading ? (
+                                            <div className="flex items-center justify-center py-8">
+                                                <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+                                            </div>
+                                        ) : queryResult && queryResult.success && queryResult.rows && queryResult.rows.length > 0 ? (
+                                            <table className="w-full text-xs">
+                                                <thead className="sticky top-0 bg-bg-dark">
+                                                    <tr>
+                                                        {queryResult.columns?.map((col) => (
+                                                            <th
+                                                                key={col.name}
+                                                                className="px-3 py-2 text-left font-medium text-text-muted border-b border-border"
+                                                            >
+                                                                {col.name}
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="font-mono">
+                                                    {queryResult.rows.map((row, idx) => (
+                                                        <tr
+                                                            key={idx}
+                                                            className="border-b border-border hover:bg-bg-light/30 transition-colors"
+                                                        >
+                                                            {queryResult.columns?.map((col) => (
+                                                                <td
+                                                                    key={col.name}
+                                                                    className="px-3 py-1.5 text-text-secondary max-w-xs truncate"
+                                                                    title={row.values[col.name] ?? ''}
+                                                                >
+                                                                    {row.values[col.name] === null ? (
+                                                                        <span className="text-text-muted italic">NULL</span>
+                                                                    ) : (
+                                                                        row.values[col.name]
+                                                                    )}
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        ) : queryResult && queryResult.success ? (
+                                            <div className="flex items-center justify-center py-4 text-text-muted text-xs">
+                                                查询结果为空
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* 筛选状态提示 */}
                         {Object.keys(columnFilters).length > 0 && (
                             <div className="px-4 py-2 border-b border-border bg-primary/10 flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-xs text-primary">
-                                    <SearchIcon size={14} />
-                                    <span>
+                                <div className="flex items-center gap-2 text-xs text-primary flex-wrap">
+                                    <SearchIcon size={14} className="flex-shrink-0" />
+                                    <span className="flex-shrink-0">
                                         已筛选 {Object.keys(columnFilters).length} 列，
                                         显示 {filteredRows.length} / {tableData?.rows.length ?? 0} 行
                                     </span>
+                                    <span className="text-text-muted mx-1">|</span>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        {Object.entries(columnFilters).map(([colName, filterValue]) => (
+                                            <span
+                                                key={colName}
+                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-primary/20 rounded text-primary"
+                                            >
+                                                <span className="font-medium">{colName}</span>
+                                                <span className="text-text-muted">=</span>
+                                                <span className="max-w-[120px] truncate" title={filterValue}>
+                                                    "{filterValue}"
+                                                </span>
+                                                <button
+                                                    onClick={() => setColumnFilters(prev => {
+                                                        const next = { ...prev }
+                                                        delete next[colName]
+                                                        return next
+                                                    })}
+                                                    className="ml-0.5 text-text-muted hover:text-primary"
+                                                    title={`清除 ${colName} 筛选`}
+                                                >
+                                                    <XIcon size={10} />
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
                                 </div>
                                 <button
                                     onClick={clearAllFilters}
-                                    className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+                                    className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 flex-shrink-0"
                                 >
                                     <XIcon size={12} />
-                                    清除筛选
+                                    清除全部
                                 </button>
                             </div>
                         )}
 
                         {/* 表数据 */}
-                        <div className="flex-1 overflow-auto relative">
+                        <div className={clsx('flex-1 overflow-auto relative', isResizing && 'select-none')}>
                             {/* 刷新加载覆盖层 */}
                             <ListLoadingOverlay isLoading={dataLoading} text="刷新表数据..." />
 
                             {tableData ? (
-                                <table className="w-full text-xs">
+                                <table className="text-xs table-fixed" style={{ minWidth: '100%' }}>
                                     <thead className="sticky top-0 bg-bg-dark z-10">
                                         {/* 列名行 */}
                                         <tr>
-                                            {tableData.columns.map((col) => {
+                                            {tableData.columns.map((col, colIndex) => {
                                                 const isFiltered = columnFilters[col.name] !== undefined
                                                 const isExpanded = expandedFilterColumn === col.name
+                                                const colWidth = columnWidths[col.name] || 150
+                                                const isLastColumn = colIndex === tableData.columns.length - 1
 
                                                 return (
                                                     <th
                                                         key={col.name}
-                                                        className="px-3 py-2 text-left font-medium text-text-muted border-b border-border"
+                                                        className="px-3 py-2 text-left font-medium text-text-muted border-b border-border relative"
+                                                        style={{ width: isLastColumn ? 'auto' : colWidth, minWidth: 80 }}
                                                     >
                                                         <div className="flex items-center gap-1">
                                                             {/* 列名（点击排序） */}
                                                             <span
                                                                 onClick={() => handleSort(col.name)}
                                                                 className={clsx(
-                                                                    'cursor-pointer hover:text-text-secondary transition-colors',
+                                                                    'cursor-pointer hover:text-text-secondary transition-colors truncate',
                                                                     col.primaryKey ? 'text-primary' : ''
                                                                 )}
                                                             >
                                                                 {col.name}
                                                             </span>
 
-                                                            {/* 排序图标 */}
+                                                            {/* 排序图标（点击也可排序） */}
                                                             {orderBy === col.name && (
-                                                                <span className="text-primary">
+                                                                <span
+                                                                    onClick={() => handleSort(col.name)}
+                                                                    className="text-primary cursor-pointer hover:opacity-70 transition-opacity flex-shrink-0"
+                                                                    title={ascending ? '点击降序' : '点击升序'}
+                                                                >
                                                                     {ascending ? <ArrowUpIcon size={12} /> : <ArrowDownIcon size={12} />}
                                                                 </span>
                                                             )}
@@ -827,7 +1072,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                                                     setExpandedFilterColumn(isExpanded ? null : col.name)
                                                                 }}
                                                                 className={clsx(
-                                                                    'ml-auto p-0.5 rounded hover:bg-bg-light/50 transition-colors',
+                                                                    'ml-auto p-0.5 rounded hover:bg-bg-light/50 transition-colors flex-shrink-0',
                                                                     isFiltered ? 'text-primary' : 'text-text-muted opacity-50 hover:opacity-100'
                                                                 )}
                                                                 title="筛选"
@@ -848,7 +1093,11 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                                                     autoFocus
                                                                     onClick={(e) => e.stopPropagation()}
                                                                     onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter' || e.key === 'Escape') {
+                                                                        if (e.key === 'Enter') {
+                                                                            setExpandedFilterColumn(null)
+                                                                        } else if (e.key === 'Escape') {
+                                                                            // ESC 键：清空筛选并关闭
+                                                                            clearColumnFilter(col.name)
                                                                             setExpandedFilterColumn(null)
                                                                         }
                                                                     }}
@@ -867,6 +1116,20 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                                                 )}
                                                             </div>
                                                         )}
+
+                                                        {/* 列分割线和拖动手柄 */}
+                                                        {!isLastColumn && (
+                                                            <div
+                                                                className={clsx(
+                                                                    'absolute right-0 top-0 bottom-0 w-px cursor-col-resize bg-border hover:bg-primary/50 transition-colors',
+                                                                    isResizing && resizeState.current?.columnName === col.name && 'bg-primary w-0.5'
+                                                                )}
+                                                                onMouseDown={(e) => startColumnResize(e, col.name)}
+                                                            >
+                                                                {/* 更大的点击区域 */}
+                                                                <div className="absolute -left-1.5 -right-1.5 top-0 bottom-0" />
+                                                            </div>
+                                                        )}
                                                     </th>
                                                 )
                                             })}
@@ -878,27 +1141,30 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                                 key={idx}
                                                 className="border-b border-border hover:bg-bg-light/30 transition-colors"
                                             >
-                                                {tableData.columns.map((col) => {
+                                                {tableData.columns.map((col, colIndex) => {
                                                     const cellValue = row.values[col.name]
                                                     const isBlobColumn = col.type?.toLowerCase() === 'blob'
                                                     const hasProtobufConfig = selectedDb && selectedTable && getColumnConfig(selectedDb, selectedTable, col.name)
                                                     const shouldTreatAsBlob = isBlobColumn || (cellValue && isBase64Blob(cellValue) && hasProtobufConfig)
+                                                    const colWidth = columnWidths[col.name] || 150
+                                                    const isLastColumn = colIndex === tableData.columns.length - 1
 
                                                     return (
                                                         <td
                                                             key={col.name}
-                                                            className="px-3 py-2 text-text-secondary max-w-xs cursor-pointer"
+                                                            className="px-3 py-2 text-text-secondary cursor-pointer border-r border-border last:border-r-0 overflow-hidden"
+                                                            style={{ width: isLastColumn ? 'auto' : colWidth, minWidth: 80, maxWidth: colWidth }}
                                                             onDoubleClick={(e) => handleCellDoubleClick(e, cellValue, col.name)}
                                                             title="双击查看完整内容"
                                                         >
                                                             {cellValue === null ? (
                                                                 <span className="text-text-muted italic">NULL</span>
-                                                            ) : shouldTreatAsBlob && selectedDb && selectedTable ? (
+                                                            ) : shouldTreatAsBlob ? (
                                                                 <BlobCell
                                                                     value={cellValue}
+                                                                    columnName={col.name}
                                                                     dbId={selectedDb}
                                                                     tableName={selectedTable}
-                                                                    columnName={col.name}
                                                                 />
                                                             ) : (
                                                                 <span className="truncate block">
@@ -970,32 +1236,36 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
             {/* 单元格详情弹出框 */}
             {cellDetailPopup && (
                 <div
-                    className="fixed inset-0 z-50"
-                    onClick={() => setCellDetailPopup(null)}
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+                    onClick={closeCellDetailPopup}
                 >
                     <div
-                        className="absolute bg-bg-dark border border-border rounded-lg shadow-xl max-w-md max-h-80 overflow-hidden flex flex-col"
-                        style={{
-                            left: cellDetailPopup.position.x,
-                            top: cellDetailPopup.position.y,
-                        }}
+                        className={clsx(
+                            'bg-bg-dark border border-border rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[70vh] overflow-hidden flex flex-col',
+                            cellPopupDragging ? '' : 'transition-transform duration-100'
+                        )}
+                        style={cellPopupPosition ? { transform: `translate(${cellPopupPosition.x}px, ${cellPopupPosition.y}px)` } : undefined}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* 标题栏 */}
-                        <div className="px-3 py-2 border-b border-border bg-bg-light/50 flex items-center justify-between">
+                        {/* 标题栏 - 可拖动 */}
+                        <div
+                            className="px-3 py-2 border-b border-border bg-bg-light/50 flex items-center justify-between shrink-0 select-none cursor-move"
+                            {...cellPopupDragHandleProps}
+                        >
                             <span className="text-xs font-medium text-text-muted">
                                 {cellDetailPopup.columnName}
                             </span>
                             <button
-                                onClick={() => setCellDetailPopup(null)}
+                                onClick={closeCellDetailPopup}
                                 className="p-1 text-text-muted hover:text-red-400 transition-colors"
                                 title="关闭"
+                                onMouseDown={(e) => e.stopPropagation()}
                             >
                                 <XIcon size={14} />
                             </button>
                         </div>
                         {/* 内容区域 */}
-                        <div className="p-3 overflow-auto flex-1 flex gap-2">
+                        <div className="p-3 overflow-auto flex-1 flex gap-2 min-h-0">
                             <pre className="flex-1 text-xs text-text-secondary whitespace-pre-wrap break-all font-mono select-text">
                                 {cellDetailPopup.value}
                             </pre>

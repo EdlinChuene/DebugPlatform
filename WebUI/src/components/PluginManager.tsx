@@ -33,6 +33,8 @@ export function PluginManager({ className }: PluginManagerProps) {
                 icon: plugin.metadata.icon,
                 dependencies: plugin.metadata.dependencies || [],
                 isEnabled: PluginRegistry.isPluginEnabled(plugin.metadata.pluginId),
+                isSubPlugin: plugin.metadata.isSubPlugin || false,
+                parentPluginId: plugin.metadata.parentPluginId,
             }))
     }, [])
 
@@ -89,12 +91,12 @@ export function PluginManager({ className }: PluginManagerProps) {
             {/* 触发按钮 */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="btn btn-ghost p-2 rounded flex items-center gap-1.5 text-text-secondary hover:text-text-primary"
+                className="btn btn-ghost p-1.5 rounded flex items-center gap-1 text-text-secondary hover:text-text-primary"
                 title="插件管理"
             >
-                <PlugIcon size={16} />
+                <PlugIcon size={14} />
                 <span className="text-xs hidden sm:inline">插件</span>
-                <span className="text-xs px-1.5 py-0.5 bg-bg-light rounded-full">
+                <span className="text-xs px-1 py-0 bg-bg-light rounded-full">
                     {enabledCount}/{plugins.length}
                 </span>
             </button>
@@ -143,13 +145,18 @@ export function PluginManager({ className }: PluginManagerProps) {
                                     const dep = PluginRegistry.getPlugin(depId)
                                     return dep?.metadata.displayName || depId
                                 })
+                                // 获取父插件名称（子插件显示）
+                                const parentPluginName = plugin.parentPluginId
+                                    ? PluginRegistry.getPlugin(plugin.parentPluginId)?.metadata.displayName || plugin.parentPluginId
+                                    : null
 
                                 return (
                                     <div
                                         key={plugin.pluginId}
                                         className={clsx(
                                             'px-4 py-3 flex items-center gap-3 hover:bg-bg-light/50 transition-colors',
-                                            !isEnabled && 'opacity-60'
+                                            !isEnabled && 'opacity-60',
+                                            plugin.isSubPlugin && 'pl-8' // 子插件缩进
                                         )}
                                     >
                                         {/* 图标 */}
@@ -174,12 +181,17 @@ export function PluginManager({ className }: PluginManagerProps) {
                                                         常用
                                                     </span>
                                                 )}
+                                                {plugin.isSubPlugin && parentPluginName && (
+                                                    <span className="text-xs px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded">
+                                                        {parentPluginName} 子功能
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="text-xs text-text-muted truncate">
                                                 {plugin.description}
                                             </div>
-                                            {/* 依赖提示 */}
-                                            {dependencyNames.length > 0 && (
+                                            {/* 依赖提示（子插件不显示依赖，因为已通过标签显示父插件） */}
+                                            {!plugin.isSubPlugin && dependencyNames.length > 0 && (
                                                 <div className="text-xs text-yellow-500/80 mt-0.5">
                                                     依赖: {dependencyNames.join('、')}
                                                 </div>
