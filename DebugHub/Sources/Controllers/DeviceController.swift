@@ -77,9 +77,15 @@ struct DeviceController: RouteCollection {
             let isOnline = onlineDeviceIds.contains(device.deviceId)
             let onlineSession = onlineSessions.first { $0.deviceInfo.deviceId == device.deviceId }
 
+            // 对于在线设备，优先使用 session 中的最新别名
+            let deviceAlias = isOnline
+                ? (onlineSession?.deviceInfo.deviceAlias ?? device.deviceAlias)
+                : device.deviceAlias
+
             return DeviceListItemDTO(
                 deviceId: device.deviceId,
                 deviceName: device.deviceName,
+                deviceAlias: deviceAlias,
                 deviceModel: device.deviceModel,
                 appName: device.appName,
                 appVersion: device.appVersion,
@@ -207,7 +213,10 @@ struct DeviceController: RouteCollection {
 
 struct DeviceListItemDTO: Content {
     let deviceId: String
+    /// 原始设备名称（系统设备名）
     let deviceName: String
+    /// 用户设置的设备别名（可选）
+    let deviceAlias: String?
     let deviceModel: String
     let appName: String
     let appVersion: String
@@ -227,7 +236,7 @@ struct DeviceDetailDTO: Content {
     let connectedAt: Date
     let lastSeenAt: Date
     let stats: DeviceStatsDTO
-    let pluginStates: [String: Bool]  // 插件启用状态
+    let pluginStates: [String: Bool] // 插件启用状态
 }
 
 struct DeviceStatsDTO: Content {

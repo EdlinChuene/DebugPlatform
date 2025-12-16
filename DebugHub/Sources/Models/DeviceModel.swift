@@ -20,9 +20,13 @@ final class DeviceModel: Model, Content, @unchecked Sendable {
     @Field(key: "device_id")
     var deviceId: String
 
-    /// 设备名称
+    /// 原始设备名称（系统设备名）
     @Field(key: "device_name")
     var deviceName: String
+
+    /// 用户设置的设备别名
+    @OptionalField(key: "device_alias")
+    var deviceAlias: String?
 
     /// 设备型号
     @Field(key: "device_model")
@@ -78,6 +82,7 @@ final class DeviceModel: Model, Content, @unchecked Sendable {
         id: UUID? = nil,
         deviceId: String,
         deviceName: String,
+        deviceAlias: String? = nil,
         deviceModel: String,
         systemName: String,
         systemVersion: String,
@@ -94,6 +99,7 @@ final class DeviceModel: Model, Content, @unchecked Sendable {
         self.id = id
         self.deviceId = deviceId
         self.deviceName = deviceName
+        self.deviceAlias = deviceAlias
         self.deviceModel = deviceModel
         self.systemName = systemName
         self.systemVersion = systemVersion

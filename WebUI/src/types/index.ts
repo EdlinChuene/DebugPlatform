@@ -1,7 +1,10 @@
 // 设备信息
 export interface DeviceInfo {
   deviceId: string
+  /** 原始设备名称（系统设备名） */
   deviceName: string
+  /** 用户设置的设备别名 */
+  deviceAlias?: string
   deviceModel: string
   systemName: string
   systemVersion: string
@@ -15,7 +18,10 @@ export interface DeviceInfo {
 
 export interface DeviceListItem {
   deviceId: string
+  /** 原始设备名称（系统设备名） */
   deviceName: string
+  /** 用户设置的设备别名 */
+  deviceAlias?: string
   deviceModel: string
   appName: string
   appVersion: string

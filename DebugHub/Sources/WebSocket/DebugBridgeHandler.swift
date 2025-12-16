@@ -78,7 +78,14 @@ final class DebugBridgeHandler: @unchecked Sendable {
             switch message {
             case let .register(deviceInfo, token, pluginStates):
                 print("[DebugBridge] Received register message from \(deviceInfo.deviceName)")
-                handleRegister(deviceInfo: deviceInfo, token: token, pluginStates: pluginStates, ws: ws, deviceIdHolder: deviceIdHolder, req: req)
+                handleRegister(
+                    deviceInfo: deviceInfo,
+                    token: token,
+                    pluginStates: pluginStates,
+                    ws: ws,
+                    deviceIdHolder: deviceIdHolder,
+                    req: req
+                )
 
             case .heartbeat:
                 print("[DebugBridge] Received heartbeat from \(deviceIdHolder.deviceId ?? "unknown")")
@@ -208,7 +215,6 @@ final class DebugBridgeHandler: @unchecked Sendable {
     }
 
     private func handleEvents(events: [DebugEventDTO], deviceId: String, req: Request) {
-
         // 异步处理事件入库
         Task {
             let result = await EventIngestor.shared.ingest(events: events, deviceId: deviceId, db: req.db)
@@ -226,7 +232,11 @@ final class DebugBridgeHandler: @unchecked Sendable {
             }
 
             // 广播非 performance 事件给实时流订阅者（带序号）
-            RealtimeStreamHandler.shared.broadcast(events: nonPerformanceEvents, deviceId: deviceId, seqNumMap: result.seqNumMap)
+            RealtimeStreamHandler.shared.broadcast(
+                events: nonPerformanceEvents,
+                deviceId: deviceId,
+                seqNumMap: result.seqNumMap
+            )
 
             // 将 performance 事件路由到 PerformanceBackendPlugin
             // PerformanceBackendPlugin 会负责处理并广播这些事件
@@ -256,11 +266,39 @@ final class DebugBridgeHandler: @unchecked Sendable {
                 let metrics = metricsItems.map { item in
                     PerformanceMetricsDTO(
                         timestamp: item.timestamp,
-                        cpu: item.cpu.map { CPUMetricsDTO(usage: $0.usage, userTime: $0.userTime, systemTime: $0.systemTime, threadCount: $0.threadCount) },
-                        memory: item.memory.map { MemoryMetricsDTO(usedMemory: $0.usedMemory, peakMemory: $0.peakMemory, freeMemory: $0.freeMemory, memoryPressure: $0.memoryPressure, footprintRatio: $0.footprintRatio) },
-                        fps: item.fps.map { FPSMetricsDTO(fps: $0.fps, droppedFrames: $0.droppedFrames, jankCount: $0.jankCount, averageRenderTime: $0.averageRenderTime) },
-                        network: item.network.map { NetworkTrafficMetricsDTO(bytesReceived: $0.bytesReceived, bytesSent: $0.bytesSent, receivedRate: $0.receivedRate, sentRate: $0.sentRate) },
-                        diskIO: item.diskIO.map { DiskIOMetricsDTO(readBytes: $0.readBytes, writeBytes: $0.writeBytes, readOps: $0.readOps, writeOps: $0.writeOps, readRate: $0.readRate, writeRate: $0.writeRate) }
+                        cpu: item.cpu.map { CPUMetricsDTO(
+                            usage: $0.usage,
+                            userTime: $0.userTime,
+                            systemTime: $0.systemTime,
+                            threadCount: $0.threadCount
+                        ) },
+                        memory: item.memory.map { MemoryMetricsDTO(
+                            usedMemory: $0.usedMemory,
+                            peakMemory: $0.peakMemory,
+                            freeMemory: $0.freeMemory,
+                            memoryPressure: $0.memoryPressure,
+                            footprintRatio: $0.footprintRatio
+                        ) },
+                        fps: item.fps.map { FPSMetricsDTO(
+                            fps: $0.fps,
+                            droppedFrames: $0.droppedFrames,
+                            jankCount: $0.jankCount,
+                            averageRenderTime: $0.averageRenderTime
+                        ) },
+                        network: item.network.map { NetworkTrafficMetricsDTO(
+                            bytesReceived: $0.bytesReceived,
+                            bytesSent: $0.bytesSent,
+                            receivedRate: $0.receivedRate,
+                            sentRate: $0.sentRate
+                        ) },
+                        diskIO: item.diskIO.map { DiskIOMetricsDTO(
+                            readBytes: $0.readBytes,
+                            writeBytes: $0.writeBytes,
+                            readOps: $0.readOps,
+                            writeOps: $0.writeOps,
+                            readRate: $0.readRate,
+                            writeRate: $0.writeRate
+                        ) }
                     )
                 }
                 let batch = PerformanceMetricsBatchDTO(metrics: metrics)
@@ -270,7 +308,13 @@ final class DebugBridgeHandler: @unchecked Sendable {
                 pluginEventType = "jank_event"
                 guard let jank = event.jank else { return }
                 // 转换为 JankEventDTO
-                let jankDTO = JankEventDTO(id: jank.id, timestamp: jank.timestamp, duration: jank.duration, droppedFrames: jank.droppedFrames, stackTrace: jank.stackTrace)
+                let jankDTO = JankEventDTO(
+                    id: jank.id,
+                    timestamp: jank.timestamp,
+                    duration: jank.duration,
+                    droppedFrames: jank.droppedFrames,
+                    stackTrace: jank.stackTrace
+                )
                 payload = try encoder.encode(jankDTO)
 
             case "alert", "alertResolved":
@@ -356,10 +400,19 @@ final class DebugBridgeHandler: @unchecked Sendable {
             session.updateDeviceInfo(deviceInfo)
         }
 
+        // 异步更新数据库中的设备别名
+        Task {
+            await DeviceRegistry.shared.updateDeviceAlias(
+                deviceId: deviceId,
+                deviceAlias: deviceInfo.deviceAlias
+            )
+        }
+
         // 广播给 WebUI
         RealtimeStreamHandler.shared.broadcastDeviceInfoUpdated(
             deviceId: deviceId,
-            deviceName: deviceInfo.deviceName
+            deviceName: deviceInfo.deviceName,
+            deviceAlias: deviceInfo.deviceAlias
         )
     }
 

@@ -372,3 +372,20 @@ struct CreateAppLaunchEvent: AsyncMigration {
         try await database.schema("app_launch_events").delete()
     }
 }
+
+// MARK: - Add Device Alias Field
+
+/// 为设备表添加别名字段
+struct AddDeviceAlias: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("devices")
+            .field("device_alias", .string)
+            .update()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("devices")
+            .deleteField("device_alias")
+            .update()
+    }
+}

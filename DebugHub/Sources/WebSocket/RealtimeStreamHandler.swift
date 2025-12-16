@@ -34,8 +34,9 @@ struct DeviceSessionEvent: Content {
     let sessionId: String
     let deviceId: String
     let deviceName: String
+    var deviceAlias: String? // 设备别名（可选）
     let timestamp: Date
-    var pluginStates: [String: Bool]?  // 插件启用状态（可选，仅在连接/重连时携带）
+    var pluginStates: [String: Bool]? // 插件启用状态（可选，仅在连接/重连时携带）
 }
 
 /// 订阅者信息
@@ -109,7 +110,12 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
     }
 
     /// 广播设备连接事件
-    func broadcastDeviceConnected(deviceId: String, deviceName: String, sessionId: String, pluginStates: [String: Bool] = [:]) {
+    func broadcastDeviceConnected(
+        deviceId: String,
+        deviceName: String,
+        sessionId: String,
+        pluginStates: [String: Bool] = [:]
+    ) {
         var event = DeviceSessionEvent(
             sessionId: sessionId,
             deviceId: deviceId,
@@ -179,13 +185,14 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
     }
 
     /// 广播设备信息更新事件（如设备别名变更）
-    func broadcastDeviceInfoUpdated(deviceId: String, deviceName: String) {
-        let event = DeviceSessionEvent(
+    func broadcastDeviceInfoUpdated(deviceId: String, deviceName: String, deviceAlias: String?) {
+        var event = DeviceSessionEvent(
             sessionId: "",
             deviceId: deviceId,
             deviceName: deviceName,
             timestamp: Date()
         )
+        event.deviceAlias = deviceAlias
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -198,7 +205,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
 
         let message = RealtimeMessage(type: .deviceInfoUpdated, deviceId: deviceId, payload: payload)
         broadcastMessage(message)
-        print("[RealtimeStream] Broadcasted device info updated: \(deviceName)")
+        print("[RealtimeStream] Broadcasted device info updated: \(deviceAlias ?? deviceName)")
     }
 
     /// 广播断点命中事件
@@ -278,7 +285,8 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
                 case let .http(httpEvent):
                     messageType = .httpEvent
                     // 添加序号到 payload
-                    var dict = try JSONSerialization.jsonObject(with: encoder.encode(httpEvent)) as? [String: Any] ?? [:]
+                    var dict = try JSONSerialization
+                        .jsonObject(with: encoder.encode(httpEvent)) as? [String: Any] ?? [:]
                     if let seqNum = seqNumMap[httpEvent.request.id] {
                         dict["seqNum"] = seqNum
                     }
@@ -291,8 +299,9 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
                     var dict = try JSONSerialization.jsonObject(with: encoder.encode(wsEvent)) as? [String: Any] ?? [:]
                     if case let .frame(frame) = wsEvent.kind, let seqNum = seqNumMap[frame.id] {
                         // frame 数据在 kind.frame 中，需要深入修改
-                        if var kind = dict["kind"] as? [String: Any],
-                           var frameDict = kind["frame"] as? [String: Any] {
+                        if
+                            var kind = dict["kind"] as? [String: Any],
+                            var frameDict = kind["frame"] as? [String: Any] {
                             frameDict["seqNum"] = seqNum
                             kind["frame"] = frameDict
                             dict["kind"] = kind
@@ -365,9 +374,10 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
 
         for subscriber in currentSubscribers {
             // 检查设备过滤
-            if let targetDeviceId = deviceId,
-               let subscriberDeviceId = subscriber.deviceId,
-               subscriberDeviceId != targetDeviceId {
+            if
+                let targetDeviceId = deviceId,
+                let subscriberDeviceId = subscriber.deviceId,
+                subscriberDeviceId != targetDeviceId {
                 continue
             }
 
@@ -432,7 +442,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
 
     /// 广播服务器统计数据更新
     /// - Parameter stats: 服务器统计数据
-    func broadcastServerStats<T: Encodable>(_ stats: T) {
+    func broadcastServerStats(_ stats: some Encodable) {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
 

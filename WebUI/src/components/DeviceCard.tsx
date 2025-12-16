@@ -21,6 +21,9 @@ export function DeviceCard({ device, style, isSelectMode, isSelected, onToggleSe
   const isFavorite = favoriteDeviceIds.has(device.deviceId)
   const isOffline = !device.isOnline
 
+  // 是否设置了别名
+  const hasAlias = !!device.deviceAlias
+
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation()
     toggleFavorite(device.deviceId)
@@ -62,48 +65,62 @@ export function DeviceCard({ device, style, isSelectMode, isSelected, onToggleSe
           </div>
         )}
 
-        {/* 设备图标 - 与侧边栏样式一致 */}
-        <div className="relative flex-shrink-0">
-          <div className={clsx(
-            'w-10 h-10 rounded-lg flex items-center justify-center border border-border',
-            device.isOnline ? 'bg-primary/20' : 'bg-bg-medium/50'
-          )}>
-            {getPlatformIcon(device.platform, 24, undefined, device.isSimulator)}
+        {/* 设备图标和模拟器标记 */}
+        <div className="flex flex-col items-center flex-shrink-0 gap-1">
+          <div className="relative">
+            <div className={clsx(
+              'w-10 h-10 rounded-lg flex items-center justify-center border border-border',
+              device.isOnline ? 'bg-primary/20' : 'bg-bg-medium/50'
+            )}>
+              {getPlatformIcon(device.platform, 24, undefined, device.isSimulator)}
+            </div>
+            {/* 状态指示点 - 右下角 */}
+            <span className={clsx(
+              'absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-bg-dark rounded-full',
+              device.isOnline ? 'bg-green-500 status-dot-online' : 'bg-gray-500'
+            )} />
           </div>
-          {/* 状态指示点 - 右下角 */}
-          <span className={clsx(
-            'absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-bg-dark rounded-full',
-            device.isOnline ? 'bg-green-500 status-dot-online' : 'bg-gray-500'
-          )} />
+          {/* 模拟器标记 - 图标下方 */}
+          {device.isSimulator && (
+            <span className="text-2xs px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 whitespace-nowrap">
+              模拟器
+            </span>
+          )}
         </div>
 
         {/* 设备 + 应用信息 */}
         <div className="flex-1 min-w-0">
-          {/* 第一行：设备信息 */}
-          <div className="flex items-center gap-2">
-            <h3 className="font-medium text-sm text-text-primary group-hover:text-primary transition-colors truncate">
-              {device.deviceName}
-            </h3>
-            {/* 设备 ID 后 4 位，便于多设备区分 */}
-            <span className="text-2xs px-1 py-0.5 rounded bg-bg-light text-text-muted font-mono flex-shrink-0" title={`设备 ID: ${device.deviceId}`}>
-              #{device.deviceId.slice(-4).toUpperCase()}
-            </span>
-            {device.isSimulator && (
-              <span className="text-2xs px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 flex-shrink-0">
-                模拟器
+          {/* 设备名称区域：两行展示 */}
+          <div className="min-h-[36px]">
+            {/* 第一行：别名或设备名 + ID 标识 */}
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium text-sm text-text-primary group-hover:text-primary transition-colors truncate">
+                {hasAlias ? device.deviceAlias : device.deviceName}
+              </h3>
+              {/* 设备 ID 后 4 位，便于多设备区分 */}
+              <span className="text-2xs px-1 py-0.5 rounded bg-bg-light text-text-muted font-mono flex-shrink-0" title={`设备 ID: ${device.deviceId}`}>
+                #{device.deviceId.slice(-4).toUpperCase()}
               </span>
-            )}
-            {isOffline && (
-              <span className="text-2xs px-1 py-0.5 rounded bg-gray-500/20 text-gray-400 flex-shrink-0">
-                离线
-              </span>
+              {isOffline && (
+                <span className="text-2xs px-1 py-0.5 rounded bg-gray-500/20 text-gray-400 flex-shrink-0">
+                  离线
+                </span>
+              )}
+            </div>
+            {/* 第二行：如果有别名则显示原始设备名 */}
+            {hasAlias && (
+              <p className="text-xs text-text-muted truncate mt-0.5" title={device.deviceName}>
+                {device.deviceName}
+              </p>
             )}
           </div>
+
+          {/* 设备型号信息 */}
           <p className="text-xs text-text-muted truncate mt-0.5">
             {device.deviceModel} · {device.platform} {device.systemVersion}
           </p>
 
-          {/* 第二行：应用信息 */}
+          {/* 应用信息 */}
           <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-border">
             {/* 应用图标 */}
             <div className="w-4 h-4 rounded overflow-hidden bg-bg-light flex items-center justify-center flex-shrink-0" title={device.appName}>

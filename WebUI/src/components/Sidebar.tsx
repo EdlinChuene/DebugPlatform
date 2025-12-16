@@ -552,6 +552,8 @@ export function Sidebar() {
               {displayedDevices.map(device => {
                 const isSelected = currentDeviceId === device.deviceId
                 const isOffline = !device.isOnline
+                // 侧边栏展示名称：有别名则展示别名，否则展示原始设备名
+                const displayName = device.deviceAlias || device.deviceName
                 return (
                   <div
                     key={device.deviceId}
@@ -587,12 +589,12 @@ export function Sidebar() {
                       )}
                     </div>
                     <div className={clsx("min-w-0 flex-1", isOffline && "opacity-60")}>
-                      {/* 设备名 */}
+                      {/* 设备名：有别名展示别名，否则展示设备名 */}
                       <div className={clsx(
                         "font-medium truncate text-xs flex items-center gap-1.5",
                         isSelected ? "text-primary" : "text-text-primary"
                       )}>
-                        {device.deviceName}
+                        {displayName}
                         {/* 设备 ID 后 4 位 */}
                         <span
                           className="text-2xs px-1 py-0.5 rounded bg-bg-light text-text-muted font-mono"

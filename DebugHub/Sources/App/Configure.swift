@@ -44,6 +44,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(CreateAlert())
     app.migrations.add(AddSequenceNumber())
     app.migrations.add(CreateAppLaunchEvent())
+    app.migrations.add(AddDeviceAlias())
 
     // 运行迁移
     try app.autoMigrate().wait()

@@ -13,7 +13,10 @@ import Vapor
 
 public struct DeviceInfoDTO: Content {
     public let deviceId: String
+    /// 原始设备名称（系统设备名）
     public let deviceName: String
+    /// 用户设置的设备别名（可选）
+    public let deviceAlias: String?
     public let deviceModel: String
     public let systemName: String
     public let systemVersion: String
@@ -29,6 +32,7 @@ public struct DeviceInfoDTO: Content {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         deviceId = try container.decode(String.self, forKey: .deviceId)
         deviceName = try container.decode(String.self, forKey: .deviceName)
+        deviceAlias = try container.decodeIfPresent(String.self, forKey: .deviceAlias)
         deviceModel = try container.decodeIfPresent(String.self, forKey: .deviceModel) ?? "Unknown"
         systemName = try container.decode(String.self, forKey: .systemName)
         systemVersion = try container.decode(String.self, forKey: .systemVersion)
@@ -41,7 +45,7 @@ public struct DeviceInfoDTO: Content {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case deviceId, deviceName, deviceModel, systemName, systemVersion
+        case deviceId, deviceName, deviceAlias, deviceModel, systemName, systemVersion
         case appName, appVersion, buildNumber, platform
         case isSimulator
         case appIcon
@@ -93,12 +97,12 @@ final class DeviceSession {
 
     /// 更新插件状态
     func updatePluginStates(_ states: [String: Bool]) {
-        self.pluginStates = states
+        pluginStates = states
     }
 
     /// 更新设备信息（如设备别名变更）
     func updateDeviceInfo(_ newDeviceInfo: DeviceInfoDTO) {
-        self.deviceInfo = newDeviceInfo
+        deviceInfo = newDeviceInfo
     }
 }
 
@@ -119,7 +123,8 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
     var database: Database?
 
     /// 新设备连接事件回调
-    var onDeviceConnected: ((String, String, String, [String: Bool]) -> Void)? // deviceId, deviceName, sessionId, pluginStates
+    var onDeviceConnected: ((String, String, String, [String: Bool])
+        -> Void)? // deviceId, deviceName, sessionId, pluginStates
 
     /// 断开事件回调
     var onDeviceDisconnected: ((String) -> Void)?
@@ -190,7 +195,12 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
             print("[DeviceRegistry] Cancelled pending disconnect for \(deviceInfo.deviceId) - quick reconnect")
         }
 
-        let session = DeviceSession(deviceInfo: deviceInfo, webSocket: webSocket, sessionId: sessionId, pluginStates: pluginStates)
+        let session = DeviceSession(
+            deviceInfo: deviceInfo,
+            webSocket: webSocket,
+            sessionId: sessionId,
+            pluginStates: pluginStates
+        )
         let isNewConnection = sessions[deviceInfo.deviceId] == nil && !isQuickReconnect
         sessions[deviceInfo.deviceId] = session
         lock.unlock()
@@ -270,6 +280,7 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
                     .first() {
                 // 更新现有设备信息
                 existingDevice.deviceName = deviceInfo.deviceName
+                existingDevice.deviceAlias = deviceInfo.deviceAlias
                 existingDevice.deviceModel = deviceInfo.deviceModel
                 existingDevice.systemVersion = deviceInfo.systemVersion
                 existingDevice.appName = deviceInfo.appName
@@ -285,6 +296,7 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
                 let device = DeviceModel(
                     deviceId: deviceInfo.deviceId,
                     deviceName: deviceInfo.deviceName,
+                    deviceAlias: deviceInfo.deviceAlias,
                     deviceModel: deviceInfo.deviceModel,
                     systemName: deviceInfo.systemName,
                     systemVersion: deviceInfo.systemVersion,
@@ -341,6 +353,24 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
             }
         } catch {
             print("[DeviceRegistry] Failed to record session end: \(error)")
+        }
+    }
+
+    /// 更新设备别名到数据库
+    func updateDeviceAlias(deviceId: String, deviceAlias: String?) async {
+        guard let db = database else { return }
+
+        do {
+            if
+                let device = try await DeviceModel.query(on: db)
+                    .filter(\.$deviceId == deviceId)
+                    .first() {
+                device.deviceAlias = deviceAlias
+                try await device.save(on: db)
+                print("[DeviceRegistry] Device alias updated: \(deviceId) -> \(deviceAlias ?? "nil")")
+            }
+        } catch {
+            print("[DeviceRegistry] Failed to update device alias: \(error)")
         }
     }
 
@@ -531,7 +561,10 @@ enum BridgeMessageDTO: Codable {
         switch self {
         case let .register(deviceInfo, token, pluginStates):
             try container.encode(MessageType.register, forKey: .type)
-            try container.encode(RegisterPayload(deviceInfo: deviceInfo, token: token, pluginStates: pluginStates), forKey: .payload)
+            try container.encode(
+                RegisterPayload(deviceInfo: deviceInfo, token: token, pluginStates: pluginStates),
+                forKey: .payload
+            )
         case .heartbeat:
             try container.encode(MessageType.heartbeat, forKey: .type)
         case let .events(events):

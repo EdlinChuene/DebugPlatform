@@ -408,17 +408,19 @@ export const deviceEventHandlers = {
   handleDeviceInfoUpdated: (data: {
     deviceId: string
     deviceName: string
+    deviceAlias?: string
     timestamp: string
   }) => {
     const { devices, currentDevice, currentDeviceId } = useDeviceStore.getState()
 
-    // 更新设备列表中的设备名称
+    // 更新设备列表中的设备名称和别名
     useDeviceStore.setState({
       devices: devices.map(d =>
         d.deviceId === data.deviceId
           ? {
             ...d,
             deviceName: data.deviceName,
+            deviceAlias: data.deviceAlias,
           }
           : d
       ),
@@ -430,11 +432,12 @@ export const deviceEventHandlers = {
             deviceInfo: {
               ...currentDevice.deviceInfo,
               deviceName: data.deviceName,
+              deviceAlias: data.deviceAlias,
             },
           }
           : currentDevice,
     })
-    console.log('[DeviceStore] Device info updated:', data.deviceName)
+    console.log('[DeviceStore] Device info updated:', data.deviceAlias || data.deviceName)
   },
 }
 
