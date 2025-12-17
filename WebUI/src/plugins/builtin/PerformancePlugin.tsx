@@ -2625,6 +2625,14 @@ function PageTimingContent({
     const [viewMode, setViewMode] = useState<'summary' | 'list' | 'distribution'>('summary')
     const [showFilters, setShowFilters] = useState(false)
 
+    // 排序状态
+    type SummarySortKey = 'count' | 'avgDuration' | 'p50' | 'p90' | 'p95'
+    type ListSortKey = 'time' | 'loadDuration' | 'appearDuration'
+    const [summarySortKey, setSummarySortKey] = useState<SummarySortKey>('count')
+    const [summarySortDesc, setSummarySortDesc] = useState(true)
+    const [listSortKey, setListSortKey] = useState<ListSortKey>('time')
+    const [listSortDesc, setListSortDesc] = useState(true)
+
     // 筛选状态
     const [filterPageName, setFilterPageName] = useState('')
     const [filterMinDuration, setFilterMinDuration] = useState<number | undefined>(undefined)
@@ -2673,6 +2681,42 @@ function PageTimingContent({
 
     // 检查是否有活跃筛选
     const hasActiveFilters = filterPageName || filterMinDuration || filterTimeRange !== 'all'
+
+    // 汇总排序选项
+    const summarySortOptions: { key: SummarySortKey; label: string }[] = [
+        { key: 'count', label: '访问次数' },
+        { key: 'avgDuration', label: '平均耗时' },
+        { key: 'p50', label: 'P50' },
+        { key: 'p90', label: 'P90' },
+        { key: 'p95', label: 'P95' },
+    ]
+
+    // 列表排序选项
+    const listSortOptions: { key: ListSortKey; label: string }[] = [
+        { key: 'time', label: '时间' },
+        { key: 'loadDuration', label: '加载耗时' },
+        { key: 'appearDuration', label: '可见耗时' },
+    ]
+
+    // 切换汇总排序
+    const handleSummarySortClick = useCallback((key: SummarySortKey) => {
+        if (key === summarySortKey) {
+            setSummarySortDesc(!summarySortDesc)
+        } else {
+            setSummarySortKey(key)
+            setSummarySortDesc(true)
+        }
+    }, [summarySortKey, summarySortDesc])
+
+    // 切换列表排序
+    const handleListSortClick = useCallback((key: ListSortKey) => {
+        if (key === listSortKey) {
+            setListSortDesc(!listSortDesc)
+        } else {
+            setListSortKey(key)
+            setListSortDesc(true)
+        }
+    }, [listSortKey, listSortDesc])
 
     return (
         <div className="h-full flex flex-col">
@@ -2734,6 +2778,60 @@ function PageTimingContent({
                             <span className="ml-1 w-1.5 h-1.5 rounded-full bg-white inline-block" />
                         )}
                     </button>
+
+                    {/* 排序控件 - 汇总视图 */}
+                    {viewMode === 'summary' && (
+                        <>
+                            <div className="h-4 w-px bg-border flex-shrink-0" />
+                            <span className="text-xs text-text-muted">排序:</span>
+                            <div className="flex gap-1">
+                                {summarySortOptions.map((opt) => (
+                                    <button
+                                        key={opt.key}
+                                        onClick={() => handleSummarySortClick(opt.key)}
+                                        className={clsx(
+                                            'px-1.5 py-0.5 text-xs rounded transition-colors flex items-center gap-0.5',
+                                            summarySortKey === opt.key
+                                                ? 'bg-primary text-bg-darkest'
+                                                : 'bg-bg-light text-text-secondary hover:text-text-primary'
+                                        )}
+                                    >
+                                        {opt.label}
+                                        {summarySortKey === opt.key && (
+                                            <span className="text-[10px]">{summarySortDesc ? '↓' : '↑'}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {/* 排序控件 - 列表视图 */}
+                    {viewMode === 'list' && (
+                        <>
+                            <div className="h-4 w-px bg-border flex-shrink-0" />
+                            <span className="text-xs text-text-muted">排序:</span>
+                            <div className="flex gap-1">
+                                {listSortOptions.map((opt) => (
+                                    <button
+                                        key={opt.key}
+                                        onClick={() => handleListSortClick(opt.key)}
+                                        className={clsx(
+                                            'px-1.5 py-0.5 text-xs rounded transition-colors flex items-center gap-0.5',
+                                            listSortKey === opt.key
+                                                ? 'bg-primary text-bg-darkest'
+                                                : 'bg-bg-light text-text-secondary hover:text-text-primary'
+                                        )}
+                                    >
+                                        {opt.label}
+                                        {listSortKey === opt.key && (
+                                            <span className="text-[10px]">{listSortDesc ? '↓' : '↑'}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -2814,11 +2912,13 @@ function PageTimingContent({
             )}
 
             {/* 内容区 */}
-            <div className="flex-1 overflow-auto p-4">
+            <div className="flex-1 overflow-auto px-3 py-4">
                 {viewMode === 'summary' ? (
                     <PageTimingSummaryView
                         summary={summary}
                         isLoading={isLoadingSummary}
+                        sortKey={summarySortKey}
+                        sortDesc={summarySortDesc}
                     />
                 ) : viewMode === 'distribution' ? (
                     <PageTimingDistributionView
@@ -2836,6 +2936,8 @@ function PageTimingContent({
                         isLoading={isLoading}
                         onPageChange={handlePageChange}
                         onSelectEvent={onSelectEvent}
+                        sortKey={listSortKey}
+                        sortDesc={listSortDesc}
                     />
                 )}
             </div>
@@ -2851,14 +2953,55 @@ function PageTimingContent({
     )
 }
 
+// 汇总排序选项类型
+type SummarySortKey = 'count' | 'avgDuration' | 'p50' | 'p90' | 'p95'
+
 // 页面耗时汇总视图
 function PageTimingSummaryView({
     summary,
     isLoading,
+    sortKey,
+    sortDesc,
 }: {
     summary: PageTimingSummary[]
     isLoading: boolean
+    sortKey: SummarySortKey
+    sortDesc: boolean
 }) {
+    // 排序后的数据
+    const sortedSummary = useMemo(() => {
+        const sorted = [...summary]
+        sorted.sort((a, b) => {
+            let aVal: number, bVal: number
+            switch (sortKey) {
+                case 'count':
+                    aVal = a.count
+                    bVal = b.count
+                    break
+                case 'avgDuration':
+                    aVal = a.avgAppearDuration ?? 0
+                    bVal = b.avgAppearDuration ?? 0
+                    break
+                case 'p50':
+                    aVal = a.p50AppearDuration ?? 0
+                    bVal = b.p50AppearDuration ?? 0
+                    break
+                case 'p90':
+                    aVal = a.p90AppearDuration ?? 0
+                    bVal = b.p90AppearDuration ?? 0
+                    break
+                case 'p95':
+                    aVal = a.p95AppearDuration ?? 0
+                    bVal = b.p95AppearDuration ?? 0
+                    break
+                default:
+                    return 0
+            }
+            return sortDesc ? bVal - aVal : aVal - bVal
+        })
+        return sorted
+    }, [summary, sortKey, sortDesc])
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-full">
@@ -2878,7 +3021,8 @@ function PageTimingSummaryView({
 
     return (
         <div className="space-y-3">
-            {summary.map((item) => (
+            {/* 汇总列表 */}
+            {sortedSummary.map((item) => (
                 <div
                     key={item.pageId}
                     className="bg-bg-medium rounded-lg p-4 border border-border"
@@ -3111,6 +3255,9 @@ function getPageTimingBarColor(ms: number): string {
     return '#ef4444'
 }
 
+// 列表排序选项类型
+type ListSortKey = 'time' | 'loadDuration' | 'appearDuration'
+
 // 页面耗时列表视图
 function PageTimingListView({
     events,
@@ -3120,6 +3267,8 @@ function PageTimingListView({
     isLoading,
     onPageChange,
     onSelectEvent,
+    sortKey,
+    sortDesc,
 }: {
     events: PageTimingEvent[]
     total: number
@@ -3129,7 +3278,35 @@ function PageTimingListView({
     isLoading: boolean
     onPageChange: (page: number) => void
     onSelectEvent: (event: PageTimingEvent) => void
+    sortKey: ListSortKey
+    sortDesc: boolean
 }) {
+    // 排序后的数据（本地排序当前页）
+    const sortedEvents = useMemo(() => {
+        const sorted = [...events]
+        sorted.sort((a, b) => {
+            let aVal: number, bVal: number
+            switch (sortKey) {
+                case 'time':
+                    aVal = new Date(a.startAt).getTime()
+                    bVal = new Date(b.startAt).getTime()
+                    break
+                case 'loadDuration':
+                    aVal = a.loadDuration ?? 0
+                    bVal = b.loadDuration ?? 0
+                    break
+                case 'appearDuration':
+                    aVal = a.appearDuration ?? 0
+                    bVal = b.appearDuration ?? 0
+                    break
+                default:
+                    return 0
+            }
+            return sortDesc ? bVal - aVal : aVal - bVal
+        })
+        return sorted
+    }, [events, sortKey, sortDesc])
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-full">
@@ -3160,7 +3337,7 @@ function PageTimingListView({
             </div>
 
             {/* 列表项 */}
-            {events.map((event) => (
+            {sortedEvents.map((event) => (
                 <div
                     key={event.id}
                     onClick={() => onSelectEvent(event)}
@@ -3242,8 +3419,29 @@ function PageTimingDetailModal({
     event: PageTimingEvent
     onClose: () => void
 }) {
+    // ESC 键关闭
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose()
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [onClose])
+
+    // 点击空白区域关闭
+    const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+        if (e.target === e.currentTarget) {
+            onClose()
+        }
+    }, [onClose])
+
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={handleBackdropClick}
+        >
             <div className="bg-bg-dark border border-border rounded-lg w-[600px] max-h-[80vh] flex flex-col">
                 {/* Header */}
                 <div className="px-6 py-4 border-b border-border flex items-center justify-between">

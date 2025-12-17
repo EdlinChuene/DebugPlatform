@@ -247,7 +247,7 @@ export function DevicePluginView() {
                 // wsEvent 由 WebSocketPlugin 统一处理，避免重复
                 case 'performanceEvent': {
                     const perfEvent = JSON.parse(message.payload) as PerformanceEventData
-                    performanceStore.handleRealtimeEvent(perfEvent)
+                    performanceStore.handleRealtimeEvent(perfEvent, deviceId)
                     break
                 }
                 case 'deviceConnected': {

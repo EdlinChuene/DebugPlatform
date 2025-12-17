@@ -476,12 +476,13 @@ export interface ServerStats {
 
 export interface PerformanceEventData {
   id: string
-  eventType: 'metrics' | 'jank' | 'alert' | 'alertResolved' | 'appLaunch'
+  eventType: 'metrics' | 'jank' | 'alert' | 'alertResolved' | 'appLaunch' | 'pageTiming'
   timestamp: string
   metrics?: PerformanceMetricsItem[]
   jank?: JankEventItem
   alert?: AlertEventItem
   appLaunch?: AppLaunchEventItem
+  pageTiming?: PageTimingEventItem
 }
 
 export interface PerformanceMetricsItem {
@@ -547,4 +548,34 @@ export interface AppLaunchEventItem {
   mainToLaunchTime?: number     // Main 到 Launch 阶段耗时（毫秒）
   launchToFirstFrameTime?: number // Launch 到首帧阶段耗时（毫秒）
   timestamp: string             // 记录时间
+}
+
+// 页面耗时事件数据（来自实时流）
+export interface PageTimingEventItem {
+  eventId: string               // 事件 ID
+  visitId: string               // 唯一访问 ID
+  pageId: string                // 页面标识（如 VC 类名）
+  pageName: string              // 人类可读的页面名称
+  route?: string                // 路由路径（如有）
+  startAt: string               // 页面开始加载时间（ISO 字符串）
+  firstLayoutAt?: string        // 首次布局时间
+  appearAt?: string             // 页面完全可见时间
+  endAt?: string                // 页面离开时间
+  loadDuration?: number         // startAt -> firstLayoutAt（毫秒）
+  appearDuration?: number       // startAt -> appearAt（毫秒）
+  totalDuration?: number        // startAt -> endAt（毫秒）
+  markers?: PageTimingMarkerItem[] // 自定义标记点
+  appVersion?: string
+  appBuild?: string
+  osVersion?: string
+  deviceModel?: string
+  isColdStart?: boolean         // 是否冷启动首页
+  isPush?: boolean              // 是否来自 Push 导航
+  parentPageId?: string         // 来源页面 ID
+}
+
+export interface PageTimingMarkerItem {
+  name: string                  // 标记点名称
+  timestamp: string             // 时间戳
+  duration?: number             // 距离页面开始的耗时
 }

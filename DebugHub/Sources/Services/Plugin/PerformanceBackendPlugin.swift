@@ -1937,27 +1937,93 @@ public final class AppLaunchEventModel: Model, @unchecked Sendable {
 extension PerformanceBackendPlugin {
     // MARK: - Event Handler
 
+    /// 需要排除的系统控制器关键词
+    /// 这些控制器通常是容器控制器或系统级控制器，不应该作为独立页面统计
+    private static let excludedControllerKeywords = [
+        // 容器控制器
+        "UINavigationController",
+        "UITabBarController",
+        "UISplitViewController",
+        "UIPageViewController",
+        // 搜索和选择
+        "UISearchController",
+        "UIImagePickerController",
+        "UIDocumentPickerViewController",
+        // 系统弹窗
+        "UIAlertController",
+        "UIActivityViewController",
+        // 键盘和输入相关
+        "UIInputWindowController",
+        "UISystemKeyboardDockController",
+        "UICompatibilityInputViewController",
+        "UITrackingElementWindowController",
+        "_UIRemoteInputViewController",
+        // SwiftUI 容器
+        "UIHostingController",
+        // 第三方系统服务
+        "SFSafariViewController",
+        "SKStoreProductViewController",
+        "MFMailComposeViewController",
+        "MFMessageComposeViewController",
+        // 其他系统控制器
+        "StyleContextSplitViewNavigationController",
+        "_UIFullscreenPresentationController",
+    ]
+
+    /// 完全匹配需要排除的类名（如基类）
+    private static let exactExcludedClassNames: Set<String> = [
+        "UIViewController",
+    ]
+
+    /// 检查是否应该排除该控制器
+    private func shouldExcludeController(_ pageId: String) -> Bool {
+        // 精确匹配基类
+        if Self.exactExcludedClassNames.contains(pageId) {
+            return true
+        }
+
+        let pageIdLower = pageId.lowercased()
+        for keyword in Self.excludedControllerKeywords {
+            // 检查是否包含关键词（不区分大小写）或者是该类的子类
+            if pageIdLower.contains(keyword.lowercased()) {
+                return true
+            }
+        }
+        return false
+    }
+
     /// 处理页面耗时事件
     func handlePageTimingEvent(_ event: PluginEventDTO, from deviceId: String) async {
         do {
             let perfEvent = try event.decodePayload(as: PerformanceEventDTO.self)
             guard let pageTiming = perfEvent.pageTiming else { return }
 
+            // 过滤系统控制器
+            if shouldExcludeController(pageTiming.pageId) {
+                context?.logger.debug("Excluding system controller from page timing: \(pageTiming.pageId)")
+                return
+            }
+
             // 入库
             try await ingestPageTimingEvent(pageTiming, deviceId: deviceId)
 
-            // 广播到 WebUI（使用字典类型）
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            if let jsonData = try? encoder.encode(pageTiming),
-               let jsonDict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                let wsEvent: [String: Any] = [
-                    "type": "page_timing",
-                    "deviceId": deviceId,
-                    "data": jsonDict
-                ]
-                context?.broadcastToWebUI(wsEvent, deviceId: deviceId)
-            }
+            // 广播到 WebUI（使用标准的 performanceEvent 格式）
+            // 构建 PerformanceEventDTO 用于广播
+            let broadcastEvent = PerformanceEventDTO(
+                id: perfEvent.id,
+                eventType: "pageTiming",
+                timestamp: perfEvent.timestamp,
+                metrics: nil,
+                jank: nil,
+                alert: nil,
+                appLaunch: nil,
+                pageTiming: pageTiming
+            )
+            // 通过 RealtimeStreamHandler 发送 performanceEvent
+            RealtimeStreamHandler.shared.broadcast(
+                events: [.performance(broadcastEvent)],
+                deviceId: deviceId
+            )
         } catch {
             context?.logger.error("Failed to handle page timing event: \(error)")
         }

@@ -344,7 +344,7 @@ final class DebugBridgeHandler: @unchecked Sendable {
 
             case "pageTiming":
                 pluginEventType = "page_timing"
-                guard let pageTiming = event.pageTiming else { return }
+                guard event.pageTiming != nil else { return }
                 // 直接使用原始的 PerformanceEventDTO 作为 payload，因为 PerformanceBackendPlugin 会解码它
                 payload = try encoder.encode(event)
 

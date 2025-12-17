@@ -1,6 +1,22 @@
 import { create } from 'zustand'
 import * as api from '@/services/api'
 
+// MARK: - Debounce Utility
+
+// 防抖计时器引用
+let summaryFetchTimer: ReturnType<typeof setTimeout> | null = null
+
+// 防抖刷新 Summary（500ms 防抖，避免频繁请求）
+function debouncedFetchSummary(deviceId: string, fetchFn: (deviceId: string) => Promise<void>) {
+    if (summaryFetchTimer) {
+        clearTimeout(summaryFetchTimer)
+    }
+    summaryFetchTimer = setTimeout(() => {
+        fetchFn(deviceId)
+        summaryFetchTimer = null
+    }, 500)
+}
+
 // MARK: - Types
 
 export interface CPUMetrics {
@@ -391,7 +407,7 @@ interface PerformanceState {
     addJankEvent: (event: JankEvent) => void
     addAlert: (alert: Alert) => void
     updateAlert: (alert: Alert) => void
-    handleRealtimeEvent: (event: import('@/types').PerformanceEventData) => void
+    handleRealtimeEvent: (event: import('@/types').PerformanceEventData, deviceId?: string) => void
 
     // UI
     setTimeRange: (seconds: number) => void
@@ -846,7 +862,7 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
     },
 
     // 处理实时事件
-    handleRealtimeEvent: (event) => {
+    handleRealtimeEvent: (event, deviceId) => {
         switch (event.eventType) {
             case 'metrics':
                 if (event.metrics && event.metrics.length > 0) {
@@ -958,6 +974,44 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
                             timestamp: event.appLaunch.timestamp,
                         },
                     })
+                }
+                break
+
+            case 'pageTiming':
+                if (event.pageTiming) {
+                    // 将实时页面耗时事件添加到列表
+                    get().addPageTimingEvent({
+                        id: event.pageTiming.eventId,
+                        deviceId: deviceId ?? '',
+                        visitId: event.pageTiming.visitId,
+                        pageId: event.pageTiming.pageId,
+                        pageName: event.pageTiming.pageName,
+                        route: event.pageTiming.route,
+                        startAt: event.pageTiming.startAt,
+                        firstLayoutAt: event.pageTiming.firstLayoutAt,
+                        appearAt: event.pageTiming.appearAt,
+                        endAt: event.pageTiming.endAt,
+                        loadDuration: event.pageTiming.loadDuration,
+                        appearDuration: event.pageTiming.appearDuration,
+                        totalDuration: event.pageTiming.totalDuration,
+                        markers: event.pageTiming.markers?.map(m => ({
+                            name: m.name,
+                            timestamp: m.timestamp,
+                            elapsed: m.duration ?? 0,
+                        })) ?? [],
+                        appVersion: event.pageTiming.appVersion,
+                        appBuild: event.pageTiming.appBuild,
+                        osVersion: event.pageTiming.osVersion,
+                        deviceModel: event.pageTiming.deviceModel,
+                        isColdStart: event.pageTiming.isColdStart,
+                        isPush: event.pageTiming.isPush,
+                        parentPageId: event.pageTiming.parentPageId,
+                        seqNum: 0, // 实时事件暂无序号
+                    })
+                    // 触发汇总数据刷新（防抖处理在 debouncedFetchSummary 中）
+                    if (deviceId) {
+                        debouncedFetchSummary(deviceId, get().fetchPageTimingSummary)
+                    }
                 }
                 break
         }
