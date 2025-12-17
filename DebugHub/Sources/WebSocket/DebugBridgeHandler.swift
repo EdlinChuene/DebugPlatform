@@ -72,7 +72,7 @@ final class DebugBridgeHandler: @unchecked Sendable {
     private func handleMessage(data: Data, ws: WebSocket, req: Request, deviceIdHolder: DeviceIdHolder) {
         do {
             let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            decoder.dateDecodingStrategy = .iso8601WithMilliseconds
             let message = try decoder.decode(BridgeMessageDTO.self, from: data)
 
             switch message {
@@ -251,7 +251,7 @@ final class DebugBridgeHandler: @unchecked Sendable {
     /// 将 PerformanceEventDTO 转换为 PluginEventDTO 并路由到 PerformanceBackendPlugin
     private func routePerformanceEvent(_ event: PerformanceEventDTO, deviceId: String) async {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         // 根据 eventType 转换为对应的 PluginEventDTO
         let pluginEventType: String
@@ -521,7 +521,7 @@ final class DebugBridgeHandler: @unchecked Sendable {
     private func sendMessage(ws: WebSocket, message: BridgeMessageDTO) {
         do {
             let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
+            encoder.dateEncodingStrategy = .iso8601WithMilliseconds
             let data = try encoder.encode(message)
 
             // 使用文本格式发送，而非二进制，提高兼容性

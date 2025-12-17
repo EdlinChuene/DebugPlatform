@@ -15,7 +15,6 @@ import { SQLEditor } from './SQLEditor'
 import { ListLoadingOverlay } from './ListLoadingOverlay'
 import { useDraggable } from '@/hooks/useDraggable'
 import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, ClipboardIcon, PackageIcon, SearchIcon, XIcon, FolderIcon, CheckIcon, SQLIcon } from './icons'
-import { revealInFinder } from '@/services/api'
 import { useToastStore } from '@/stores/toastStore'
 import type { DatabaseLocation, DBInfo, DBQueryError } from '@/types'
 interface DBInspectorProps {
@@ -464,12 +463,29 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
         })
     }, [])
 
-    // 复制文本到剪贴板
-    const copyToClipboard = useCallback(async (text: string) => {
+    // 复制文本到剪贴板（带回退机制和错误处理）
+    const copyToClipboard = useCallback(async (text: string): Promise<boolean> => {
         try {
-            await navigator.clipboard.writeText(text)
+            // 首选：使用现代 Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text)
+                return true
+            }
+            // 回退：使用 execCommand（已废弃但兼容性好）
+            const textArea = document.createElement('textarea')
+            textArea.value = text
+            textArea.style.position = 'fixed'
+            textArea.style.left = '-9999px'
+            textArea.style.top = '-9999px'
+            document.body.appendChild(textArea)
+            textArea.focus()
+            textArea.select()
+            const success = document.execCommand('copy')
+            document.body.removeChild(textArea)
+            return success
         } catch (err) {
             console.error('Failed to copy:', err)
+            return false
         }
     }, [])
 
@@ -498,30 +514,20 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
         return db.absolutePath || formatLocationPath(db.descriptor.location)
     }, [formatLocationPath])
 
+    const toast = useToastStore()
+
     // 复制数据库路径并显示反馈
     const handleCopyPath = useCallback(async (db: DBInfo) => {
         const path = getDisplayPath(db)
-        await copyToClipboard(path)
-        setPathCopied(true)
-        setTimeout(() => setPathCopied(false), 2000)
-    }, [getDisplayPath, copyToClipboard])
-
-    const toast = useToastStore()
-
-    // 在 Finder 中显示数据库文件
-    const handleRevealInFinder = useCallback(async (path: string) => {
-        try {
-            const result = await revealInFinder(path)
-            if (result.success) {
-                toast.show('success', '已在 Finder 中显示')
-            } else {
-                toast.show('error', result.message)
-            }
-        } catch (err) {
-            toast.show('error', '无法在 Finder 中显示')
-            console.error('Failed to reveal in Finder:', err)
+        const success = await copyToClipboard(path)
+        if (success) {
+            setPathCopied(true)
+            toast.show('success', '路径已复制到剪贴板')
+            setTimeout(() => setPathCopied(false), 2000)
+        } else {
+            toast.show('error', '复制失败，请手动复制')
         }
-    }, [toast])
+    }, [getDisplayPath, copyToClipboard, toast])
 
     // 根据筛选条件过滤数据（客户端筛选）
     const filteredRows = useMemo(() => {
@@ -734,20 +740,11 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                                     </>
                                                 )}
                                             </button>
-                                            {/* 仅 macOS 显示"在 Finder 中展示"按钮 */}
-                                            {navigator.platform.toLowerCase().includes('mac') && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        handleRevealInFinder(getDisplayPath(db))
-                                                    }}
-                                                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-xs bg-bg-light text-text-secondary hover:bg-bg-lighter transition-colors"
-                                                >
-                                                    <FolderIcon size={12} />
-                                                    在 Finder 中显示
-                                                </button>
-                                            )}
                                         </div>
+                                        {/* 提示：数据库位于目标设备上 */}
+                                        <p className="mt-2 text-2xs text-text-muted italic">
+                                            此路径指向目标设备上的数据库文件位置
+                                        </p>
                                     </div>
                                 )}
                             </div>
