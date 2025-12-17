@@ -471,7 +471,7 @@ public final class DatabaseBackendPlugin: BackendPlugin, @unchecked Sendable {
         }
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601WithMilliseconds
         return try decoder.decode(DBListDatabasesResponseDTO.self, from: payload)
     }
 
@@ -504,7 +504,7 @@ public final class DatabaseBackendPlugin: BackendPlugin, @unchecked Sendable {
         }
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601WithMilliseconds
         return try decoder.decode(DBListTablesResponseDTO.self, from: payload)
     }
 
@@ -538,7 +538,7 @@ public final class DatabaseBackendPlugin: BackendPlugin, @unchecked Sendable {
         }
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601WithMilliseconds
         return try decoder.decode(DBDescribeTableResponseDTO.self, from: payload)
     }
 
@@ -586,7 +586,7 @@ public final class DatabaseBackendPlugin: BackendPlugin, @unchecked Sendable {
         }
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601WithMilliseconds
         return try decoder.decode(DBTablePageResultDTO.self, from: payload)
     }
 
@@ -636,7 +636,7 @@ public final class DatabaseBackendPlugin: BackendPlugin, @unchecked Sendable {
         }
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601WithMilliseconds
 
         // 解析原始响应
         struct RawQueryResponse: Decodable {

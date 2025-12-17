@@ -396,7 +396,7 @@ interface PerformanceState {
 
     // Page Timing Actions
     fetchPageTimingEvents: (deviceId: string, params?: PageTimingQueryParams) => Promise<void>
-    fetchPageTimingSummary: (deviceId: string, from?: Date, to?: Date) => Promise<void>
+    fetchPageTimingSummary: (deviceId: string, from?: Date, to?: Date, pageName?: string) => Promise<void>
     fetchPageTimingEvent: (deviceId: string, eventId: string) => Promise<void>
     clearPageTimingEvents: (deviceId: string) => Promise<void>
     setSelectedPageTimingEvent: (event: PageTimingEvent | null) => void
@@ -534,11 +534,13 @@ async function getPageTimingEvents(
 async function getPageTimingSummary(
     deviceId: string,
     from?: Date,
-    to?: Date
+    to?: Date,
+    pageName?: string
 ): Promise<PageTimingSummaryListResponse> {
     const query = new URLSearchParams()
     if (from) query.set('from', from.toISOString())
     if (to) query.set('to', to.toISOString())
+    if (pageName) query.set('pageName', pageName)
 
     const queryString = query.toString()
     const url = `${API_BASE}/devices/${deviceId}/performance/page-timings/summary${queryString ? '?' + queryString : ''}`
@@ -688,6 +690,10 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
                 realtimeMetrics: [],
                 jankEvents: [],
                 jankTotal: 0,
+                // 同时清除 App Launch 相关状态
+                appLaunchMetrics: null,
+                appLaunchHistory: [],
+                appLaunchStats: null,
             })
         } catch (error) {
             console.error('Failed to clear metrics:', error)
@@ -1060,10 +1066,10 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
         }
     },
 
-    fetchPageTimingSummary: async (deviceId: string, from?: Date, to?: Date) => {
+    fetchPageTimingSummary: async (deviceId: string, from?: Date, to?: Date, pageName?: string) => {
         set({ isLoadingPageTimingSummary: true })
         try {
-            const response = await getPageTimingSummary(deviceId, from, to)
+            const response = await getPageTimingSummary(deviceId, from, to, pageName)
             set({
                 pageTimingSummary: response.items,
                 isLoadingPageTimingSummary: false,

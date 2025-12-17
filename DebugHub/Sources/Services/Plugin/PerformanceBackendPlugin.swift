@@ -137,6 +137,7 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
         metricsLock.lock()
         defer { metricsLock.unlock() }
         realtimeMetrics[deviceId] = []
+        appLaunchMetrics[deviceId] = nil
     }
 
     /// 同步清除所有缓存
@@ -773,7 +774,7 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
         // 清除内存缓存（同步操作）
         clearCachedMetrics(deviceId: deviceId)
 
-        // 清除数据库数据
+        // 清除数据库数据 - Performance Metrics
         let metricsCount = try await PerformanceMetricsModel.query(on: req.db)
             .filter(\.$deviceId == deviceId)
             .count()
@@ -782,11 +783,17 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
             .filter(\.$deviceId == deviceId)
             .delete()
 
+        // 清除数据库数据 - Jank Events
         let jankCount = try await JankEventModel.query(on: req.db)
             .filter(\.$deviceId == deviceId)
             .count()
 
         try await JankEventModel.query(on: req.db)
+            .filter(\.$deviceId == deviceId)
+            .delete()
+
+        // 清除数据库数据 - App Launch Events
+        try await AppLaunchEventModel.query(on: req.db)
             .filter(\.$deviceId == deviceId)
             .delete()
 
@@ -1977,7 +1984,7 @@ extension PerformanceBackendPlugin {
 
         // 编码 markers
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
         let markersJSON = (try? String(data: encoder.encode(event.markers ?? []), encoding: .utf8)) ?? "[]"
 
         let model = PageTimingEventModel(
@@ -2111,6 +2118,8 @@ extension PerformanceBackendPlugin {
         // 解析时间范围
         let fromStr = try? req.query.get(String.self, at: "from")
         let toStr = try? req.query.get(String.self, at: "to")
+        // 解析页面名过滤
+        let pageName = try? req.query.get(String.self, at: "pageName")
 
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -2126,6 +2135,10 @@ extension PerformanceBackendPlugin {
         }
         if let to {
             query = query.filter(\.$startAt <= to)
+        }
+        // 应用页面名过滤（支持模糊匹配）
+        if let pageName, !pageName.isEmpty {
+            query = query.filter(\.$pageName ~~ pageName)
         }
 
         // 获取所有事件（按 pageId 分组统计）

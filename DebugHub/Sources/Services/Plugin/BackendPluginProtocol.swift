@@ -62,7 +62,7 @@ public struct PluginEventDTO: Codable, Sendable {
     /// 解码 payload 为指定类型
     public func decodePayload<T: Decodable>(as type: T.Type) throws -> T {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601WithMilliseconds
         return try decoder.decode(type, from: payload)
     }
 }
@@ -96,7 +96,7 @@ public struct PluginCommandDTO: Codable, Sendable {
         encodable: T
     ) throws {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
         self.pluginId = pluginId
         self.commandType = commandType
         self.commandId = commandId
@@ -219,7 +219,7 @@ public struct PluginCommandResponseDTO: Codable, Sendable {
     public func decodePayload<T: Decodable>(as type: T.Type) throws -> T? {
         guard let payload else { return nil }
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601WithMilliseconds
         return try decoder.decode(type, from: payload)
     }
 }

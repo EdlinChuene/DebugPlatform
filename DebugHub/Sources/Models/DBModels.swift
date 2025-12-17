@@ -705,7 +705,7 @@ final class PageTimingEventModel: Model, Content, @unchecked Sendable {
     /// 转换为 DTO
     func toDTO() -> PageTimingEventDTO {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601WithMilliseconds
         let markers: [PageTimingMarkerDTO] = (try? decoder.decode(
             [PageTimingMarkerDTO].self,
             from: Data((markersJSON ?? "[]").utf8)

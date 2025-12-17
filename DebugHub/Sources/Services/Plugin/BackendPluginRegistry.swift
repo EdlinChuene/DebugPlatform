@@ -258,7 +258,7 @@ final class BackendPluginContextImpl: BackendPluginContext, @unchecked Sendable 
         // 将 PluginCommandDTO 转换为 BridgeMessageDTO 并发送
         let message = BridgeMessageDTO.pluginCommand(command)
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         do {
             let data = try encoder.encode(message)

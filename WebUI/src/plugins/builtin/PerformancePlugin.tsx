@@ -474,7 +474,7 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
                         isLoadingSummary={store.isLoadingPageTimingSummary}
                         selectedEvent={store.selectedPageTimingEvent}
                         onFetch={(params) => store.fetchPageTimingEvents(deviceId, params)}
-                        onFetchSummary={(from, to) => store.fetchPageTimingSummary(deviceId, from, to)}
+                        onFetchSummary={(from, to, pageName) => store.fetchPageTimingSummary(deviceId, from, to, pageName)}
                         onSelectEvent={(event) => store.setSelectedPageTimingEvent(event)}
                     />
                 )}
@@ -545,7 +545,7 @@ function AppLaunchHistoryChart({ history }: { history: AppLaunchHistoryItem[] })
 
     return (
         <div className="h-[140px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                     <defs>
                         <linearGradient id="launchTotalGradient" x1="0" y1="0" x2="0" y2="1">
@@ -683,43 +683,56 @@ function OverviewContent({
                     <div className="flex gap-6">
                         {/* 左侧：最新启动数据 */}
                         <div className="flex-shrink-0 w-[280px]">
-                            {appLaunchMetrics ? (
-                                <>
-                                    {/* 总启动时间 */}
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <span className="text-text-muted text-xs">总耗时:</span>
-                                        <span className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                                            {appLaunchMetrics.totalTime > 0 ? `${appLaunchMetrics.totalTime.toFixed(0)}ms` : '--'}
-                                        </span>
-                                    </div>
-                                    {/* 分阶段详情 */}
-                                    <div className="grid grid-cols-3 gap-3 text-xs">
-                                        <div>
-                                            <div className="text-text-muted">PreMain</div>
-                                            <div className="text-base font-semibold text-purple-600 dark:text-purple-400">
-                                                {appLaunchMetrics.preMainTime != null ? `${appLaunchMetrics.preMainTime.toFixed(0)}ms` : '--'}
+                            {/* 优先使用 appLaunchMetrics，如果没有则从历史数据取最新一条 */}
+                            {(() => {
+                                const latestLaunch = appLaunchMetrics ?? (appLaunchHistory.length > 0 ? {
+                                    totalTime: appLaunchHistory[0].totalTime,
+                                    preMainTime: appLaunchHistory[0].preMainTime,
+                                    mainToLaunchTime: appLaunchHistory[0].mainToLaunchTime,
+                                    launchToFirstFrameTime: appLaunchHistory[0].launchToFirstFrameTime,
+                                    timestamp: appLaunchHistory[0].timestamp,
+                                } : null)
+
+                                if (!latestLaunch) {
+                                    return <div className="text-text-muted text-sm">暂无启动数据</div>
+                                }
+
+                                return (
+                                    <>
+                                        {/* 总启动时间 */}
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <span className="text-text-muted text-xs">总耗时:</span>
+                                            <span className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                                                {latestLaunch.totalTime > 0 ? `${latestLaunch.totalTime.toFixed(0)}ms` : '--'}
+                                            </span>
+                                        </div>
+                                        {/* 分阶段详情 */}
+                                        <div className="grid grid-cols-3 gap-3 text-xs">
+                                            <div>
+                                                <div className="text-text-muted">PreMain</div>
+                                                <div className="text-base font-semibold text-purple-600 dark:text-purple-400">
+                                                    {latestLaunch.preMainTime != null ? `${latestLaunch.preMainTime.toFixed(0)}ms` : '--'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div className="text-text-muted">Main→Launch</div>
+                                                <div className="text-base font-semibold text-indigo-600 dark:text-indigo-400">
+                                                    {latestLaunch.mainToLaunchTime != null ? `${latestLaunch.mainToLaunchTime.toFixed(0)}ms` : '--'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div className="text-text-muted">Launch→首帧</div>
+                                                <div className="text-base font-semibold text-blue-600 dark:text-blue-400">
+                                                    {latestLaunch.launchToFirstFrameTime != null ? `${latestLaunch.launchToFirstFrameTime.toFixed(0)}ms` : '--'}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div>
-                                            <div className="text-text-muted">Main→Launch</div>
-                                            <div className="text-base font-semibold text-indigo-600 dark:text-indigo-400">
-                                                {appLaunchMetrics.mainToLaunchTime != null ? `${appLaunchMetrics.mainToLaunchTime.toFixed(0)}ms` : '--'}
-                                            </div>
+                                        <div className="mt-3 text-[10px] text-text-muted">
+                                            记录于: {latestLaunch.timestamp ? new Date(latestLaunch.timestamp).toLocaleString() : '--'}
                                         </div>
-                                        <div>
-                                            <div className="text-text-muted">Launch→首帧</div>
-                                            <div className="text-base font-semibold text-blue-600 dark:text-blue-400">
-                                                {appLaunchMetrics.launchToFirstFrameTime != null ? `${appLaunchMetrics.launchToFirstFrameTime.toFixed(0)}ms` : '--'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 text-[10px] text-text-muted">
-                                        记录于: {appLaunchMetrics.timestamp ? new Date(appLaunchMetrics.timestamp).toLocaleString() : '--'}
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="text-text-muted text-sm">暂无启动数据</div>
-                            )}
+                                    </>
+                                )
+                            })()}
                         </div>
 
                         {/* 右侧：历史趋势图表 */}
@@ -1031,7 +1044,7 @@ function PerformanceCharts({ metrics }: { metrics: PerformanceMetrics[] }) {
                     </span>
                 </div>
                 <div className="h-32">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <AreaChart data={chartData}>
                             <defs>
                                 <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
@@ -1079,7 +1092,7 @@ function PerformanceCharts({ metrics }: { metrics: PerformanceMetrics[] }) {
                     </span>
                 </div>
                 <div className="h-32">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <AreaChart data={chartData}>
                             <defs>
                                 <linearGradient id="memoryGradient" x1="0" y1="0" x2="0" y2="1">
@@ -1124,7 +1137,7 @@ function PerformanceCharts({ metrics }: { metrics: PerformanceMetrics[] }) {
                     </span>
                 </div>
                 <div className="h-32">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <LineChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                             <XAxis
@@ -1171,7 +1184,7 @@ function PerformanceCharts({ metrics }: { metrics: PerformanceMetrics[] }) {
                         </div>
                     </div>
                     <div className="h-32">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                             <LineChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                                 <XAxis
@@ -2604,7 +2617,7 @@ interface PageTimingContentProps {
     isLoadingSummary: boolean
     selectedEvent: PageTimingEvent | null
     onFetch: (params: PageTimingQueryParams) => void
-    onFetchSummary: (from?: Date, to?: Date) => void
+    onFetchSummary: (from?: Date, to?: Date, pageName?: string) => void
     onSelectEvent: (event: PageTimingEvent | null) => void
 }
 
@@ -2662,7 +2675,7 @@ function PageTimingContent({
             from,
             to,
         })
-        onFetchSummary(from, to)
+        onFetchSummary(from, to, filterPageName || undefined)
     }, [filterPageName, filterMinDuration, getTimeRange, onFetch, onFetchSummary])
 
     // 页码变化
@@ -2721,7 +2734,7 @@ function PageTimingContent({
     return (
         <div className="h-full flex flex-col">
             {/* 工具栏 */}
-            <div className="flex-shrink-0 px-3 py-1.5 border-b border-border bg-bg-medium flex items-center justify-between">
+            <div className="flex-shrink-0 px-4 py-1.5 border-b border-border bg-bg-medium flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {/* 视图切换 */}
                     <div className="flex bg-bg-light rounded p-0.5">
@@ -2769,8 +2782,8 @@ function PageTimingContent({
                     <button
                         onClick={() => setShowFilters(!showFilters)}
                         className={clsx(
-                            'btn text-xs px-2 py-0.5',
-                            hasActiveFilters ? 'btn-primary' : 'btn-secondary'
+                            'btn !text-2xs !px-2 !py-1',
+                            (showFilters || hasActiveFilters) ? 'btn-primary' : 'btn-secondary'
                         )}
                     >
                         筛选
@@ -2843,7 +2856,7 @@ function PageTimingContent({
 
             {/* 筛选面板 */}
             {showFilters && (
-                <div className="flex-shrink-0 px-3 py-1.5 border-b border-border bg-bg-light">
+                <div className="flex-shrink-0 px-4 py-1.5 border-b border-border bg-bg-medium">
                     <div className="flex items-center gap-3 flex-wrap">
                         {/* 页面名称搜索 */}
                         <div className="flex items-center gap-1.5">
@@ -2890,29 +2903,29 @@ function PageTimingContent({
                             </select>
                         </div>
 
-                        {/* 操作按钮 */}
-                        <div className="flex items-center gap-2 ml-auto">
+                        {/* 应用按钮 - 紧跟在筛选项后面 */}
+                        <button
+                            onClick={() => applyFilters(1)}
+                            className="btn btn-primary !px-2 !py-1 !text-2xs"
+                        >
+                            应用
+                        </button>
+
+                        {/* 重置按钮 */}
+                        {hasActiveFilters && (
                             <button
-                                onClick={() => applyFilters(1)}
-                                className="btn btn-primary text-xs px-2 py-0.5"
+                                onClick={resetFilters}
+                                className="btn btn-secondary !px-2 !py-1 !text-2xs"
                             >
-                                应用
+                                重置
                             </button>
-                            {hasActiveFilters && (
-                                <button
-                                    onClick={resetFilters}
-                                    className="btn btn-secondary text-xs px-2 py-0.5"
-                                >
-                                    重置
-                                </button>
-                            )}
-                        </div>
+                        )}
                     </div>
                 </div>
             )}
 
             {/* 内容区 */}
-            <div className="flex-1 overflow-auto px-3 py-4">
+            <div className="flex-1 overflow-auto px-4 py-4">
                 {viewMode === 'summary' ? (
                     <PageTimingSummaryView
                         summary={summary}
@@ -3149,7 +3162,7 @@ function PageTimingDistributionView({
                     ⏱️ 可见耗时分布
                 </h3>
                 <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <BarChart data={distributionBuckets} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                             <XAxis
@@ -3164,11 +3177,16 @@ function PageTimingDistributionView({
                             />
                             <Tooltip
                                 contentStyle={{
-                                    backgroundColor: '#1f2937',
-                                    border: '1px solid #374151',
+                                    backgroundColor: 'var(--color-bg-darkest)',
+                                    border: '1px solid var(--color-border)',
                                     borderRadius: '8px',
                                     fontSize: '12px',
+                                    color: 'var(--color-text-primary)',
+                                    boxShadow: 'var(--shadow-lg)',
                                 }}
+                                labelStyle={{ color: 'var(--color-text-primary)' }}
+                                itemStyle={{ color: 'var(--color-text-primary)' }}
+                                cursor={{ fill: 'rgba(0, 212, 170, 0.15)' }}
                                 formatter={(value: number) => [`${value} 次`, '访问次数']}
                             />
                             <Bar dataKey="count" radius={[4, 4, 0, 0]}>

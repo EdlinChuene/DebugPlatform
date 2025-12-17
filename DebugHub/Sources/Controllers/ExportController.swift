@@ -160,7 +160,7 @@ struct ExportController: RouteCollection {
         let harLog = try buildHARLog(from: events)
 
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(harLog)
 
@@ -269,7 +269,7 @@ struct ExportController: RouteCollection {
         let fullFilename = "\(filename)_\(timestamp)"
 
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         let data: Data
@@ -281,7 +281,7 @@ struct ExportController: RouteCollection {
             // Newline-delimited JSON
             var lines: [String] = []
             let lineEncoder = JSONEncoder()
-            lineEncoder.dateEncodingStrategy = .iso8601
+            lineEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
             for item in items {
                 let lineData = try lineEncoder.encode(item)
                 if let line = String(data: lineData, encoding: .utf8) {
@@ -315,7 +315,7 @@ struct ExportController: RouteCollection {
     private func generateCSV(items: [some Encodable]) throws -> Data {
         // 简化的 CSV 生成
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         guard let first = items.first else {
             return Data()

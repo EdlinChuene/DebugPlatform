@@ -125,7 +125,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         event.pluginStates = pluginStates
 
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         guard
             let payloadData = try? encoder.encode(event),
@@ -148,7 +148,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         )
 
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         guard
             let payloadData = try? encoder.encode(event),
@@ -171,7 +171,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         )
 
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         guard
             let payloadData = try? encoder.encode(event),
@@ -195,7 +195,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         event.deviceAlias = deviceAlias
 
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         guard
             let payloadData = try? encoder.encode(event),
@@ -211,7 +211,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
     /// 广播断点命中事件
     func broadcastBreakpointHit(_ hit: BreakpointHitDTO, deviceId: String) {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         guard
             let payloadData = try? encoder.encode(hit),
@@ -231,7 +231,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         lock.unlock()
 
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         for subscriber in currentSubscribers {
             // 检查设备过滤
@@ -257,7 +257,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
         lock.unlock()
 
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         // 统计事件类型
         var httpCount = 0, wsCount = 0, logCount = 0, statsCount = 0, perfCount = 0
@@ -391,7 +391,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
     ///   - deviceId: 设备 ID
     func broadcastPluginEvent(_ event: PluginEventDTO, deviceId: String) {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         guard
             let payloadData = try? encoder.encode(event),
@@ -444,7 +444,7 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
     /// - Parameter stats: 服务器统计数据
     func broadcastServerStats(_ stats: some Encodable) {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .iso8601WithMilliseconds
 
         guard
             let payloadData = try? encoder.encode(stats),

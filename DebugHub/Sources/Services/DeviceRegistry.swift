@@ -417,7 +417,7 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
 
         do {
             let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
+            encoder.dateEncodingStrategy = .iso8601WithMilliseconds
             let data = try encoder.encode(message)
 
             session.webSocket.send([UInt8](data))
@@ -430,7 +430,7 @@ final class DeviceRegistry: LifecycleHandler, @unchecked Sendable {
         for session in getAllSessions() {
             do {
                 let encoder = JSONEncoder()
-                encoder.dateEncodingStrategy = .iso8601
+                encoder.dateEncodingStrategy = .iso8601WithMilliseconds
                 let data = try encoder.encode(message)
                 session.webSocket.send([UInt8](data))
             } catch {
