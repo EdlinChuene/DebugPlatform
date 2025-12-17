@@ -7,6 +7,35 @@
 
 ---
 
+## [1.5.0] - 2025-12-17
+
+### 新增
+
+#### 页面耗时监控
+- **SDK**: 新增 `PageTimingRecorder` 页面耗时记录器
+- **SDK**: 支持 UIKit ViewController 自动采集（viewWillAppear → viewDidAppear）
+- **SDK**: 支持 SwiftUI UIHostingController 自动采集
+- **SDK**: 支持手动 API 精确控制页面生命周期标记
+- **SDK**: 支持自定义标记点（markers）
+- **SDK**: 支持采样率控制和黑/白名单
+- **Hub**: 新增 `page_timing` 事件类型处理和存储
+- **Hub**: 新增页面耗时 API 接口（列表、详情、统计、删除）
+- **WebUI**: 新增"页面耗时"标签页
+- **WebUI**: 支持页面列表视图和统计摘要视图
+- **WebUI**: 支持页面耗时分布图表
+
+### 修复
+
+- **SDK**: 修复 SwiftUI 页面被错误过滤的问题（shouldTrack 逻辑优化）
+- **Hub**: 修复 `pageTiming` 事件路由缺失的问题
+
+### 改进
+
+- **WebUI**: HTTP 子标签颜色改为主题绿色，与父 Tab 样式保持一致
+- **WebUI**: WebSocket、Performance、Log 操作栏间距统一为 `px-4 py-1.5`
+
+---
+
 ## [1.4.1] - 2025-12-12
 
 ### 文档

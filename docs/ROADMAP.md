@@ -2,9 +2,9 @@
 
 本文档是 Debug Platform 的总体规划。各功能模块的详细路线图请参阅对应文档。
 
-> **当前版本**: 1.4.0 | [更新日志](CHANGELOG.md)
+> **当前版本**: 1.5.0 | [更新日志](CHANGELOG.md)
 >
-> **最后更新**: 2025-12-12
+> **最后更新**: 2025-12-17
 
 ---
 
@@ -31,7 +31,7 @@
 | **Mock Engine** | [MOCK_ENGINE_ROADMAP.md](MOCK_ENGINE_ROADMAP.md) | ✅ 1.2 稳定 | 动态响应模板 |
 | **Breakpoint** | [BREAKPOINT_ROADMAP.md](BREAKPOINT_ROADMAP.md) | ✅ 1.3 稳定 | 请求修改 UI |
 | **Chaos Engine** | [CHAOS_ENGINE_ROADMAP.md](CHAOS_ENGINE_ROADMAP.md) | ✅ 1.3 稳定 | DNS 失败模拟 |
-| **Performance Monitor** | [PERFORMANCE_MONITOR_ROADMAP.md](PERFORMANCE_MONITOR_ROADMAP.md) | 🚧 开发中 | 实时仪表盘 |
+| **Performance Monitor** | [PERFORMANCE_MONITOR_ROADMAP.md](PERFORMANCE_MONITOR_ROADMAP.md) | ✅ 1.5 稳定 | 内存泄漏检测 |
 
 ---
 

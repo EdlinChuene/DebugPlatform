@@ -213,6 +213,12 @@ export const useDBStore = create<DBState>((set, get) => ({
                 tableData: null,
                 page: 1,
                 orderBy: null,
+                // 切换表时重置面板展开状态
+                showSchema: false,
+                queryMode: false,
+                queryInput: '',
+                queryResult: null,
+                queryError: null,
             })
         }
     },

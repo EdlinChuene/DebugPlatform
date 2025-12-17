@@ -82,6 +82,13 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
 
         // App 启动时间
         perf.get("launch", use: getAppLaunchMetrics)
+
+        // Page Timing 路由
+        let pageTiming = perf.grouped("page-timings")
+        pageTiming.get(use: listPageTimingEvents)
+        pageTiming.get("summary", use: getPageTimingSummary)
+        pageTiming.get(":eventId", use: getPageTimingEvent)
+        pageTiming.delete(use: deleteAllPageTimingEvents)
     }
 
     public func handleEvent(_ event: PluginEventDTO, from deviceId: String) async {
@@ -94,6 +101,8 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
             await handlePerformanceAlert(event, from: deviceId)
         case "app_launch":
             await handleAppLaunchEvent(event, from: deviceId)
+        case "page_timing":
+            await handlePageTimingEvent(event, from: deviceId)
         default:
             break
         }
@@ -241,7 +250,8 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
                     stackTrace: jankEvent.stackTrace
                 ),
                 alert: nil,
-                appLaunch: nil
+                appLaunch: nil,
+                pageTiming: nil
             )
 
             // 通过 RealtimeStreamHandler 广播给 WebUI
@@ -307,7 +317,8 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
                     mainToLaunchTime: launchMetrics.mainToLaunchTime,
                     launchToFirstFrameTime: launchMetrics.launchToFirstFrameTime,
                     timestamp: launchMetrics.timestamp
-                )
+                ),
+                pageTiming: nil
             )
             
             // 通过 RealtimeStreamHandler 广播给 WebUI
@@ -1918,5 +1929,279 @@ public final class AppLaunchEventModel: Model, @unchecked Sendable {
         self.mainToLaunchTime = mainToLaunchTime
         self.launchToFirstFrameTime = launchToFirstFrameTime
         self.timestamp = timestamp
+    }
+}
+
+// MARK: - Page Timing Extension
+
+extension PerformanceBackendPlugin {
+    // MARK: - Event Handler
+
+    /// 处理页面耗时事件
+    func handlePageTimingEvent(_ event: PluginEventDTO, from deviceId: String) async {
+        do {
+            let perfEvent = try event.decodePayload(as: PerformanceEventDTO.self)
+            guard let pageTiming = perfEvent.pageTiming else { return }
+
+            // 入库
+            try await ingestPageTimingEvent(pageTiming, deviceId: deviceId)
+
+            // 广播到 WebUI（使用字典类型）
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            if let jsonData = try? encoder.encode(pageTiming),
+               let jsonDict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                let wsEvent: [String: Any] = [
+                    "type": "page_timing",
+                    "deviceId": deviceId,
+                    "data": jsonDict
+                ]
+                context?.broadcastToWebUI(wsEvent, deviceId: deviceId)
+            }
+        } catch {
+            context?.logger.error("Failed to handle page timing event: \(error)")
+        }
+    }
+
+    /// 入库页面耗时事件
+    private func ingestPageTimingEvent(_ event: PerfPageTimingDTO, deviceId: String) async throws {
+        guard let db = context?.database else { return }
+
+        // 获取序列号
+        let seqNum = await SequenceNumberManager.shared.nextSeqNum(for: deviceId, type: .pageTiming, db: db)
+
+        // 编码 markers
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let markersJSON = (try? String(data: encoder.encode(event.markers ?? []), encoding: .utf8)) ?? "[]"
+
+        let model = PageTimingEventModel(
+            id: event.eventId,
+            deviceId: deviceId,
+            visitId: event.visitId,
+            pageId: event.pageId,
+            pageName: event.pageName,
+            route: event.route,
+            startAt: event.startAt,
+            firstLayoutAt: event.firstLayoutAt,
+            appearAt: event.appearAt,
+            endAt: event.endAt,
+            loadDuration: event.loadDuration,
+            appearDuration: event.appearDuration,
+            totalDuration: event.totalDuration,
+            markersJSON: markersJSON,
+            appVersion: event.appVersion,
+            appBuild: event.appBuild,
+            osVersion: event.osVersion,
+            deviceModel: event.deviceModel,
+            isColdStart: event.isColdStart,
+            isPush: event.isPush,
+            parentPageId: event.parentPageId,
+            seqNum: seqNum
+        )
+
+        try await model.save(on: db)
+    }
+
+    // MARK: - API Handlers
+
+    /// 获取页面耗时事件列表
+    func listPageTimingEvents(_ req: Request) async throws -> PageTimingListDTO {
+        guard let deviceId = req.parameters.get("deviceId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId")
+        }
+        guard let db = context?.database else {
+            throw Abort(.internalServerError, reason: "Database not available")
+        }
+
+        // 解析分页参数
+        let page = (try? req.query.get(Int.self, at: "page")) ?? 1
+        let pageSize = min((try? req.query.get(Int.self, at: "pageSize")) ?? 50, 100)
+
+        // 解析筛选参数
+        let pageId = try? req.query.get(String.self, at: "pageId")
+        let pageName = try? req.query.get(String.self, at: "pageName")
+        let route = try? req.query.get(String.self, at: "route")
+        let fromStr = try? req.query.get(String.self, at: "from")
+        let toStr = try? req.query.get(String.self, at: "to")
+        let minDuration = try? req.query.get(Double.self, at: "minDuration")
+
+        // 解析日期
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let from = fromStr.flatMap { dateFormatter.date(from: $0) }
+        let to = toStr.flatMap { dateFormatter.date(from: $0) }
+
+        // 构建查询
+        var query = PageTimingEventModel.query(on: db)
+            .filter(\.$deviceId == deviceId)
+
+        if let pageId {
+            query = query.filter(\.$pageId == pageId)
+        }
+        if let pageName {
+            query = query.filter(\.$pageName ~~ pageName) // 模糊匹配
+        }
+        if let route {
+            query = query.filter(\.$route == route)
+        }
+        if let from {
+            query = query.filter(\.$startAt >= from)
+        }
+        if let to {
+            query = query.filter(\.$startAt <= to)
+        }
+        if let minDuration {
+            query = query.filter(\.$appearDuration >= minDuration)
+        }
+
+        // 获取总数
+        let total = try await query.count()
+
+        // 分页查询
+        let items = try await query
+            .sort(\.$startAt, .descending)
+            .range((page - 1) * pageSize ..< page * pageSize)
+            .all()
+
+        return PageTimingListDTO(
+            items: items.map { $0.toDTO() },
+            total: total,
+            page: page,
+            pageSize: pageSize
+        )
+    }
+
+    /// 获取单个页面耗时事件
+    func getPageTimingEvent(_ req: Request) async throws -> PageTimingEventDTO {
+        guard let deviceId = req.parameters.get("deviceId"),
+              let eventId = req.parameters.get("eventId")
+        else {
+            throw Abort(.badRequest, reason: "Missing deviceId or eventId")
+        }
+        guard let db = context?.database else {
+            throw Abort(.internalServerError, reason: "Database not available")
+        }
+
+        guard let event = try await PageTimingEventModel.query(on: db)
+            .filter(\.$id == eventId)
+            .filter(\.$deviceId == deviceId)
+            .first()
+        else {
+            throw Abort(.notFound, reason: "Page timing event not found")
+        }
+
+        return event.toDTO()
+    }
+
+    /// 获取页面耗时聚合统计
+    func getPageTimingSummary(_ req: Request) async throws -> PageTimingSummaryListDTO {
+        guard let deviceId = req.parameters.get("deviceId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId")
+        }
+        guard let db = context?.database else {
+            throw Abort(.internalServerError, reason: "Database not available")
+        }
+
+        // 解析时间范围
+        let fromStr = try? req.query.get(String.self, at: "from")
+        let toStr = try? req.query.get(String.self, at: "to")
+
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let from = fromStr.flatMap { dateFormatter.date(from: $0) }
+        let to = toStr.flatMap { dateFormatter.date(from: $0) }
+
+        // 构建查询
+        var query = PageTimingEventModel.query(on: db)
+            .filter(\.$deviceId == deviceId)
+
+        if let from {
+            query = query.filter(\.$startAt >= from)
+        }
+        if let to {
+            query = query.filter(\.$startAt <= to)
+        }
+
+        // 获取所有事件（按 pageId 分组统计）
+        let events = try await query.all()
+
+        // 按 pageId 分组
+        var grouped: [String: [PageTimingEventModel]] = [:]
+        for event in events {
+            let key = event.pageId
+            grouped[key, default: []].append(event)
+        }
+
+        // 计算统计
+        var summaries: [PageTimingSummaryDTO] = []
+        for (pageId, pageEvents) in grouped {
+            let pageName = pageEvents.first?.pageName ?? pageId
+            let count = pageEvents.count
+
+            // 收集 appearDuration 值
+            let appearDurations = pageEvents.compactMap(\.appearDuration).sorted()
+            let loadDurations = pageEvents.compactMap(\.loadDuration)
+
+            // 计算统计
+            let avgAppear = appearDurations.isEmpty ? nil : appearDurations.reduce(0, +) / Double(appearDurations.count)
+            let avgLoad = loadDurations.isEmpty ? nil : loadDurations.reduce(0, +) / Double(loadDurations.count)
+            let maxAppear = appearDurations.max()
+            let minAppear = appearDurations.min()
+
+            // 计算百分位数
+            let p50 = percentile(appearDurations, 0.50)
+            let p90 = percentile(appearDurations, 0.90)
+            let p95 = percentile(appearDurations, 0.95)
+
+            // 计算错误率（endAt 为空的比例）
+            let errorCount = pageEvents.filter { $0.endAt == nil }.count
+            let errorRate = count > 0 ? Double(errorCount) / Double(count) : 0
+
+            summaries.append(PageTimingSummaryDTO(
+                pageId: pageId,
+                pageName: pageName,
+                count: count,
+                avgAppearDuration: avgAppear,
+                avgLoadDuration: avgLoad,
+                p50AppearDuration: p50,
+                p90AppearDuration: p90,
+                p95AppearDuration: p95,
+                maxAppearDuration: maxAppear,
+                minAppearDuration: minAppear,
+                errorRate: errorRate
+            ))
+        }
+
+        // 按 count 降序排序
+        summaries.sort { $0.count > $1.count }
+
+        return PageTimingSummaryListDTO(
+            items: summaries,
+            totalPages: grouped.count
+        )
+    }
+
+    /// 删除所有页面耗时事件
+    func deleteAllPageTimingEvents(_ req: Request) async throws -> HTTPStatus {
+        guard let deviceId = req.parameters.get("deviceId") else {
+            throw Abort(.badRequest, reason: "Missing deviceId")
+        }
+        guard let db = context?.database else {
+            throw Abort(.internalServerError, reason: "Database not available")
+        }
+
+        try await PageTimingEventModel.query(on: db)
+            .filter(\.$deviceId == deviceId)
+            .delete()
+
+        return .noContent
+    }
+
+    /// 计算百分位数
+    private func percentile(_ sortedValues: [Double], _ p: Double) -> Double? {
+        guard !sortedValues.isEmpty else { return nil }
+        let index = Int(Double(sortedValues.count - 1) * p)
+        return sortedValues[index]
     }
 }

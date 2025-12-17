@@ -181,6 +181,7 @@ struct PerformanceEventDTO: Content {
     let jank: PerfJankEventDTO?
     let alert: PerfAlertEventDTO?
     let appLaunch: PerfAppLaunchDTO?
+    let pageTiming: PerfPageTimingDTO?
 }
 
 /// 性能指标 DTO（仅用于事件传输）
@@ -263,4 +264,97 @@ struct PerfAppLaunchDTO: Codable {
     let launchToFirstFrameTime: Double?
     /// 记录时间戳
     let timestamp: Date
+}
+
+// MARK: - Page Timing Event DTO
+
+/// 页面耗时事件 DTO（用于从客户端接收）
+struct PerfPageTimingDTO: Codable {
+    let eventId: String
+    let visitId: String
+    let pageId: String
+    let pageName: String
+    let route: String?
+    let startAt: Date
+    let firstLayoutAt: Date?
+    let appearAt: Date?
+    let endAt: Date?
+    let loadDuration: Double?
+    let appearDuration: Double?
+    let totalDuration: Double?
+    let markers: [PerfPageTimingMarkerDTO]?
+    let appVersion: String?
+    let appBuild: String?
+    let osVersion: String?
+    let deviceModel: String?
+    let isColdStart: Bool
+    let isPush: Bool?
+    let parentPageId: String?
+}
+
+/// 页面耗时标记点 DTO
+struct PerfPageTimingMarkerDTO: Codable {
+    let name: String
+    let timestamp: Date
+    let deltaMs: Double?
+}
+
+/// 页面耗时事件响应 DTO（用于 API 响应）
+struct PageTimingEventDTO: Content {
+    let eventId: String
+    let visitId: String
+    let pageId: String
+    let pageName: String
+    let route: String?
+    let startAt: Date
+    let firstLayoutAt: Date?
+    let appearAt: Date?
+    let endAt: Date?
+    let loadDuration: Double?
+    let appearDuration: Double?
+    let totalDuration: Double?
+    let markers: [PageTimingMarkerDTO]
+    let appVersion: String?
+    let appBuild: String?
+    let osVersion: String?
+    let deviceModel: String?
+    let isColdStart: Bool
+    let isPush: Bool?
+    let parentPageId: String?
+}
+
+/// 页面耗时标记点响应 DTO
+struct PageTimingMarkerDTO: Codable {
+    let name: String
+    let timestamp: Date
+    let deltaMs: Double?
+}
+
+/// 页面耗时列表响应 DTO
+struct PageTimingListDTO: Content {
+    let items: [PageTimingEventDTO]
+    let total: Int
+    let page: Int
+    let pageSize: Int
+}
+
+/// 页面耗时聚合统计 DTO
+struct PageTimingSummaryDTO: Content {
+    let pageId: String
+    let pageName: String
+    let count: Int
+    let avgAppearDuration: Double?
+    let avgLoadDuration: Double?
+    let p50AppearDuration: Double?
+    let p90AppearDuration: Double?
+    let p95AppearDuration: Double?
+    let maxAppearDuration: Double?
+    let minAppearDuration: Double?
+    let errorRate: Double
+}
+
+/// 页面耗时聚合列表响应 DTO
+struct PageTimingSummaryListDTO: Content {
+    let items: [PageTimingSummaryDTO]
+    let totalPages: Int
 }

@@ -198,6 +198,17 @@ body {
   background-color: rgba(var(--color-primary-rgb), 0.2) !important;
 }
 
+/* 在线设备卡片样式 - 主题色背景 */
+.device-card-online {
+  background-color: rgba(var(--color-primary-rgb), 0.15);
+  border-color: rgba(var(--color-primary-rgb), 0.3);
+}
+
+.device-card-online:hover {
+  background-color: rgba(var(--color-primary-rgb), 0.25);
+  border-color: rgba(var(--color-primary-rgb), 0.5);
+}
+
 /* Input Styles */
 input::placeholder,
 textarea::placeholder {
@@ -362,18 +373,18 @@ input[type='checkbox'] {
   border-left: 2px solid var(--color-primary);
 }
 
-/* Status Dot Animation */
+/* Status Dot Animation - 呼吸灯效果 */
 @keyframes status-pulse {
 
   0%,
   100% {
-    transform: scale(1);
     opacity: 1;
+    transform: scale(1);
   }
 
   50% {
-    transform: scale(1.2);
-    opacity: 0.7;
+    opacity: 0.6;
+    transform: scale(0.9);
   }
 }
 

@@ -180,7 +180,7 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
     return (
         <div className="h-full flex flex-col">
             {/* 工具栏 */}
-            <div className="flex-shrink-0 px-3 py-1.5 border-b border-border bg-bg-medium flex items-center justify-between">
+            <div className="flex-shrink-0 px-4 py-1.5 border-b border-border bg-bg-medium flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {/* 刷新按钮 */}
                     <button
@@ -304,7 +304,7 @@ function LogPluginView({ context, isActive }: PluginRenderProps) {
 
             {/* 过滤器面板 */}
             {showFilters && (
-                <div className="flex-shrink-0 px-3 py-1.5 border-b border-border bg-bg-medium">
+                <div className="flex-shrink-0 px-4 py-1.5 border-b border-border bg-bg-medium">
                     <LogFilters
                         minLevel={filters.minLevel}
                         subsystems={subsystems}

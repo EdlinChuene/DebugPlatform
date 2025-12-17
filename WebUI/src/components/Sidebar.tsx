@@ -585,14 +585,14 @@ export function Sidebar() {
                           {getPlatformIcon(device.platform, 18, undefined, device.isSimulator)}
                         </div>
                         {device.isOnline ? (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-bg-dark rounded-full" />
+                          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 border border-green-400/50 rounded-full status-dot-online" />
                         ) : (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-gray-500 border-2 border-bg-dark rounded-full" />
+                          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-gray-500 border border-bg-dark rounded-full" />
                         )}
                       </div>
                       {/* 模拟器标记 - 图标下方 */}
                       {device.isSimulator && (
-                        <span className="text-2xs px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 whitespace-nowrap">
+                        <span className="text-2xs px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-400 whitespace-nowrap">
                           模拟器
                         </span>
                       )}
@@ -879,9 +879,11 @@ export function Sidebar() {
           <ThemeToggle />
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-1.5">
-            <div className={clsx(
-              "w-2 h-2 rounded-full",
-              isServerOnline ? "bg-green-500" : "bg-red-500"
+            <span className={clsx(
+              "w-2 h-2 rounded-full border",
+              isServerOnline
+                ? "bg-green-500 border-green-400/50 status-dot-online"
+                : "bg-red-500 border-red-400/50"
             )} />
             <span className="font-medium">{isServerOnline ? "在线" : "离线"}</span>
           </div>

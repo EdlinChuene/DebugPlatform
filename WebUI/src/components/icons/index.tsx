@@ -1496,6 +1496,26 @@ export const LightningIcon = ({ size = 24, className = '' }: IconProps) => (
     </svg>
 )
 
+/** SQL 查询图标 */
+export const SQLIcon = ({ size = 24, className = '' }: IconProps) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+    >
+        {/* 终端/命令提示符样式 */}
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <polyline points="7 10 10 13 7 16" />
+        <line x1="13" y1="16" x2="17" y2="16" />
+    </svg>
+)
+
 export const PhoneOffIcon = ({ size = 24, className = '' }: IconProps) => (
     <svg
         width={size}
@@ -1692,7 +1712,70 @@ export const TrafficLightIcon = ({ size = 24, className = '' }: IconProps) => (
     </svg>
 )
 
+/** 汇总/摘要图标 - 网格卡片样式 */
+export const SummaryIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth={strokeWidth} />
+        <rect x="13" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth={strokeWidth} />
+        <rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth={strokeWidth} />
+        <rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth={strokeWidth} />
+    </svg>
+)
 
+/** 列表图标 - 水平列表样式 */
+export const ListIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <line x1="9" y1="6" x2="20" y2="6" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+        <line x1="9" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+        <line x1="9" y1="18" x2="20" y2="18" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+        <circle cx="5" cy="6" r="1.5" fill="currentColor" />
+        <circle cx="5" cy="12" r="1.5" fill="currentColor" />
+        <circle cx="5" cy="18" r="1.5" fill="currentColor" />
+    </svg>
+)
+
+/** 分布图图标 - 直方图/柱状图样式 */
+export const DistributionIcon: React.FC<IconProps> = ({
+    size = defaultProps.size,
+    className,
+    strokeWidth = defaultProps.strokeWidth
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <rect x="3" y="14" width="4" height="7" rx="1" stroke="currentColor" strokeWidth={strokeWidth} />
+        <rect x="10" y="6" width="4" height="15" rx="1" stroke="currentColor" strokeWidth={strokeWidth} />
+        <rect x="17" y="10" width="4" height="11" rx="1" stroke="currentColor" strokeWidth={strokeWidth} />
+        <line x1="2" y1="21" x2="22" y2="21" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+    </svg>
+)
 
 export const ChartBarIcon = ({ size = 24, className = '' }: IconProps) => (
     <svg

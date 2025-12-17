@@ -579,3 +579,159 @@ final class MockRuleModel: Model, Content, @unchecked Sendable {
         )
     }
 }
+
+// MARK: - Page Timing Event Model
+
+/// 页面耗时事件数据库模型
+final class PageTimingEventModel: Model, Content, @unchecked Sendable {
+    static let schema = "page_timing_events"
+
+    @ID(custom: "id", generatedBy: .user)
+    var id: String?
+
+    @Field(key: "device_id")
+    var deviceId: String
+
+    @Field(key: "visit_id")
+    var visitId: String
+
+    @Field(key: "page_id")
+    var pageId: String
+
+    @Field(key: "page_name")
+    var pageName: String
+
+    @Field(key: "route")
+    var route: String?
+
+    @Field(key: "start_at")
+    var startAt: Date
+
+    @Field(key: "first_layout_at")
+    var firstLayoutAt: Date?
+
+    @Field(key: "appear_at")
+    var appearAt: Date?
+
+    @Field(key: "end_at")
+    var endAt: Date?
+
+    @Field(key: "load_duration")
+    var loadDuration: Double?
+
+    @Field(key: "appear_duration")
+    var appearDuration: Double?
+
+    @Field(key: "total_duration")
+    var totalDuration: Double?
+
+    @Field(key: "markers_json")
+    var markersJSON: String?
+
+    @Field(key: "app_version")
+    var appVersion: String?
+
+    @Field(key: "app_build")
+    var appBuild: String?
+
+    @Field(key: "os_version")
+    var osVersion: String?
+
+    @Field(key: "device_model")
+    var deviceModel: String?
+
+    @Field(key: "is_cold_start")
+    var isColdStart: Bool
+
+    @Field(key: "is_push")
+    var isPush: Bool?
+
+    @Field(key: "parent_page_id")
+    var parentPageId: String?
+
+    @Field(key: "seq_num")
+    var seqNum: Int64
+
+    init() {}
+
+    init(
+        id: String,
+        deviceId: String,
+        visitId: String,
+        pageId: String,
+        pageName: String,
+        route: String? = nil,
+        startAt: Date,
+        firstLayoutAt: Date? = nil,
+        appearAt: Date? = nil,
+        endAt: Date? = nil,
+        loadDuration: Double? = nil,
+        appearDuration: Double? = nil,
+        totalDuration: Double? = nil,
+        markersJSON: String? = nil,
+        appVersion: String? = nil,
+        appBuild: String? = nil,
+        osVersion: String? = nil,
+        deviceModel: String? = nil,
+        isColdStart: Bool = false,
+        isPush: Bool? = nil,
+        parentPageId: String? = nil,
+        seqNum: Int64 = 0
+    ) {
+        self.id = id
+        self.deviceId = deviceId
+        self.visitId = visitId
+        self.pageId = pageId
+        self.pageName = pageName
+        self.route = route
+        self.startAt = startAt
+        self.firstLayoutAt = firstLayoutAt
+        self.appearAt = appearAt
+        self.endAt = endAt
+        self.loadDuration = loadDuration
+        self.appearDuration = appearDuration
+        self.totalDuration = totalDuration
+        self.markersJSON = markersJSON
+        self.appVersion = appVersion
+        self.appBuild = appBuild
+        self.osVersion = osVersion
+        self.deviceModel = deviceModel
+        self.isColdStart = isColdStart
+        self.isPush = isPush
+        self.parentPageId = parentPageId
+        self.seqNum = seqNum
+    }
+
+    /// 转换为 DTO
+    func toDTO() -> PageTimingEventDTO {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let markers: [PageTimingMarkerDTO] = (try? decoder.decode(
+            [PageTimingMarkerDTO].self,
+            from: Data((markersJSON ?? "[]").utf8)
+        )) ?? []
+
+        return PageTimingEventDTO(
+            eventId: id ?? "",
+            visitId: visitId,
+            pageId: pageId,
+            pageName: pageName,
+            route: route,
+            startAt: startAt,
+            firstLayoutAt: firstLayoutAt,
+            appearAt: appearAt,
+            endAt: endAt,
+            loadDuration: loadDuration,
+            appearDuration: appearDuration,
+            totalDuration: totalDuration,
+            markers: markers,
+            appVersion: appVersion,
+            appBuild: appBuild,
+            osVersion: osVersion,
+            deviceModel: deviceModel,
+            isColdStart: isColdStart,
+            isPush: isPush,
+            parentPageId: parentPageId
+        )
+    }
+}

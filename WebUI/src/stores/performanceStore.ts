@@ -97,6 +97,70 @@ export interface JankEvent {
     stackTrace?: string
 }
 
+// MARK: - Page Timing Types
+
+// 页面耗时 Marker
+export interface PageTimingMarker {
+    name: string
+    timestamp: string
+    elapsed: number // 从 startAt 到此时间的毫秒数
+}
+
+// 页面耗时事件
+export interface PageTimingEvent {
+    id: string
+    deviceId: string
+    visitId: string              // 唯一访问 ID
+    pageId: string               // 页面标识（如 VC 类名）
+    pageName: string             // 人类可读的页面名称
+    route?: string               // 路由路径（如有）
+    startAt: string              // 页面开始加载时间（ISO 字符串）
+    firstLayoutAt?: string       // 首次布局时间
+    appearAt?: string            // 页面完全可见时间
+    endAt?: string               // 页面离开时间
+    loadDuration?: number        // startAt -> firstLayoutAt（毫秒）
+    appearDuration?: number      // startAt -> appearAt（毫秒）
+    totalDuration?: number       // startAt -> endAt（毫秒）
+    markers: PageTimingMarker[]  // 自定义标记点
+    appVersion?: string
+    appBuild?: string
+    osVersion?: string
+    deviceModel?: string
+    isColdStart?: boolean        // 是否冷启动首页
+    isPush?: boolean             // 是否来自 Push 导航
+    parentPageId?: string        // 来源页面 ID
+    seqNum: number               // 序列号
+}
+
+// 页面耗时列表响应
+export interface PageTimingListResponse {
+    items: PageTimingEvent[]
+    total: number
+    page: number
+    pageSize: number
+}
+
+// 页面耗时聚合统计
+export interface PageTimingSummary {
+    pageId: string
+    pageName: string
+    count: number                  // 访问次数
+    avgAppearDuration?: number     // 平均页面可见耗时
+    avgLoadDuration?: number       // 平均加载耗时
+    p50AppearDuration?: number     // P50 耗时
+    p90AppearDuration?: number     // P90 耗时
+    p95AppearDuration?: number     // P95 耗时
+    maxAppearDuration?: number     // 最大耗时
+    minAppearDuration?: number     // 最小耗时
+    errorRate?: number             // 页面未正常结束的比例
+}
+
+// 页面耗时聚合统计列表响应
+export interface PageTimingSummaryListResponse {
+    items: PageTimingSummary[]
+    totalPages: number
+}
+
 // MARK: - Alert Types
 
 export type AlertSeverity = 'info' | 'warning' | 'critical'
@@ -218,6 +282,19 @@ export interface PerformanceTrends {
     recommendations: string[]
 }
 
+// MARK: - Page Timing Query Params (用于 Store Action 类型定义)
+
+export interface PageTimingQueryParams {
+    page?: number
+    pageSize?: number
+    pageId?: string
+    pageName?: string
+    route?: string
+    from?: Date
+    to?: Date
+    minDuration?: number
+}
+
 // MARK: - Store State
 
 interface PerformanceState {
@@ -272,6 +349,16 @@ interface PerformanceState {
     // 显示设置
     timeRange: number // 显示多少秒的数据
 
+    // 页面耗时
+    pageTimingEvents: PageTimingEvent[]
+    pageTimingTotal: number
+    pageTimingPage: number
+    pageTimingPageSize: number
+    pageTimingSummary: PageTimingSummary[]
+    isLoadingPageTiming: boolean
+    isLoadingPageTimingSummary: boolean
+    selectedPageTimingEvent: PageTimingEvent | null
+
     // Actions
     fetchRealtimeMetrics: (deviceId: string) => Promise<void>
     fetchHistoryMetrics: (deviceId: string, startTime?: Date, endTime?: Date, interval?: number) => Promise<void>
@@ -290,6 +377,14 @@ interface PerformanceState {
     updateAlertRule: (deviceId: string, ruleId: string, rule: Partial<AlertRuleInput>) => Promise<void>
     deleteAlertRule: (deviceId: string, ruleId: string) => Promise<void>
     resolveAlert: (deviceId: string, alertId: string) => Promise<void>
+
+    // Page Timing Actions
+    fetchPageTimingEvents: (deviceId: string, params?: PageTimingQueryParams) => Promise<void>
+    fetchPageTimingSummary: (deviceId: string, from?: Date, to?: Date) => Promise<void>
+    fetchPageTimingEvent: (deviceId: string, eventId: string) => Promise<void>
+    clearPageTimingEvents: (deviceId: string) => Promise<void>
+    setSelectedPageTimingEvent: (event: PageTimingEvent | null) => void
+    addPageTimingEvent: (event: PageTimingEvent) => void
 
     // Realtime updates
     addRealtimeMetrics: (metrics: PerformanceMetrics[]) => void
@@ -399,6 +494,49 @@ async function getAppLaunchData(deviceId: string): Promise<AppLaunchResponse> {
     return api.api.get<AppLaunchResponse>(`${API_BASE}/devices/${deviceId}/performance/launch`)
 }
 
+// MARK: - Page Timing API Functions
+
+async function getPageTimingEvents(
+    deviceId: string,
+    params: PageTimingQueryParams = {}
+): Promise<PageTimingListResponse> {
+    const query = new URLSearchParams()
+    if (params.page) query.set('page', params.page.toString())
+    if (params.pageSize) query.set('pageSize', params.pageSize.toString())
+    if (params.pageId) query.set('pageId', params.pageId)
+    if (params.pageName) query.set('pageName', params.pageName)
+    if (params.route) query.set('route', params.route)
+    if (params.from) query.set('from', params.from.toISOString())
+    if (params.to) query.set('to', params.to.toISOString())
+    if (params.minDuration) query.set('minDuration', params.minDuration.toString())
+
+    const queryString = query.toString()
+    const url = `${API_BASE}/devices/${deviceId}/performance/page-timings${queryString ? '?' + queryString : ''}`
+    return api.api.get<PageTimingListResponse>(url)
+}
+
+async function getPageTimingSummary(
+    deviceId: string,
+    from?: Date,
+    to?: Date
+): Promise<PageTimingSummaryListResponse> {
+    const query = new URLSearchParams()
+    if (from) query.set('from', from.toISOString())
+    if (to) query.set('to', to.toISOString())
+
+    const queryString = query.toString()
+    const url = `${API_BASE}/devices/${deviceId}/performance/page-timings/summary${queryString ? '?' + queryString : ''}`
+    return api.api.get<PageTimingSummaryListResponse>(url)
+}
+
+async function getPageTimingEvent(deviceId: string, eventId: string): Promise<PageTimingEvent> {
+    return api.api.get<PageTimingEvent>(`${API_BASE}/devices/${deviceId}/performance/page-timings/${eventId}`)
+}
+
+async function deletePageTimingEvents(deviceId: string): Promise<void> {
+    await api.api.delete(`${API_BASE}/devices/${deviceId}/performance/page-timings`)
+}
+
 // MARK: - Store
 
 export const usePerformanceStore = create<PerformanceState>((set, get) => ({
@@ -445,6 +583,16 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
     activeAlertCount: 0,
 
     timeRange: 60,
+
+    // 页面耗时
+    pageTimingEvents: [],
+    pageTimingTotal: 0,
+    pageTimingPage: 1,
+    pageTimingPageSize: 50,
+    pageTimingSummary: [],
+    isLoadingPageTiming: false,
+    isLoadingPageTimingSummary: false,
+    selectedPageTimingEvent: null,
 
     // Actions
     fetchRealtimeMetrics: async (deviceId: string) => {
@@ -832,6 +980,85 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
             trends: null,
             alerts: [],
             activeAlertCount: 0,
+            pageTimingEvents: [],
+            pageTimingTotal: 0,
+            pageTimingPage: 1,
+            pageTimingSummary: [],
+            selectedPageTimingEvent: null,
+        })
+    },
+
+    // Page Timing Actions
+    fetchPageTimingEvents: async (deviceId: string, params: PageTimingQueryParams = {}) => {
+        set({ isLoadingPageTiming: true })
+        try {
+            const response = await getPageTimingEvents(deviceId, params)
+            set({
+                pageTimingEvents: response.items,
+                pageTimingTotal: response.total,
+                pageTimingPage: response.page,
+                pageTimingPageSize: response.pageSize,
+                isLoadingPageTiming: false,
+            })
+        } catch (error) {
+            console.error('Failed to fetch page timing events:', error)
+            set({ isLoadingPageTiming: false })
+        }
+    },
+
+    fetchPageTimingSummary: async (deviceId: string, from?: Date, to?: Date) => {
+        set({ isLoadingPageTimingSummary: true })
+        try {
+            const response = await getPageTimingSummary(deviceId, from, to)
+            set({
+                pageTimingSummary: response.items,
+                isLoadingPageTimingSummary: false,
+            })
+        } catch (error) {
+            console.error('Failed to fetch page timing summary:', error)
+            set({ isLoadingPageTimingSummary: false })
+        }
+    },
+
+    fetchPageTimingEvent: async (deviceId: string, eventId: string) => {
+        try {
+            const event = await getPageTimingEvent(deviceId, eventId)
+            set({ selectedPageTimingEvent: event })
+        } catch (error) {
+            console.error('Failed to fetch page timing event:', error)
+        }
+    },
+
+    clearPageTimingEvents: async (deviceId: string) => {
+        try {
+            await deletePageTimingEvents(deviceId)
+            set({
+                pageTimingEvents: [],
+                pageTimingTotal: 0,
+                pageTimingPage: 1,
+                pageTimingSummary: [],
+                selectedPageTimingEvent: null,
+            })
+        } catch (error) {
+            console.error('Failed to clear page timing events:', error)
+        }
+    },
+
+    setSelectedPageTimingEvent: (event: PageTimingEvent | null) => {
+        set({ selectedPageTimingEvent: event })
+    },
+
+    addPageTimingEvent: (event: PageTimingEvent) => {
+        set((state) => {
+            // 按时间倒序，新事件在最前面
+            const exists = state.pageTimingEvents.some(e => e.id === event.id)
+            if (exists) {
+                return state
+            }
+            return {
+                pageTimingEvents: [event, ...state.pageTimingEvents].slice(0, 100),
+                pageTimingTotal: state.pageTimingTotal + 1,
+            }
         })
     },
 }))
@@ -976,4 +1203,39 @@ export function getTrendIcon(trend: TrendDirection): string {
         default:
             return '❓'
     }
+}
+
+// MARK: - Page Timing Helper Functions
+
+/// 根据页面耗时获取颜色类
+export function getPageTimingColor(durationMs: number | undefined | null): string {
+    if (durationMs === undefined || durationMs === null || isNaN(durationMs)) {
+        return 'text-zinc-400'
+    }
+    if (durationMs < 300) return 'text-green-400'
+    if (durationMs < 500) return 'text-yellow-400'
+    if (durationMs < 1000) return 'text-orange-400'
+    return 'text-red-400'
+}
+
+/// 根据页面耗时获取背景色类
+export function getPageTimingBgColor(durationMs: number | undefined | null): string {
+    if (durationMs === undefined || durationMs === null || isNaN(durationMs)) {
+        return 'bg-zinc-500/10'
+    }
+    if (durationMs < 300) return 'bg-green-500/10'
+    if (durationMs < 500) return 'bg-yellow-500/10'
+    if (durationMs < 1000) return 'bg-orange-500/10'
+    return 'bg-red-500/10'
+}
+
+/// 格式化页面耗时为可读字符串
+export function formatPageTiming(durationMs: number | undefined | null): string {
+    if (durationMs === undefined || durationMs === null || isNaN(durationMs)) {
+        return '--'
+    }
+    if (durationMs < 1000) {
+        return `${Math.round(durationMs)}ms`
+    }
+    return `${(durationMs / 1000).toFixed(2)}s`
 }

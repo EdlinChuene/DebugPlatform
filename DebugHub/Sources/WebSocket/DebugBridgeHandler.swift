@@ -342,6 +342,12 @@ final class DebugBridgeHandler: @unchecked Sendable {
                 )
                 payload = try encoder.encode(launchDTO)
 
+            case "pageTiming":
+                pluginEventType = "page_timing"
+                guard let pageTiming = event.pageTiming else { return }
+                // 直接使用原始的 PerformanceEventDTO 作为 payload，因为 PerformanceBackendPlugin 会解码它
+                payload = try encoder.encode(event)
+
             default:
                 return
             }

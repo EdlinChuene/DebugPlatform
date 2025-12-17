@@ -10,7 +10,7 @@ import {
     PluginRenderProps,
     PluginState,
 } from '../types'
-import { PerformanceIcon, CPUIcon, MemoryIcon, FPSIcon, SettingsIcon, AlertIcon, TrashIcon } from '@/components/icons'
+import { PerformanceIcon, CPUIcon, MemoryIcon, FPSIcon, SettingsIcon, AlertIcon, TrashIcon, ClockIcon, SummaryIcon, ListIcon, DistributionIcon } from '@/components/icons'
 import { Checkbox } from '@/components/Checkbox'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
@@ -24,6 +24,9 @@ import {
     getSeverityBgColor,
     getMetricTypeLabel,
     getConditionLabel,
+    getPageTimingColor,
+    getPageTimingBgColor,
+    formatPageTiming,
     type PerformanceMetrics,
     type JankEvent,
     type Alert,
@@ -31,6 +34,8 @@ import {
     type AlertSeverity,
     type AppLaunchHistoryItem,
     type AppLaunchStats,
+    type PageTimingEvent,
+    type PageTimingSummary,
 } from '@/stores/performanceStore'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { useToastStore } from '@/stores/toastStore'
@@ -47,7 +52,11 @@ import {
     Area,
     AreaChart,
     ReferenceLine,
+    BarChart,
+    Bar,
+    Cell,
 } from 'recharts'
+import type { PageTimingQueryParams } from '@/stores/performanceStore'
 
 // 格式化时间，包含毫秒
 function formatTimeWithMs(dateString: string): string {
@@ -93,7 +102,7 @@ class PerformancePluginImpl implements FrontendPlugin {
 
         // 订阅性能事件
         this.unsubscribe = context.subscribeToEvents(
-            ['performance_metrics', 'jank_event', 'performance_alert', 'alert_resolved'],
+            ['performance_metrics', 'jank_event', 'performance_alert', 'alert_resolved', 'page_timing'],
             this.handleEvent.bind(this)
         )
 
@@ -136,6 +145,11 @@ class PerformancePluginImpl implements FrontendPlugin {
             if (alert) {
                 store.updateAlert(alert)
             }
+        } else if (event.eventType === 'page_timing') {
+            const pageTimingEvent = event.payload as PageTimingEvent
+            if (pageTimingEvent) {
+                store.addPageTimingEvent(pageTimingEvent)
+            }
         }
     }
 
@@ -171,7 +185,7 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
     }, [deviceId, deviceStore.devices])
 
     // UI 状态
-    const [activeTab, setActiveTab] = useState<'overview' | 'trends' | 'janks' | 'alerts'>('overview')
+    const [activeTab, setActiveTab] = useState<'overview' | 'trends' | 'janks' | 'alerts' | 'pageTiming'>('overview')
     const [showSettings, setShowSettings] = useState(false)
     const [showClearConfirm, setShowClearConfirm] = useState(false)
     const [isClearing, setIsClearing] = useState(false)
@@ -187,6 +201,8 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
         store.fetchAlerts(deviceId)
         store.fetchJankEvents(deviceId)
         store.fetchTrends(deviceId, 60)
+        store.fetchPageTimingEvents(deviceId)
+        store.fetchPageTimingSummary(deviceId)
         store.fetchAppLaunchData(deviceId)
     }, [deviceId, isActive])
 
@@ -203,13 +219,16 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
         return () => clearInterval(timer)
     }, [deviceId, isActive, isAutoRefreshEnabled, autoRefreshInterval])
 
-    // 刷新
+    // 刷新所有 tab 数据
     const handleRefresh = useCallback(() => {
         if (deviceId) {
             store.fetchRealtimeMetrics(deviceId)
             store.fetchStatus(deviceId)
             store.fetchJankEvents(deviceId)
             store.fetchTrends(deviceId, 60)
+            store.fetchAlerts(deviceId)
+            store.fetchPageTimingEvents(deviceId)
+            store.fetchPageTimingSummary(deviceId)
         }
     }, [deviceId])
 
@@ -242,7 +261,7 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
     return (
         <div className="flex flex-col h-full">
             {/* 工具栏 */}
-            <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-bg-medium flex items-center justify-between">
+            <div className="flex-shrink-0 px-4 py-1.5 border-b border-border bg-bg-medium flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {/* 刷新 - 放在最左边 */}
                     <button
@@ -278,6 +297,17 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
                             )}
                         >
                             趋势
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('pageTiming')}
+                            className={clsx(
+                                'px-3 py-1.5 text-xs rounded-md transition-colors',
+                                activeTab === 'pageTiming'
+                                    ? 'bg-primary text-bg-darkest'
+                                    : 'text-text-secondary hover:text-text-primary'
+                            )}
+                        >
+                            页面耗时 ({store.pageTimingTotal})
                         </button>
                         <button
                             onClick={() => setActiveTab('janks')}
@@ -420,7 +450,7 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
                         isLoading={store.isLoadingJanks}
                         onPageChange={(page) => store.fetchJankEvents(deviceId, page)}
                     />
-                ) : (
+                ) : activeTab === 'alerts' ? (
                     <AlertsContent
                         deviceId={deviceId}
                         alerts={store.alerts}
@@ -428,7 +458,22 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
                         alertConfig={store.alertConfig}
                         isLoading={store.isLoadingAlerts}
                         onResolve={(alertId) => store.resolveAlert(deviceId, alertId)}
-                        onRefresh={() => store.fetchAlerts(deviceId)}
+                    />
+                ) : (
+                    <PageTimingContent
+                        deviceId={deviceId}
+                        events={store.pageTimingEvents}
+                        summary={store.pageTimingSummary}
+                        total={store.pageTimingTotal}
+                        page={store.pageTimingPage}
+                        pageSize={store.pageTimingPageSize}
+                        isLoading={store.isLoadingPageTiming}
+                        isLoadingSummary={store.isLoadingPageTimingSummary}
+                        selectedEvent={store.selectedPageTimingEvent}
+                        onFetch={(params) => store.fetchPageTimingEvents(deviceId, params)}
+                        onFetchSummary={(from, to) => store.fetchPageTimingSummary(deviceId, from, to)}
+                        onSelectEvent={(event) => store.setSelectedPageTimingEvent(event)}
+                        onClear={() => store.clearPageTimingEvents(deviceId)}
                     />
                 )}
             </div>
@@ -1968,7 +2013,6 @@ function AlertsContent({
     alertRules,
     isLoading,
     onResolve,
-    onRefresh,
 }: {
     deviceId: string
     alerts: Alert[]
@@ -1976,7 +2020,6 @@ function AlertsContent({
     alertConfig: { cooldownSeconds: number; isEnabled: boolean }
     isLoading: boolean
     onResolve: (alertId: string) => void
-    onRefresh: () => void
 }) {
     const [showRules, setShowRules] = useState(false)
     const [includeResolved, setIncludeResolved] = useState(false)
@@ -2039,13 +2082,6 @@ function AlertsContent({
                             className="btn btn-secondary text-xs px-2 py-1"
                         >
                             {showRules ? '隐藏规则' : '告警规则'}
-                        </button>
-                        <button
-                            onClick={onRefresh}
-                            disabled={isLoading}
-                            className="btn btn-secondary text-xs px-2 py-1 disabled:opacity-50"
-                        >
-                            刷新
                         </button>
                     </div>
                 </div>
@@ -2546,6 +2582,1035 @@ function AddAlertRuleModal({
                         添加规则
                     </button>
                 </div>
+            </div>
+        </div>
+    )
+}
+
+// =============================================
+// 页面耗时内容组件
+// =============================================
+
+interface PageTimingContentProps {
+    deviceId: string
+    events: PageTimingEvent[]
+    summary: PageTimingSummary[]
+    total: number
+    page: number
+    pageSize: number
+    isLoading: boolean
+    isLoadingSummary: boolean
+    selectedEvent: PageTimingEvent | null
+    onFetch: (params: PageTimingQueryParams) => void
+    onFetchSummary: (from?: Date, to?: Date) => void
+    onSelectEvent: (event: PageTimingEvent | null) => void
+    onClear: () => void
+}
+
+function PageTimingContent({
+    events,
+    summary,
+    total,
+    page,
+    pageSize,
+    isLoading,
+    isLoadingSummary,
+    selectedEvent,
+    onFetch,
+    onFetchSummary,
+    onSelectEvent,
+    onClear,
+}: PageTimingContentProps) {
+    // 视图模式: summary=汇总, list=列表, distribution=分布图
+    const [viewMode, setViewMode] = useState<'summary' | 'list' | 'distribution'>('summary')
+    const [showClearConfirm, setShowClearConfirm] = useState(false)
+    const [showFilters, setShowFilters] = useState(false)
+
+    // 筛选状态
+    const [filterPageName, setFilterPageName] = useState('')
+    const [filterMinDuration, setFilterMinDuration] = useState<number | undefined>(undefined)
+    const [filterTimeRange, setFilterTimeRange] = useState<'1h' | '6h' | '24h' | '7d' | 'all'>('all')
+
+    const totalPages = Math.ceil(total / pageSize)
+
+    // 计算时间范围
+    const getTimeRange = useCallback(() => {
+        const now = new Date()
+        switch (filterTimeRange) {
+            case '1h': return { from: new Date(now.getTime() - 60 * 60 * 1000), to: now }
+            case '6h': return { from: new Date(now.getTime() - 6 * 60 * 60 * 1000), to: now }
+            case '24h': return { from: new Date(now.getTime() - 24 * 60 * 60 * 1000), to: now }
+            case '7d': return { from: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), to: now }
+            default: return { from: undefined, to: undefined }
+        }
+    }, [filterTimeRange])
+
+    // 应用筛选
+    const applyFilters = useCallback((newPage?: number) => {
+        const { from, to } = getTimeRange()
+        onFetch({
+            page: newPage ?? 1,
+            pageName: filterPageName || undefined,
+            minDuration: filterMinDuration,
+            from,
+            to,
+        })
+        onFetchSummary(from, to)
+    }, [filterPageName, filterMinDuration, getTimeRange, onFetch, onFetchSummary])
+
+    // 页码变化
+    const handlePageChange = useCallback((newPage: number) => {
+        applyFilters(newPage)
+    }, [applyFilters])
+
+    // 重置筛选
+    const resetFilters = useCallback(() => {
+        setFilterPageName('')
+        setFilterMinDuration(undefined)
+        setFilterTimeRange('all')
+        onFetch({ page: 1 })
+        onFetchSummary()
+    }, [onFetch, onFetchSummary])
+
+    // 检查是否有活跃筛选
+    const hasActiveFilters = filterPageName || filterMinDuration || filterTimeRange !== 'all'
+
+    return (
+        <div className="h-full flex flex-col">
+            {/* 工具栏 */}
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-border bg-bg-medium flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    {/* 视图切换 */}
+                    <div className="flex bg-bg-light rounded p-0.5">
+                        <button
+                            onClick={() => setViewMode('summary')}
+                            className={clsx(
+                                'px-2 py-0.5 text-xs rounded transition-colors flex items-center gap-1',
+                                viewMode === 'summary'
+                                    ? 'bg-primary text-bg-darkest'
+                                    : 'text-text-secondary hover:text-text-primary'
+                            )}
+                        >
+                            <SummaryIcon size={12} />
+                            汇总
+                        </button>
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={clsx(
+                                'px-2 py-0.5 text-xs rounded transition-colors flex items-center gap-1',
+                                viewMode === 'list'
+                                    ? 'bg-primary text-bg-darkest'
+                                    : 'text-text-secondary hover:text-text-primary'
+                            )}
+                        >
+                            <ListIcon size={12} />
+                            列表
+                        </button>
+                        <button
+                            onClick={() => setViewMode('distribution')}
+                            className={clsx(
+                                'px-2 py-0.5 text-xs rounded transition-colors flex items-center gap-1',
+                                viewMode === 'distribution'
+                                    ? 'bg-primary text-bg-darkest'
+                                    : 'text-text-secondary hover:text-text-primary'
+                            )}
+                        >
+                            <DistributionIcon size={12} />
+                            分布
+                        </button>
+                    </div>
+
+                    <div className="h-4 w-px bg-border flex-shrink-0" />
+
+                    {/* 筛选按钮 */}
+                    <button
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={clsx(
+                            'btn text-xs px-2 py-0.5',
+                            hasActiveFilters ? 'btn-primary' : 'btn-secondary'
+                        )}
+                    >
+                        筛选
+                        {hasActiveFilters && (
+                            <span className="ml-1 w-1.5 h-1.5 rounded-full bg-white inline-block" />
+                        )}
+                    </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-text-muted">
+                        共 {total} 条记录
+                    </span>
+                    {total > 0 && (
+                        <button
+                            onClick={() => setShowClearConfirm(true)}
+                            className="btn btn-ghost text-red-400 hover:bg-red-500/10 text-xs px-2 py-0.5 flex items-center"
+                        >
+                            <TrashIcon size={12} className="mr-1" />
+                            清空
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* 筛选面板 */}
+            {showFilters && (
+                <div className="flex-shrink-0 px-3 py-1.5 border-b border-border bg-bg-light">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        {/* 页面名称搜索 */}
+                        <div className="flex items-center gap-1.5">
+                            <label className="text-xs text-text-muted">页面名称:</label>
+                            <input
+                                type="text"
+                                value={filterPageName}
+                                onChange={(e) => setFilterPageName(e.target.value)}
+                                placeholder="搜索页面..."
+                                className="bg-bg-medium text-xs text-text-primary rounded px-2 py-0.5 border border-border focus:outline-none focus:border-primary w-36"
+                            />
+                        </div>
+
+                        {/* 最小耗时 */}
+                        <div className="flex items-center gap-1.5">
+                            <label className="text-xs text-text-muted">最小耗时:</label>
+                            <select
+                                value={filterMinDuration ?? ''}
+                                onChange={(e) => setFilterMinDuration(e.target.value ? Number(e.target.value) : undefined)}
+                                className="bg-bg-medium text-xs text-text-primary rounded px-2 py-0.5 border border-border focus:outline-none focus:border-primary"
+                            >
+                                <option value="">全部</option>
+                                <option value="100">&gt; 100ms</option>
+                                <option value="300">&gt; 300ms</option>
+                                <option value="500">&gt; 500ms</option>
+                                <option value="1000">&gt; 1s</option>
+                                <option value="2000">&gt; 2s</option>
+                            </select>
+                        </div>
+
+                        {/* 时间范围 */}
+                        <div className="flex items-center gap-1.5">
+                            <label className="text-xs text-text-muted">时间范围:</label>
+                            <select
+                                value={filterTimeRange}
+                                onChange={(e) => setFilterTimeRange(e.target.value as typeof filterTimeRange)}
+                                className="bg-bg-medium text-xs text-text-primary rounded px-2 py-0.5 border border-border focus:outline-none focus:border-primary"
+                            >
+                                <option value="all">全部</option>
+                                <option value="1h">最近 1 小时</option>
+                                <option value="6h">最近 6 小时</option>
+                                <option value="24h">最近 24 小时</option>
+                                <option value="7d">最近 7 天</option>
+                            </select>
+                        </div>
+
+                        {/* 操作按钮 */}
+                        <div className="flex items-center gap-2 ml-auto">
+                            <button
+                                onClick={() => applyFilters(1)}
+                                className="btn btn-primary text-xs px-2 py-0.5"
+                            >
+                                应用
+                            </button>
+                            {hasActiveFilters && (
+                                <button
+                                    onClick={resetFilters}
+                                    className="btn btn-secondary text-xs px-2 py-0.5"
+                                >
+                                    重置
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 内容区 */}
+            <div className="flex-1 overflow-auto p-4">
+                {viewMode === 'summary' ? (
+                    <PageTimingSummaryView
+                        summary={summary}
+                        isLoading={isLoadingSummary}
+                    />
+                ) : viewMode === 'distribution' ? (
+                    <PageTimingDistributionView
+                        events={events}
+                        summary={summary}
+                        isLoading={isLoading || isLoadingSummary}
+                    />
+                ) : (
+                    <PageTimingListView
+                        events={events}
+                        total={total}
+                        page={page}
+                        pageSize={pageSize}
+                        totalPages={totalPages}
+                        isLoading={isLoading}
+                        onPageChange={handlePageChange}
+                        onSelectEvent={onSelectEvent}
+                    />
+                )}
+            </div>
+
+            {/* 详情弹窗 */}
+            {selectedEvent && (
+                <PageTimingDetailModal
+                    event={selectedEvent}
+                    onClose={() => onSelectEvent(null)}
+                />
+            )}
+
+            {/* 清空确认对话框 */}
+            <ConfirmDialog
+                isOpen={showClearConfirm}
+                onClose={() => setShowClearConfirm(false)}
+                onConfirm={() => {
+                    onClear()
+                    setShowClearConfirm(false)
+                }}
+                title="清空页面耗时数据"
+                message="确定要清空该设备的全部页面耗时数据吗？此操作不可恢复。"
+                confirmText="确认清空"
+                cancelText="取消"
+                type="danger"
+            />
+        </div>
+    )
+}
+
+// 页面耗时汇总视图
+function PageTimingSummaryView({
+    summary,
+    isLoading,
+}: {
+    summary: PageTimingSummary[]
+    isLoading: boolean
+}) {
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <span className="text-text-muted text-sm">加载中...</span>
+            </div>
+        )
+    }
+
+    if (summary.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full">
+                <ClockIcon size={48} className="text-text-muted mb-4" />
+                <span className="text-text-muted text-sm">暂无页面耗时数据</span>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-3">
+            {summary.map((item) => (
+                <div
+                    key={item.pageId}
+                    className="bg-bg-medium rounded-lg p-4 border border-border"
+                >
+                    <div className="flex items-start justify-between mb-3">
+                        <div>
+                            <h3 className="text-sm font-medium text-text-primary">
+                                {item.pageName}
+                            </h3>
+                            <p className="text-xs text-text-muted mt-0.5">
+                                {item.pageId}
+                            </p>
+                        </div>
+                        <div className="text-right">
+                            <span className="text-xs text-text-muted">访问次数</span>
+                            <p className="text-lg font-semibold text-text-primary">{item.count}</p>
+                        </div>
+                    </div>
+
+                    {/* 耗时指标 */}
+                    <div className="grid grid-cols-4 gap-4 mb-3">
+                        <div className="text-center">
+                            <span className="text-xs text-text-muted block mb-1">平均耗时</span>
+                            <span className={clsx('text-sm font-medium', getPageTimingColor(item.avgAppearDuration))}>
+                                {formatPageTiming(item.avgAppearDuration)}
+                            </span>
+                        </div>
+                        <div className="text-center">
+                            <span className="text-xs text-text-muted block mb-1">P50</span>
+                            <span className={clsx('text-sm font-medium', getPageTimingColor(item.p50AppearDuration))}>
+                                {formatPageTiming(item.p50AppearDuration)}
+                            </span>
+                        </div>
+                        <div className="text-center">
+                            <span className="text-xs text-text-muted block mb-1">P90</span>
+                            <span className={clsx('text-sm font-medium', getPageTimingColor(item.p90AppearDuration))}>
+                                {formatPageTiming(item.p90AppearDuration)}
+                            </span>
+                        </div>
+                        <div className="text-center">
+                            <span className="text-xs text-text-muted block mb-1">P95</span>
+                            <span className={clsx('text-sm font-medium', getPageTimingColor(item.p95AppearDuration))}>
+                                {formatPageTiming(item.p95AppearDuration)}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* 范围和错误率 */}
+                    <div className="flex items-center justify-between text-xs text-text-muted">
+                        <span>
+                            范围: {formatPageTiming(item.minAppearDuration)} ~ {formatPageTiming(item.maxAppearDuration)}
+                        </span>
+                        {item.errorRate !== undefined && item.errorRate > 0 && (
+                            <span className="text-red-400">
+                                异常率: {(item.errorRate * 100).toFixed(1)}%
+                            </span>
+                        )}
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+// 页面耗时分布视图
+function PageTimingDistributionView({
+    events,
+    summary,
+    isLoading,
+}: {
+    events: PageTimingEvent[]
+    summary: PageTimingSummary[]
+    isLoading: boolean
+}) {
+    // 计算耗时分布桶
+    const distributionBuckets = useMemo(() => {
+        const buckets = [
+            { range: '0-100ms', min: 0, max: 100, count: 0, color: '#4ade80' },
+            { range: '100-300ms', min: 100, max: 300, count: 0, color: '#a3e635' },
+            { range: '300-500ms', min: 300, max: 500, count: 0, color: '#facc15' },
+            { range: '500-1s', min: 500, max: 1000, count: 0, color: '#fb923c' },
+            { range: '1-2s', min: 1000, max: 2000, count: 0, color: '#f87171' },
+            { range: '>2s', min: 2000, max: Infinity, count: 0, color: '#ef4444' },
+        ]
+
+        events.forEach((event) => {
+            const duration = event.appearDuration ?? 0
+            const bucket = buckets.find((b) => duration >= b.min && duration < b.max)
+            if (bucket) bucket.count++
+        })
+
+        return buckets
+    }, [events])
+
+    // Top 10 慢页面
+    const slowestPages = useMemo(() => {
+        return [...summary]
+            .sort((a, b) => (b.avgAppearDuration ?? 0) - (a.avgAppearDuration ?? 0))
+            .slice(0, 10)
+    }, [summary])
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <span className="text-text-muted text-sm">加载中...</span>
+            </div>
+        )
+    }
+
+    if (events.length === 0 && summary.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full">
+                <ClockIcon size={48} className="text-text-muted mb-4" />
+                <span className="text-text-muted text-sm">暂无数据</span>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* 耗时分布直方图 */}
+            <div className="bg-bg-light rounded-lg p-4">
+                <h3 className="text-sm font-medium text-text-primary mb-4">
+                    ⏱️ 可见耗时分布
+                </h3>
+                <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={distributionBuckets} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                            <XAxis
+                                dataKey="range"
+                                tick={{ fontSize: 11, fill: '#9ca3af' }}
+                                axisLine={{ stroke: '#4b5563' }}
+                            />
+                            <YAxis
+                                tick={{ fontSize: 11, fill: '#9ca3af' }}
+                                axisLine={{ stroke: '#4b5563' }}
+                                allowDecimals={false}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: '#1f2937',
+                                    border: '1px solid #374151',
+                                    borderRadius: '8px',
+                                    fontSize: '12px',
+                                }}
+                                formatter={(value: number) => [`${value} 次`, '访问次数']}
+                            />
+                            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                                {distributionBuckets.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+                <div className="flex items-center justify-center gap-4 mt-4">
+                    {distributionBuckets.map((bucket) => (
+                        <div key={bucket.range} className="flex items-center gap-1.5">
+                            <div
+                                className="w-3 h-3 rounded"
+                                style={{ backgroundColor: bucket.color }}
+                            />
+                            <span className="text-[10px] text-text-muted">{bucket.range}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Top 10 慢页面 */}
+            {slowestPages.length > 0 && (
+                <div className="bg-bg-light rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-text-primary mb-4">
+                        🐢 Top 10 慢页面 (按平均可见耗时)
+                    </h3>
+                    <div className="space-y-2">
+                        {slowestPages.map((item, index) => (
+                            <div
+                                key={item.pageName}
+                                className="flex items-center gap-3 p-2 rounded hover:bg-bg-medium transition-colors"
+                            >
+                                <span className={clsx(
+                                    'w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold',
+                                    index < 3 ? 'bg-red-500/20 text-red-400' : 'bg-bg-medium text-text-muted'
+                                )}>
+                                    {index + 1}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-text-primary truncate">
+                                        {item.pageName}
+                                    </p>
+                                    <p className="text-[10px] text-text-muted">
+                                        访问 {item.count} 次
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <span className={clsx('text-xs font-bold', getPageTimingColor(item.avgAppearDuration))}>
+                                        {formatPageTiming(item.avgAppearDuration)}
+                                    </span>
+                                    <p className="text-[10px] text-text-muted">
+                                        最大 {formatPageTiming(item.maxAppearDuration)}
+                                    </p>
+                                </div>
+                                {/* 进度条 */}
+                                <div className="w-24 h-2 bg-bg-dark rounded overflow-hidden">
+                                    <div
+                                        className="h-full rounded"
+                                        style={{
+                                            width: `${Math.min(((item.avgAppearDuration ?? 0) / (slowestPages[0]?.avgAppearDuration || 1)) * 100, 100)}%`,
+                                            backgroundColor: getPageTimingBarColor(item.avgAppearDuration ?? 0),
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// 获取进度条颜色
+function getPageTimingBarColor(ms: number): string {
+    if (ms < 100) return '#4ade80'
+    if (ms < 300) return '#a3e635'
+    if (ms < 500) return '#facc15'
+    if (ms < 1000) return '#fb923c'
+    if (ms < 2000) return '#f87171'
+    return '#ef4444'
+}
+
+// 页面耗时列表视图
+function PageTimingListView({
+    events,
+    total,
+    page,
+    totalPages,
+    isLoading,
+    onPageChange,
+    onSelectEvent,
+}: {
+    events: PageTimingEvent[]
+    total: number
+    page: number
+    pageSize: number
+    totalPages: number
+    isLoading: boolean
+    onPageChange: (page: number) => void
+    onSelectEvent: (event: PageTimingEvent) => void
+}) {
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <span className="text-text-muted text-sm">加载中...</span>
+            </div>
+        )
+    }
+
+    if (events.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full">
+                <ClockIcon size={48} className="text-text-muted mb-4" />
+                <span className="text-text-muted text-sm">暂无页面耗时数据</span>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-2">
+            {/* 表头 */}
+            <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs text-text-muted font-medium bg-bg-light rounded">
+                <div className="col-span-3">页面</div>
+                <div className="col-span-2">路由</div>
+                <div className="col-span-2 text-center">加载耗时</div>
+                <div className="col-span-2 text-center">可见耗时</div>
+                <div className="col-span-2">时间</div>
+                <div className="col-span-1 text-center">标记</div>
+            </div>
+
+            {/* 列表项 */}
+            {events.map((event) => (
+                <div
+                    key={event.id}
+                    onClick={() => onSelectEvent(event)}
+                    className={clsx(
+                        'grid grid-cols-12 gap-2 px-3 py-2 rounded cursor-pointer transition-colors',
+                        'hover:bg-bg-light border border-transparent hover:border-border',
+                        getPageTimingBgColor(event.appearDuration)
+                    )}
+                >
+                    <div className="col-span-3">
+                        <p className="text-xs font-medium text-text-primary truncate">
+                            {event.pageName}
+                        </p>
+                        <p className="text-[10px] text-text-muted truncate">
+                            {event.pageId}
+                        </p>
+                    </div>
+                    <div className="col-span-2 text-xs text-text-secondary truncate self-center">
+                        {event.route || '--'}
+                    </div>
+                    <div className="col-span-2 text-center self-center">
+                        <span className={clsx('text-xs font-medium', getPageTimingColor(event.loadDuration))}>
+                            {formatPageTiming(event.loadDuration)}
+                        </span>
+                    </div>
+                    <div className="col-span-2 text-center self-center">
+                        <span className={clsx('text-xs font-medium', getPageTimingColor(event.appearDuration))}>
+                            {formatPageTiming(event.appearDuration)}
+                        </span>
+                    </div>
+                    <div className="col-span-2 text-xs text-text-muted self-center">
+                        {formatTimeWithMs(event.startAt)}
+                    </div>
+                    <div className="col-span-1 text-center self-center">
+                        {event.markers && event.markers.length > 0 ? (
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/20 text-primary text-[10px] font-medium">
+                                {event.markers.length}
+                            </span>
+                        ) : (
+                            <span className="text-text-muted">--</span>
+                        )}
+                    </div>
+                </div>
+            ))}
+
+            {/* 分页 */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
+                    <span className="text-xs text-text-muted">
+                        第 {page} / {totalPages} 页，共 {total} 条
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => onPageChange(page - 1)}
+                            disabled={page <= 1}
+                            className="btn btn-secondary text-xs px-2 py-1 disabled:opacity-50"
+                        >
+                            上一页
+                        </button>
+                        <button
+                            onClick={() => onPageChange(page + 1)}
+                            disabled={page >= totalPages}
+                            className="btn btn-secondary text-xs px-2 py-1 disabled:opacity-50"
+                        >
+                            下一页
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// 页面耗时详情弹窗
+function PageTimingDetailModal({
+    event,
+    onClose,
+}: {
+    event: PageTimingEvent
+    onClose: () => void
+}) {
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-bg-dark border border-border rounded-lg w-[600px] max-h-[80vh] flex flex-col">
+                {/* Header */}
+                <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-text-primary">页面耗时详情</h2>
+                    <button
+                        onClick={onClose}
+                        className="text-text-muted hover:text-text-primary"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-auto p-6">
+                    {/* 基本信息 */}
+                    <div className="mb-6">
+                        <h3 className="text-sm font-medium text-text-secondary mb-3">基本信息</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <span className="text-xs text-text-muted">页面名称</span>
+                                <p className="text-sm text-text-primary">{event.pageName}</p>
+                            </div>
+                            <div>
+                                <span className="text-xs text-text-muted">页面标识</span>
+                                <p className="text-sm text-text-primary font-mono">{event.pageId}</p>
+                            </div>
+                            <div>
+                                <span className="text-xs text-text-muted">路由</span>
+                                <p className="text-sm text-text-primary">{event.route || '--'}</p>
+                            </div>
+                            <div>
+                                <span className="text-xs text-text-muted">访问 ID</span>
+                                <p className="text-sm text-text-primary font-mono text-[10px]">{event.visitId}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 耗时指标 */}
+                    <div className="mb-6">
+                        <h3 className="text-sm font-medium text-text-secondary mb-3">耗时指标</h3>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-bg-medium rounded-lg p-3 text-center">
+                                <span className="text-xs text-text-muted block mb-1">加载耗时</span>
+                                <span className={clsx('text-lg font-semibold', getPageTimingColor(event.loadDuration))}>
+                                    {formatPageTiming(event.loadDuration)}
+                                </span>
+                                <span className="text-[10px] text-text-muted block mt-1">startAt → firstLayoutAt</span>
+                            </div>
+                            <div className="bg-bg-medium rounded-lg p-3 text-center">
+                                <span className="text-xs text-text-muted block mb-1">可见耗时</span>
+                                <span className={clsx('text-lg font-semibold', getPageTimingColor(event.appearDuration))}>
+                                    {formatPageTiming(event.appearDuration)}
+                                </span>
+                                <span className="text-[10px] text-text-muted block mt-1">startAt → appearAt</span>
+                            </div>
+                            <div className="bg-bg-medium rounded-lg p-3 text-center">
+                                <span className="text-xs text-text-muted block mb-1">总耗时</span>
+                                <span className={clsx('text-lg font-semibold', getPageTimingColor(event.totalDuration))}>
+                                    {formatPageTiming(event.totalDuration)}
+                                </span>
+                                <span className="text-[10px] text-text-muted block mt-1">startAt → endAt</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 时间线 */}
+                    <div className="mb-6">
+                        <h3 className="text-sm font-medium text-text-secondary mb-3">时间线</h3>
+
+                        {/* 瀑布图可视化 */}
+                        <PageTimingWaterfall event={event} />
+
+                        {/* 时间点列表 */}
+                        <div className="space-y-2 mt-4">
+                            <TimelineItem
+                                label="开始加载"
+                                time={event.startAt}
+                                elapsed={0}
+                            />
+                            {event.firstLayoutAt && (
+                                <TimelineItem
+                                    label="首次布局"
+                                    time={event.firstLayoutAt}
+                                    elapsed={event.loadDuration}
+                                />
+                            )}
+                            {event.appearAt && (
+                                <TimelineItem
+                                    label="页面可见"
+                                    time={event.appearAt}
+                                    elapsed={event.appearDuration}
+                                />
+                            )}
+                            {event.endAt && (
+                                <TimelineItem
+                                    label="页面离开"
+                                    time={event.endAt}
+                                    elapsed={event.totalDuration}
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 自定义标记 */}
+                    {event.markers && event.markers.length > 0 && (
+                        <div className="mb-6">
+                            <h3 className="text-sm font-medium text-text-secondary mb-3">
+                                自定义标记 ({event.markers.length})
+                            </h3>
+                            <div className="space-y-2">
+                                {event.markers.map((marker, index) => (
+                                    <div
+                                        key={index}
+                                        className="flex items-center justify-between bg-bg-medium rounded px-3 py-2"
+                                    >
+                                        <span className="text-xs text-text-primary">{marker.name}</span>
+                                        <span className="text-xs text-text-muted">
+                                            +{formatPageTiming(marker.elapsed)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 上下文信息 */}
+                    <div>
+                        <h3 className="text-sm font-medium text-text-secondary mb-3">上下文信息</h3>
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                            <div>
+                                <span className="text-text-muted">App 版本</span>
+                                <p className="text-text-primary">
+                                    {event.appVersion || '--'} ({event.appBuild || '--'})
+                                </p>
+                            </div>
+                            <div>
+                                <span className="text-text-muted">系统版本</span>
+                                <p className="text-text-primary">{event.osVersion || '--'}</p>
+                            </div>
+                            <div>
+                                <span className="text-text-muted">设备型号</span>
+                                <p className="text-text-primary">{event.deviceModel || '--'}</p>
+                            </div>
+                            <div>
+                                <span className="text-text-muted">来源页面</span>
+                                <p className="text-text-primary font-mono">{event.parentPageId || '--'}</p>
+                            </div>
+                            <div>
+                                <span className="text-text-muted">冷启动首页</span>
+                                <p className="text-text-primary">{event.isColdStart ? '是' : '否'}</p>
+                            </div>
+                            <div>
+                                <span className="text-text-muted">Push 导航</span>
+                                <p className="text-text-primary">{event.isPush ? '是' : '否'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-4 border-t border-border flex justify-end">
+                    <button
+                        onClick={onClose}
+                        className="btn btn-secondary px-4 py-2 text-sm"
+                    >
+                        关闭
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// 时间线项组件
+function TimelineItem({
+    label,
+    time,
+    elapsed,
+}: {
+    label: string
+    time: string
+    elapsed?: number
+}) {
+    return (
+        <div className="flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+            <div className="flex-1 flex items-center justify-between bg-bg-medium rounded px-3 py-2">
+                <span className="text-xs text-text-primary">{label}</span>
+                <div className="text-right">
+                    <span className="text-xs text-text-muted">{formatTimeWithMs(time)}</span>
+                    {elapsed !== undefined && elapsed > 0 && (
+                        <span className={clsx('text-xs ml-2', getPageTimingColor(elapsed))}>
+                            +{formatPageTiming(elapsed)}
+                        </span>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// 页面耗时瀑布图
+function PageTimingWaterfall({ event }: { event: PageTimingEvent }) {
+    // 计算各阶段相对于 startAt 的时间偏移（毫秒）
+    const phases = useMemo(() => {
+        const result: Array<{ name: string; start: number; end: number; color: string }> = []
+        const loadDuration = event.loadDuration ?? 0
+        const appearDuration = event.appearDuration ?? 0
+        const totalDuration = event.totalDuration ?? 0
+
+        // 加载阶段: startAt → firstLayoutAt
+        if (event.firstLayoutAt && loadDuration > 0) {
+            result.push({
+                name: '加载',
+                start: 0,
+                end: loadDuration,
+                color: '#3b82f6', // blue
+            })
+        }
+
+        // 渲染阶段: firstLayoutAt → appearAt
+        if (event.firstLayoutAt && event.appearAt && appearDuration > loadDuration) {
+            result.push({
+                name: '渲染',
+                start: loadDuration,
+                end: appearDuration,
+                color: '#8b5cf6', // purple
+            })
+        }
+
+        // 交互阶段: appearAt → endAt
+        if (event.appearAt && event.endAt && totalDuration > appearDuration) {
+            result.push({
+                name: '交互',
+                start: appearDuration,
+                end: totalDuration,
+                color: '#10b981', // green
+            })
+        }
+
+        return result
+    }, [event])
+
+    // 添加自定义标记
+    const markers = useMemo(() => {
+        if (!event.markers || event.markers.length === 0) return []
+        return event.markers.map((m) => ({
+            name: m.name,
+            time: m.elapsed,
+        }))
+    }, [event.markers])
+
+    // 总时长用于计算比例
+    const totalDuration = event.totalDuration || event.appearDuration || event.loadDuration || 1
+
+    return (
+        <div className="bg-bg-medium rounded-lg p-4">
+            {/* 瀑布条形图 */}
+            <div className="relative h-10 mb-3">
+                {/* 背景刻度线 */}
+                <div className="absolute inset-0 flex">
+                    {[0, 25, 50, 75, 100].map((percent) => (
+                        <div
+                            key={percent}
+                            className="absolute top-0 bottom-0 w-px bg-border"
+                            style={{ left: `${percent}%` }}
+                        />
+                    ))}
+                </div>
+
+                {/* 阶段条 */}
+                <div className="absolute inset-y-2 left-0 right-0">
+                    {phases.map((phase, index) => {
+                        const leftPercent = (phase.start / totalDuration) * 100
+                        const widthPercent = ((phase.end - phase.start) / totalDuration) * 100
+                        return (
+                            <div
+                                key={index}
+                                className="absolute h-full rounded flex items-center justify-center overflow-hidden"
+                                style={{
+                                    left: `${leftPercent}%`,
+                                    width: `${Math.max(widthPercent, 1)}%`,
+                                    backgroundColor: phase.color,
+                                }}
+                                title={`${phase.name}: ${formatPageTiming(phase.end - phase.start)}`}
+                            >
+                                {widthPercent > 15 && (
+                                    <span className="text-[10px] text-white font-medium truncate px-1">
+                                        {phase.name}
+                                    </span>
+                                )}
+                            </div>
+                        )
+                    })}
+
+                    {/* 自定义标记 */}
+                    {markers.map((marker, index) => {
+                        const leftPercent = (marker.time / totalDuration) * 100
+                        return (
+                            <div
+                                key={`marker-${index}`}
+                                className="absolute top-0 bottom-0 w-0.5 bg-yellow-400"
+                                style={{ left: `${leftPercent}%` }}
+                                title={`${marker.name}: +${formatPageTiming(marker.time)}`}
+                            >
+                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 bg-yellow-400" />
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* 刻度标签 */}
+            <div className="flex justify-between text-[10px] text-text-muted">
+                <span>0ms</span>
+                <span>{formatPageTiming(totalDuration * 0.25)}</span>
+                <span>{formatPageTiming(totalDuration * 0.5)}</span>
+                <span>{formatPageTiming(totalDuration * 0.75)}</span>
+                <span>{formatPageTiming(totalDuration)}</span>
+            </div>
+
+            {/* 图例 */}
+            <div className="flex items-center justify-center gap-4 mt-3 pt-3 border-t border-border">
+                {phases.map((phase) => (
+                    <div key={phase.name} className="flex items-center gap-1.5">
+                        <div
+                            className="w-3 h-3 rounded"
+                            style={{ backgroundColor: phase.color }}
+                        />
+                        <span className="text-[10px] text-text-muted">
+                            {phase.name}: {formatPageTiming(phase.end - phase.start)}
+                        </span>
+                    </div>
+                ))}
+                {markers.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 bg-yellow-400 rotate-45" />
+                        <span className="text-[10px] text-text-muted">
+                            标记 ({markers.length})
+                        </span>
+                    </div>
+                )}
             </div>
         </div>
     )

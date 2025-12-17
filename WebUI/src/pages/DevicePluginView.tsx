@@ -419,7 +419,7 @@ export function DevicePluginView() {
                                 </DeviceIdPopover>
                             )}
                             {currentDevice?.deviceInfo.isSimulator && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 flex-shrink-0">
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 flex-shrink-0">
                                     模拟器
                                 </span>
                             )}
@@ -440,15 +440,17 @@ export function DevicePluginView() {
                             {currentDevice && (
                                 <span
                                     className={clsx(
-                                        'text-xs px-2 py-0.5 rounded flex items-center gap-1 flex-shrink-0',
+                                        'text-xs px-2 py-0.5 rounded flex items-center gap-1.5 flex-shrink-0',
                                         currentDevice.isOnline
                                             ? 'bg-status-success-bg text-status-success border border-green-500/30'
                                             : 'bg-red-500/10 text-red-400 border border-red-500/30'
                                     )}
                                 >
                                     <span className={clsx(
-                                        'w-1.5 h-1.5 rounded-full',
-                                        currentDevice.isOnline ? 'bg-green-400' : 'bg-red-400'
+                                        'w-2 h-2 rounded-full border',
+                                        currentDevice.isOnline
+                                            ? 'bg-green-400 border-green-300/50 status-dot-online'
+                                            : 'bg-red-400 border-red-300/50'
                                     )} />
                                     {currentDevice.isOnline ? '在线' : '离线'}
                                 </span>

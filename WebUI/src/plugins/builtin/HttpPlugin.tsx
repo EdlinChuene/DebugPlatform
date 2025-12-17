@@ -376,7 +376,7 @@ function HttpPluginView({ context, isActive }: PluginRenderProps) {
                                     className={clsx(
                                         'flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap',
                                         activeSubTab === tab.id
-                                            ? 'bg-accent-blue text-white'
+                                            ? 'bg-primary text-bg-darkest'
                                             : isDisabledOnDevice
                                                 ? 'text-text-muted opacity-50'
                                                 : 'text-text-secondary hover:text-text-primary hover:bg-bg-light'

@@ -11,9 +11,10 @@ import { useDBStore } from '@/stores/dbStore'
 import { useProtobufStore } from '@/stores/protobufStore'
 import { ProtobufConfigPanel } from './ProtobufConfigPanel'
 import { BlobCell, isBase64Blob } from './BlobCell'
+import { SQLEditor } from './SQLEditor'
 import { ListLoadingOverlay } from './ListLoadingOverlay'
 import { useDraggable } from '@/hooks/useDraggable'
-import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, ClipboardIcon, PackageIcon, SearchIcon, XIcon, FolderIcon, CheckIcon } from './icons'
+import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, ClipboardIcon, PackageIcon, SearchIcon, XIcon, FolderIcon, CheckIcon, SQLIcon } from './icons'
 import { revealInFinder } from '@/services/api'
 import { useToastStore } from '@/stores/toastStore'
 import type { DatabaseLocation, DBInfo, DBQueryError } from '@/types'
@@ -185,6 +186,11 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
     const { descriptorMeta, getColumnConfig } = useProtobufStore()
     const [showProtobufConfig, setShowProtobufConfig] = useState(false)
 
+    // 切换表时重置 Protobuf 面板状态
+    useEffect(() => {
+        setShowProtobufConfig(false)
+    }, [selectedTable])
+
     // 当前表的描述符数量
     const currentTableDescriptorCount = useMemo(() => {
         if (!selectedDb || !selectedTable) return 0
@@ -195,6 +201,51 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
     const [columnFilters, setColumnFilters] = useState<Record<string, string>>({})
     // 展开的筛选列
     const [expandedFilterColumn, setExpandedFilterColumn] = useState<string | null>(null)
+    // 展开的 BLOB 单元格（用于高亮标记）
+    const [expandedBlobCell, setExpandedBlobCell] = useState<{ rowIndex: number; columnName: string } | null>(null)
+
+    // 切换表时重置列筛选状态和展开的 BLOB 单元格
+    useEffect(() => {
+        setColumnFilters({})
+        setExpandedFilterColumn(null)
+        setExpandedBlobCell(null)
+    }, [selectedTable])
+
+    // 面板区域高度调整状态
+    const [panelHeight, setPanelHeight] = useState(300) // 默认 300px
+    const [isPanelResizing, setIsPanelResizing] = useState(false)
+    const panelResizeState = useRef<{ startY: number; startHeight: number } | null>(null)
+
+    // 面板高度调整的鼠标事件
+    const startPanelResize = useCallback((e: React.MouseEvent) => {
+        e.preventDefault()
+        panelResizeState.current = { startY: e.clientY, startHeight: panelHeight }
+        setIsPanelResizing(true)
+    }, [panelHeight])
+
+    useEffect(() => {
+        if (!isPanelResizing) return
+
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!panelResizeState.current) return
+            const deltaY = e.clientY - panelResizeState.current.startY
+            const newHeight = Math.max(100, Math.min(window.innerHeight * 0.8, panelResizeState.current.startHeight + deltaY))
+            setPanelHeight(newHeight)
+        }
+
+        const handleMouseUp = () => {
+            setIsPanelResizing(false)
+            panelResizeState.current = null
+        }
+
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('mouseup', handleMouseUp)
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [isPanelResizing])
 
     // 动态列宽状态：columnName -> width
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
@@ -780,22 +831,28 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                     className={clsx(
                                         'px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1 whitespace-nowrap',
                                         showProtobufConfig
-                                            ? 'bg-purple-500/20 text-purple-400'
+                                            ? 'bg-purple-500/20 text-purple-400 ring-1 ring-purple-500/40'  // 展开时：紫色背景+边框
                                             : currentTableDescriptorCount > 0
-                                                ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'
-                                                : 'bg-bg-light text-text-secondary hover:bg-bg-lighter'
+                                                ? 'text-purple-400 hover:bg-purple-500/10'  // 已配置但未展开：紫色字，无背景
+                                                : 'text-text-secondary hover:bg-bg-light'  // 未配置：灰色字，无背景
                                     )}
                                     title="Protobuf 配置"
                                 >
-                                    <PackageIcon size={12} /> Protobuf {currentTableDescriptorCount > 0 && `(${currentTableDescriptorCount})`}
+                                    <PackageIcon size={12} />
+                                    Protobuf
+                                    {currentTableDescriptorCount > 0 && (
+                                        <span className="ml-0.5 px-1 py-0.5 rounded text-2xs bg-purple-500/20 text-purple-400">
+                                            {currentTableDescriptorCount}
+                                        </span>
+                                    )}
                                 </button>
                                 <button
                                     onClick={() => setShowSchema(!showSchema)}
                                     className={clsx(
                                         'px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1',
                                         showSchema
-                                            ? 'bg-primary/20 text-primary'
-                                            : 'bg-bg-light text-text-secondary hover:bg-bg-lighter'
+                                            ? 'bg-[rgba(0,212,170,0.2)] text-primary ring-1 ring-[rgba(0,212,170,0.4)]'  // 展开时：绿色背景+边框
+                                            : 'text-text-secondary hover:bg-bg-light'  // 未展开：灰色字，无背景
                                     )}
                                 >
                                     <ClipboardIcon size={12} /> Schema
@@ -810,12 +867,12 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                     className={clsx(
                                         'px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1',
                                         queryMode
-                                            ? 'bg-accent-blue/20 text-accent-blue'
-                                            : 'bg-bg-light text-text-secondary hover:bg-bg-lighter'
+                                            ? 'bg-[rgba(74,144,217,0.2)] text-accent-blue ring-1 ring-[rgba(74,144,217,0.4)]'  // 展开时：蓝色背景+边框
+                                            : 'text-text-secondary hover:bg-bg-light'  // 未展开：灰色字，无背景
                                     )}
                                     title="SQL 查询"
                                 >
-                                    SQL 查询
+                                    <SQLIcon size={12} /> SQL 查询
                                 </button>
                                 <button
                                     onClick={() => selectedDb && selectedTable && loadTableData(deviceId, selectedDb, selectedTable)}
@@ -827,150 +884,195 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                             </div>
                         </div>
 
-                        {/* Protobuf 配置面板 */}
-                        {showProtobufConfig && (
-                            <div className="px-4 py-3 border-b border-border bg-bg-dark/30">
-                                <ProtobufConfigPanel
-                                    dbId={selectedDb}
-                                    tableName={selectedTable}
-                                    columns={schema.map(col => ({ name: col.name, type: col.type }))}
-                                    onClose={() => setShowProtobufConfig(false)}
-                                />
-                            </div>
-                        )}
-
-                        {/* Schema 面板 */}
-                        {showSchema && schema.length > 0 && (
-                            <div className="px-4 py-3 border-b border-border bg-bg-dark/30">
-                                <table className="w-full text-xs">
-                                    <thead>
-                                        <tr className="text-left text-text-muted">
-                                            <th className="pb-2 font-medium">列名</th>
-                                            <th className="pb-2 font-medium">类型</th>
-                                            <th className="pb-2 font-medium">主键</th>
-                                            <th className="pb-2 font-medium">非空</th>
-                                            <th className="pb-2 font-medium">默认值</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="font-mono">
-                                        {schema.map((col) => (
-                                            <tr key={col.name} className="border-t border-border">
-                                                <td className="py-1.5 text-primary">{col.name}</td>
-                                                <td className="py-1.5 text-text-secondary">{col.type || '-'}</td>
-                                                <td className="py-1.5">{col.primaryKey ? '✓' : ''}</td>
-                                                <td className="py-1.5">{col.notNull ? '✓' : ''}</td>
-                                                <td className="py-1.5 text-text-muted">{col.defaultValue || '-'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        {/* SQL 查询面板 */}
-                        {queryMode && (
-                            <div className="border-b border-border bg-bg-dark/30">
-                                {/* 查询输入区 */}
-                                <div className="px-4 py-3">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-text-muted">SQL 查询</span>
-                                            <span className="text-xs text-text-muted/50">（仅支持 SELECT）</span>
+                        {/* 面板区域 - 可滚动并可调整高度 */}
+                        {(showProtobufConfig || showSchema || queryMode) && (
+                            <div className="relative border-b border-border bg-bg-dark/30 flex flex-col">
+                                <div
+                                    className="overflow-auto"
+                                    style={{ maxHeight: panelHeight }}
+                                >
+                                    {/* Protobuf 配置面板 */}
+                                    {showProtobufConfig && (
+                                        <div className="px-4 py-3">
+                                            <ProtobufConfigPanel
+                                                dbId={selectedDb}
+                                                tableName={selectedTable}
+                                                columns={schema.map(col => ({ name: col.name, type: col.type }))}
+                                                onClose={() => setShowProtobufConfig(false)}
+                                            />
                                         </div>
-                                        <button
-                                            onClick={() => setQueryMode(false)}
-                                            className="p-1 rounded hover:bg-bg-light transition-colors text-text-muted hover:text-text-primary"
-                                            title="关闭 SQL 查询"
-                                        >
-                                            <XIcon size={14} />
-                                        </button>
-                                    </div>
-                                    <textarea
-                                        value={queryInput}
-                                        onChange={(e) => setQueryInput(e.target.value)}
-                                        placeholder="SELECT * FROM table_name LIMIT 100"
-                                        className="w-full h-20 px-3 py-2 bg-bg-light border border-border rounded-lg text-xs font-mono text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-primary/50"
-                                        onKeyDown={(e) => {
-                                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                                                executeQuery(deviceId)
-                                            }
-                                        }}
-                                    />
-                                    <div className="flex items-center justify-between mt-2">
-                                        <span className="text-xs text-text-muted">
-                                            {queryResult && queryResult.success && queryResult.rowCount != null && queryResult.executionTimeMs != null && (
-                                                <>
-                                                    {queryResult.rowCount} 行 • {queryResult.executionTimeMs.toFixed(2)} ms
-                                                </>
-                                            )}
-                                        </span>
-                                        <button
-                                            onClick={() => executeQuery(deviceId)}
-                                            disabled={queryLoading || !queryInput.trim()}
-                                            className="px-3 py-1 bg-primary text-white rounded text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                                        >
-                                            {queryLoading ? '执行中...' : '执行 (⌘↵)'}
-                                        </button>
-                                    </div>
-                                    {queryError && (
-                                        <SQLQueryErrorDisplay
-                                            error={queryError}
-                                            onApplySuggestion={(suggestion) => setQueryInput(suggestion)}
-                                        />
+                                    )}
+
+                                    {/* Schema 面板 */}
+                                    {showSchema && schema.length > 0 && (
+                                        <div className="px-4 py-3">
+                                            <div className="bg-bg-dark rounded-lg border border-border shadow-lg">
+                                                {/* 标题栏 */}
+                                                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                                                    <div className="flex items-center gap-2">
+                                                        <ClipboardIcon size={16} className="text-primary" />
+                                                        <h3 className="font-medium text-primary text-sm">Schema</h3>
+                                                        <span className="text-xs text-text-muted">({schema.length} 列)</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setShowSchema(false)}
+                                                        className="px-2 py-1 rounded text-xs hover:bg-bg-light text-text-muted hover:text-text-secondary transition-colors"
+                                                    >
+                                                        收起
+                                                    </button>
+                                                </div>
+                                                {/* 内容区 */}
+                                                <div className="max-h-[200px] overflow-auto">
+                                                    <table className="w-full text-xs">
+                                                        <thead className="sticky top-0 bg-bg-dark">
+                                                            <tr className="text-left text-text-muted">
+                                                                <th className="px-4 py-2 font-medium border-b border-border">列名</th>
+                                                                <th className="px-4 py-2 font-medium border-b border-border">类型</th>
+                                                                <th className="px-4 py-2 font-medium border-b border-border">主键</th>
+                                                                <th className="px-4 py-2 font-medium border-b border-border">非空</th>
+                                                                <th className="px-4 py-2 font-medium border-b border-border">默认值</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="font-mono">
+                                                            {schema.map((col) => (
+                                                                <tr key={col.name} className="hover:bg-bg-light/30 transition-colors">
+                                                                    <td className="px-4 py-1.5 text-primary">{col.name}</td>
+                                                                    <td className="px-4 py-1.5 text-text-secondary">{col.type || '-'}</td>
+                                                                    <td className="px-4 py-1.5">{col.primaryKey ? '✓' : ''}</td>
+                                                                    <td className="px-4 py-1.5">{col.notNull ? '✓' : ''}</td>
+                                                                    <td className="px-4 py-1.5 text-text-muted">{col.defaultValue || '-'}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* SQL 查询面板 */}
+                                    {queryMode && (
+                                        <div className="px-4 py-3">
+                                            <div className="bg-bg-dark rounded-lg border border-border shadow-lg">
+                                                {/* 标题栏 */}
+                                                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                                                    <div className="flex items-center gap-2">
+                                                        <SQLIcon size={16} className="text-accent-blue" />
+                                                        <h3 className="text-sm font-medium text-accent-blue">SQL 查询</h3>
+                                                        <span className="text-xs text-text-muted">（仅支持 SELECT）</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setQueryMode(false)}
+                                                        className="px-2 py-1 rounded text-xs hover:bg-bg-light text-text-muted hover:text-text-secondary transition-colors"
+                                                    >
+                                                        收起
+                                                    </button>
+                                                </div>
+                                                {/* 查询输入区 */}
+                                                <div className="p-4">
+                                                    <SQLEditor
+                                                        value={queryInput}
+                                                        onChange={setQueryInput}
+                                                        onExecute={() => executeQuery(deviceId)}
+                                                        placeholder="SELECT * FROM table_name LIMIT 100"
+                                                        height={100}
+                                                        tables={tables.map(t => t.name)}
+                                                        tableColumns={schema ? { [selectedTable || '']: schema.map(c => c.name) } : {}}
+                                                        disabled={queryLoading}
+                                                    />
+                                                    <div className="flex items-center justify-between mt-2">
+                                                        <span className="text-xs text-text-muted">
+                                                            {queryResult && queryResult.success && queryResult.rowCount != null && queryResult.executionTimeMs != null && (
+                                                                <>
+                                                                    {queryResult.rowCount} 行 • {queryResult.executionTimeMs.toFixed(2)} ms
+                                                                </>
+                                                            )}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => executeQuery(deviceId)}
+                                                            disabled={queryLoading || !queryInput.trim()}
+                                                            className="px-3 py-1 bg-primary text-white rounded text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                                                        >
+                                                            {queryLoading ? '执行中...' : '执行 (⌘↵)'}
+                                                        </button>
+                                                    </div>
+                                                    {queryError && (
+                                                        <SQLQueryErrorDisplay
+                                                            error={queryError}
+                                                            onApplySuggestion={(suggestion) => setQueryInput(suggestion)}
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                {/* 查询结果 */}
+                                                {(queryLoading || queryResult) && (
+                                                    <div className="max-h-[200px] overflow-auto border-t border-border">
+                                                        {queryLoading ? (
+                                                            <div className="flex items-center justify-center py-8">
+                                                                <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+                                                            </div>
+                                                        ) : queryResult && queryResult.success && queryResult.rows && queryResult.rows.length > 0 ? (
+                                                            <table className="w-full text-xs">
+                                                                <thead className="sticky top-0 bg-bg-dark">
+                                                                    <tr>
+                                                                        {queryResult.columns?.map((col) => (
+                                                                            <th
+                                                                                key={col.name}
+                                                                                className="px-3 py-2 text-left font-medium text-text-muted border-b border-border"
+                                                                            >
+                                                                                {col.name}
+                                                                            </th>
+                                                                        ))}
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="font-mono">
+                                                                    {queryResult.rows.map((row, idx) => (
+                                                                        <tr
+                                                                            key={idx}
+                                                                            className="border-b border-border hover:bg-bg-light/30 transition-colors"
+                                                                        >
+                                                                            {queryResult.columns?.map((col) => (
+                                                                                <td
+                                                                                    key={col.name}
+                                                                                    className="px-3 py-1.5 text-text-secondary max-w-xs truncate"
+                                                                                    title={row.values[col.name] ?? ''}
+                                                                                >
+                                                                                    {row.values[col.name] === null ? (
+                                                                                        <span className="text-text-muted italic">NULL</span>
+                                                                                    ) : (
+                                                                                        row.values[col.name]
+                                                                                    )}
+                                                                                </td>
+                                                                            ))}
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        ) : queryResult && queryResult.success ? (
+                                                            <div className="flex items-center justify-center py-4 text-text-muted text-xs">
+                                                                查询结果为空
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
-
-                                {/* 查询结果 */}
-                                {(queryLoading || queryResult) && (
-                                    <div className="max-h-[200px] overflow-auto border-t border-border">
-                                        {queryLoading ? (
-                                            <div className="flex items-center justify-center py-8">
-                                                <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
-                                            </div>
-                                        ) : queryResult && queryResult.success && queryResult.rows && queryResult.rows.length > 0 ? (
-                                            <table className="w-full text-xs">
-                                                <thead className="sticky top-0 bg-bg-dark">
-                                                    <tr>
-                                                        {queryResult.columns?.map((col) => (
-                                                            <th
-                                                                key={col.name}
-                                                                className="px-3 py-2 text-left font-medium text-text-muted border-b border-border"
-                                                            >
-                                                                {col.name}
-                                                            </th>
-                                                        ))}
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="font-mono">
-                                                    {queryResult.rows.map((row, idx) => (
-                                                        <tr
-                                                            key={idx}
-                                                            className="border-b border-border hover:bg-bg-light/30 transition-colors"
-                                                        >
-                                                            {queryResult.columns?.map((col) => (
-                                                                <td
-                                                                    key={col.name}
-                                                                    className="px-3 py-1.5 text-text-secondary max-w-xs truncate"
-                                                                    title={row.values[col.name] ?? ''}
-                                                                >
-                                                                    {row.values[col.name] === null ? (
-                                                                        <span className="text-text-muted italic">NULL</span>
-                                                                    ) : (
-                                                                        row.values[col.name]
-                                                                    )}
-                                                                </td>
-                                                            ))}
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        ) : queryResult && queryResult.success ? (
-                                            <div className="flex items-center justify-center py-4 text-text-muted text-xs">
-                                                查询结果为空
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                )}
+                                {/* 拖动手柄 */}
+                                <div
+                                    onMouseDown={startPanelResize}
+                                    className={clsx(
+                                        'h-1.5 cursor-ns-resize flex items-center justify-center transition-colors',
+                                        isPanelResizing ? 'bg-primary/30' : 'hover:bg-bg-lighter'
+                                    )}
+                                    title="拖动调整面板高度"
+                                >
+                                    <div className={clsx(
+                                        'w-10 h-0.5 rounded-full transition-colors',
+                                        isPanelResizing ? 'bg-primary' : 'bg-text-muted/50'
+                                    )} />
+                                </div>
                             </div>
                         )}
 
@@ -1136,46 +1238,63 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                         </tr>
                                     </thead>
                                     <tbody className="font-mono">
-                                        {filteredRows.map((row, idx) => (
-                                            <tr
-                                                key={idx}
-                                                className="border-b border-border hover:bg-bg-light/30 transition-colors"
-                                            >
-                                                {tableData.columns.map((col, colIndex) => {
-                                                    const cellValue = row.values[col.name]
-                                                    const isBlobColumn = col.type?.toLowerCase() === 'blob'
-                                                    const hasProtobufConfig = selectedDb && selectedTable && getColumnConfig(selectedDb, selectedTable, col.name)
-                                                    const shouldTreatAsBlob = isBlobColumn || (cellValue && isBase64Blob(cellValue) && hasProtobufConfig)
-                                                    const colWidth = columnWidths[col.name] || 150
-                                                    const isLastColumn = colIndex === tableData.columns.length - 1
+                                        {filteredRows.map((row, idx) => {
+                                            const isExpandedRow = expandedBlobCell?.rowIndex === idx
+                                            return (
+                                                <tr
+                                                    key={idx}
+                                                    className={clsx(
+                                                        "border-b border-border transition-colors",
+                                                        isExpandedRow
+                                                            ? "bg-purple-500/10"
+                                                            : "hover:bg-bg-light/30"
+                                                    )}
+                                                >
+                                                    {tableData.columns.map((col, colIndex) => {
+                                                        const cellValue = row.values[col.name]
+                                                        const isBlobColumn = col.type?.toLowerCase() === 'blob'
+                                                        const hasProtobufConfig = selectedDb && selectedTable && getColumnConfig(selectedDb, selectedTable, col.name)
+                                                        const shouldTreatAsBlob = isBlobColumn || (cellValue && isBase64Blob(cellValue) && hasProtobufConfig)
+                                                        const colWidth = columnWidths[col.name] || 150
+                                                        const isLastColumn = colIndex === tableData.columns.length - 1
+                                                        const isExpandedCell = isExpandedRow && expandedBlobCell?.columnName === col.name
 
-                                                    return (
-                                                        <td
-                                                            key={col.name}
-                                                            className="px-3 py-2 text-text-secondary cursor-pointer border-r border-border last:border-r-0 overflow-hidden"
-                                                            style={{ width: isLastColumn ? 'auto' : colWidth, minWidth: 80, maxWidth: colWidth }}
-                                                            onDoubleClick={(e) => handleCellDoubleClick(e, cellValue, col.name)}
-                                                            title="双击查看完整内容"
-                                                        >
-                                                            {cellValue === null ? (
-                                                                <span className="text-text-muted italic">NULL</span>
-                                                            ) : shouldTreatAsBlob ? (
-                                                                <BlobCell
-                                                                    value={cellValue}
-                                                                    columnName={col.name}
-                                                                    dbId={selectedDb}
-                                                                    tableName={selectedTable}
-                                                                />
-                                                            ) : (
-                                                                <span className="truncate block">
-                                                                    {cellValue}
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                    )
-                                                })}
-                                            </tr>
-                                        ))}
+                                                        return (
+                                                            <td
+                                                                key={col.name}
+                                                                className={clsx(
+                                                                    "px-3 py-2 text-text-secondary cursor-pointer border-r border-border last:border-r-0 overflow-hidden",
+                                                                    isExpandedCell && "bg-purple-500/20 ring-1 ring-purple-500/50 ring-inset"
+                                                                )}
+                                                                style={{ width: isLastColumn ? 'auto' : colWidth, minWidth: 80, maxWidth: colWidth }}
+                                                                onDoubleClick={(e) => handleCellDoubleClick(e, cellValue, col.name)}
+                                                                title="双击查看完整内容"
+                                                            >
+                                                                {cellValue === null ? (
+                                                                    <span className="text-text-muted italic">NULL</span>
+                                                                ) : shouldTreatAsBlob ? (
+                                                                    <BlobCell
+                                                                        value={cellValue}
+                                                                        columnName={col.name}
+                                                                        dbId={selectedDb}
+                                                                        tableName={selectedTable}
+                                                                        rowData={row.values}
+                                                                        onExpandChange={(expanded) => {
+                                                                            setExpandedBlobCell(expanded ? { rowIndex: idx, columnName: col.name } : null)
+                                                                        }}
+                                                                        isHighlighted={isExpandedCell}
+                                                                    />
+                                                                ) : (
+                                                                    <span className="truncate block">
+                                                                        {cellValue}
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                        )
+                                                    })}
+                                                </tr>
+                                            )
+                                        })}
                                     </tbody>
                                 </table>
                             ) : dataError ? (

@@ -27,6 +27,12 @@ interface BlobCellProps {
     dbId: string | null
     /** 表名 */
     tableName: string | null
+    /** 当前行的所有列数据（用于类型映射） */
+    rowData?: Record<string, unknown>
+    /** 展开状态变化回调 */
+    onExpandChange?: (isExpanded: boolean) => void
+    /** 是否处于高亮选中状态 */
+    isHighlighted?: boolean
 }
 
 type ViewMode = 'decoded' | 'wire' | 'hex'
@@ -43,12 +49,16 @@ export function BlobCell({
     columnName,
     dbId,
     tableName,
+    rowData,
+    onExpandChange,
+    isHighlighted = false,
 }: BlobCellProps) {
     const {
         getColumnConfig,
         autoDetectTypeWithDescriptor,
         decodeBlobWithType,
         getDescriptorMessageTypes,
+        getMessageTypeByMapping,
     } = useProtobufStore()
 
     const [isExpanded, setIsExpanded] = useState(false)
@@ -66,11 +76,15 @@ export function BlobCell({
     const handleClose = useCallback(() => {
         setIsExpanded(false)
         resetPosition()
-    }, [resetPosition])
+        onExpandChange?.(false)
+    }, [resetPosition, onExpandChange])
 
     // 自动检测相关状态
     const [autoDetecting, setAutoDetecting] = useState(false)
     const [autoDetectedType, setAutoDetectedType] = useState<string | null>(null)
+
+    // 通过类型映射获取的类型
+    const [mappedType, setMappedType] = useState<string | null>(null)
 
     // 用户手动选择的类型（覆盖自动检测）
     const [manualSelectedType, setManualSelectedType] = useState<string>('')
@@ -82,24 +96,43 @@ export function BlobCell({
     const columnConfig = dbId && tableName ? getColumnConfig(dbId, tableName, columnName) : null
     const descriptorName = columnConfig?.descriptorName || null
 
+    // 是否配置了类型映射
+    const hasTypeMapping = !!(columnConfig?.typeSourceColumn && columnConfig?.typeMappings?.length)
+
     // 获取描述符的所有消息类型
     const availableMessageTypes = descriptorName
         ? getDescriptorMessageTypes(descriptorName)
         : []
 
-    // 当前使用的类型：手动选择 > 自动检测（禁用时都为空）
-    const currentMessageType = disableDescriptorDecode ? '' : (manualSelectedType || autoDetectedType || '')
+    // 当前使用的类型：手动选择 > 映射类型 > 自动检测（禁用时都为空）
+    const currentMessageType = disableDescriptorDecode ? '' : (manualSelectedType || mappedType || autoDetectedType || '')
+
+    // 空选项的显示文本：有映射配置时显示"映射匹配"，否则显示"自动匹配"
+    const emptyOptionText = hasTypeMapping ? '映射匹配' : '自动匹配'
 
     // 当前显示的简化类型名（用于计算宽度）
-    const displayTypeName = currentMessageType ? simplifyTypeName(currentMessageType) : '自动匹配'
+    // 如果没有手动选择类型，显示空选项文本
+    const displayTypeName = manualSelectedType ? simplifyTypeName(manualSelectedType) : emptyOptionText
 
-    // 展开时自动检测类型（仅当列已配置描述符且未禁用时）
+    // 展开时检测类型：先检查类型映射，然后回退到自动检测
     useEffect(() => {
-        if (!isExpanded || !value || !descriptorName) return
+        if (!isExpanded || !value || !descriptorName || !columnConfig) return
 
-        // 禁用描述符解析或手动选择时跳过自动检测
+        // 禁用描述符解析或手动选择时跳过
         if (disableDescriptorDecode || manualSelectedType) return
 
+        // 1. 优先检查类型映射
+        if (hasTypeMapping && rowData) {
+            const mapped = getMessageTypeByMapping(columnConfig, rowData)
+            if (mapped) {
+                setMappedType(mapped)
+                setAutoDetectedType(null)
+                return
+            }
+        }
+
+        // 2. 回退到自动检测
+        setMappedType(null)
         setAutoDetecting(true)
         autoDetectTypeWithDescriptor(descriptorName, value).then(result => {
             setAutoDetecting(false)
@@ -107,7 +140,7 @@ export function BlobCell({
                 setAutoDetectedType(result)
             }
         })
-    }, [isExpanded, value, descriptorName, manualSelectedType, disableDescriptorDecode, autoDetectTypeWithDescriptor])
+    }, [isExpanded, value, descriptorName, columnConfig, rowData, hasTypeMapping, manualSelectedType, disableDescriptorDecode, getMessageTypeByMapping, autoDetectTypeWithDescriptor])
 
     // 解码数据
     useEffect(() => {
@@ -119,7 +152,7 @@ export function BlobCell({
         setDecodedData(null)
 
         const decodeWithType = async () => {
-            const typeToUse = manualSelectedType || autoDetectedType
+            const typeToUse = manualSelectedType || mappedType || autoDetectedType
 
             if (typeToUse && descriptorName) {
                 // 使用 Schema 解码
@@ -143,7 +176,7 @@ export function BlobCell({
         }
 
         decodeWithType()
-    }, [value, isExpanded, viewMode, manualSelectedType, autoDetectedType, descriptorName, disableDescriptorDecode, decodeBlobWithType])
+    }, [value, isExpanded, viewMode, manualSelectedType, mappedType, autoDetectedType, descriptorName, disableDescriptorDecode, decodeBlobWithType])
 
     // 处理选择类型（包括选择"自动匹配"选项）
     const handleTypeChange = (type: string) => {
@@ -188,21 +221,67 @@ export function BlobCell({
         return tryAutoDecode(value)
     }, [value, viewMode, isExpanded])
 
-    // 计算弹窗宽度：根据当前选择（或自动匹配）的类型名长度自适应
+    // 计算弹窗宽度：根据 Protobuf 类型行的实际内容动态计算
     const dialogWidth = useMemo(() => {
-        // 基础宽度用于显示头部和按钮
-        const baseWidth = 380
-        // 根据当前显示的类型名长度计算宽度
-        // 每个字符约 8px，加上 padding (24px)、标签文字 (~90px)、下拉框边框 (2px)
-        // X 按钮 (~20px)、下拉箭头 (~20px)、间距 (12px) = ~170px
-        const typeWidth = displayTypeName.length * 8 + 170
-        // 当处于自动匹配状态且有自动检测结果时，需要额外宽度显示 "✨ 自动匹配" 标签 (~80px)
-        // 或者正在检测中时显示 "✨ 检测中..." (~70px)
-        const autoMatchLabelWidth = (autoDetecting || (autoDetectedType && !manualSelectedType && !disableDescriptorDecode)) ? 85 : 0
-        // 当有选中值时，显示 X 清除按钮需要额外空间
-        const clearButtonWidth = currentMessageType ? 24 : 0
-        return Math.max(baseWidth, Math.min(typeWidth + autoMatchLabelWidth + clearButtonWidth, 1000))
-    }, [displayTypeName, autoDetecting, autoDetectedType, manualSelectedType, disableDescriptorDecode, currentMessageType])
+        // 基础宽度（无 Protobuf 配置时使用）
+        const baseWidth = 400
+        
+        // 如果没有描述符或消息类型，使用基础宽度
+        if (!descriptorName || availableMessageTypes.length === 0) {
+            return baseWidth
+        }
+        
+        // 计算类型选择行的宽度：
+        // 布局: [padding] [标签] [gap] [选择框] [gap] [状态标签?] [padding]
+        
+        // 1. 左右 padding: 16px * 2 = 32px (px-4)
+        const padding = 32
+        
+        // 2. "Protobuf 类型:" 标签宽度 (约 85px)
+        const labelWidth = 85
+        
+        // 3. 标签和选择框之间的 gap: 12px (gap-3)
+        const gap1 = 12
+        
+        // 4. 选择框宽度：
+        //    - 类型名文字（等宽字体，每字符约 7.5px）
+        //    - 左右内边距: 12px * 2 = 24px
+        //    - X 清除按钮（有值时显示）: 20px
+        //    - 下拉箭头: 20px
+        //    - 边框和额外间距: 8px
+        const typeNameWidth = displayTypeName.length * 7.5
+        const selectPadding = 24
+        // 清除按钮仅在手动选择类型时显示
+        const clearButton = manualSelectedType ? 20 : 0
+        const dropdownArrow = 20
+        const selectExtra = 8
+        const selectWidth = typeNameWidth + selectPadding + clearButton + dropdownArrow + selectExtra
+        
+        // 5. 选择框和状态标签之间的 gap: 12px
+        const gap2 = 12
+        
+        // 6. 状态标签宽度（根据显示内容）
+        //    - "检测中...": 约 70px
+        //    - "→ xxx": 根据实际类型名长度计算
+        let statusLabelWidth = 0
+        if (!disableDescriptorDecode && !manualSelectedType) {
+            if (autoDetecting) {
+                statusLabelWidth = 75 // "✨ 检测中..."
+            } else if (mappedType || autoDetectedType) {
+                // 显示实际匹配到的类型名，计算其宽度
+                const actualType = mappedType || autoDetectedType || ''
+                const actualTypeName = simplifyTypeName(actualType)
+                // "→ " + 类型名，每字符约 7px
+                statusLabelWidth = 20 + actualTypeName.length * 7
+            }
+        }
+        
+        // 计算总宽度
+        const totalWidth = padding + labelWidth + gap1 + selectWidth + (statusLabelWidth > 0 ? gap2 + statusLabelWidth : 0)
+        
+        // 确保宽度在合理范围内
+        return Math.max(baseWidth, Math.min(totalWidth, 800))
+    }, [descriptorName, availableMessageTypes.length, displayTypeName, currentMessageType, disableDescriptorDecode, autoDetecting, mappedType, autoDetectedType, manualSelectedType])
 
     // ESC 键关闭弹窗
     useEffect(() => {
@@ -243,27 +322,44 @@ export function BlobCell({
         return ''
     }, [viewMode, decodedData, wireDecoded, hexView])
 
-    // 折叠状态的预览
+    // 处理展开
+    const handleExpand = useCallback(() => {
+        setIsExpanded(true)
+        onExpandChange?.(true)
+    }, [onExpandChange])
+
+    // 单元格内的预览按钮（始终显示）
+    const previewButton = (
+        <button
+            onClick={handleExpand}
+            className={clsx(
+                "flex items-center gap-1 text-xs transition-colors",
+                isHighlighted
+                    ? "text-white"
+                    : "text-purple-400 hover:text-purple-300"
+            )}
+            title="点击展开查看详情"
+        >
+            <PackageIcon size={14} className="opacity-70" />
+            <span className="font-mono">
+                [BLOB {blobSize}B]
+            </span>
+        </button>
+    )
+
+    // 折叠状态：只显示预览
     if (!isExpanded) {
-        return (
-            <button
-                onClick={() => setIsExpanded(true)}
-                className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                title="点击展开查看详情"
-            >
-                <PackageIcon size={14} className="opacity-70" />
-                <span className="font-mono">
-                    [BLOB {blobSize}B]
-                </span>
-            </button>
-        )
+        return previewButton
     }
 
+    // 展开状态：显示预览 + 弹窗
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            onClick={handleClose}
-        >
+        <>
+            {previewButton}
+            <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+                onClick={handleClose}
+            >
             <div
                 className={clsx(
                     'bg-bg-dark rounded-lg border border-border shadow-2xl max-h-[80vh] flex flex-col',
@@ -313,8 +409,8 @@ export function BlobCell({
                                     <div className="flex-1 min-w-0">
                                         <GroupedFilterSelect
                                             options={availableMessageTypes}
-                                            value={currentMessageType}
-                                            placeholder="自动匹配"
+                                            value={manualSelectedType}
+                                            placeholder={emptyOptionText}
                                             formatOption={simplifyTypeName}
                                             showEmptyOption
                                             onChange={handleTypeChange}
@@ -327,10 +423,14 @@ export function BlobCell({
                                             检测中...
                                         </span>
                                     )}
-                                    {autoDetectedType && currentMessageType === autoDetectedType && !manualSelectedType && (
-                                        <span className="flex items-center gap-1 text-2xs text-green-400 shrink-0">
-                                            <SparklesIcon size={12} />
-                                            自动匹配
+                                    {/* 当选中空选项（映射匹配/自动匹配）时，显示实际匹配到的类型 */}
+                                    {!manualSelectedType && !autoDetecting && (mappedType || autoDetectedType) && (
+                                        <span className={clsx(
+                                            "flex items-center gap-1 text-2xs shrink-0",
+                                            mappedType ? "text-blue-400" : "text-green-400"
+                                        )}>
+                                            →
+                                            <span className="font-mono">{simplifyTypeName(mappedType || autoDetectedType || '')}</span>
                                         </span>
                                     )}
                                 </>
@@ -476,6 +576,7 @@ export function BlobCell({
                 )}
             </div>
         </div>
+        </>
     )
 }
 

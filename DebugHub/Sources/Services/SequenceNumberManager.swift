@@ -13,6 +13,7 @@ enum SequenceType: String, Hashable {
     case http
     case log
     case wsFrame
+    case pageTiming
 }
 
 /// 设备维度的序号管理器
@@ -77,6 +78,13 @@ actor SequenceNumberManager {
                     .sort(\.$seqNum, .descending)
                     .first()
                 return maxEvent?.seqNum ?? 0
+
+            case .pageTiming:
+                let maxEvent = try await PageTimingEventModel.query(on: db)
+                    .filter(\.$deviceId == deviceId)
+                    .sort(\.$seqNum, .descending)
+                    .first()
+                return maxEvent?.seqNum ?? 0
             }
         } catch {
             print("[SequenceNumberManager] Failed to fetch max seq_num: \(error)")
@@ -86,7 +94,7 @@ actor SequenceNumberManager {
 
     /// 重置指定设备的序号缓存（当清空数据时调用）
     func reset(for deviceId: String) {
-        for type in [SequenceType.http, .log, .wsFrame] {
+        for type in [SequenceType.http, .log, .wsFrame, .pageTiming] {
             let cacheKey = key(deviceId: deviceId, type: type)
             sequences.removeValue(forKey: cacheKey)
         }

@@ -389,3 +389,44 @@ struct AddDeviceAlias: AsyncMigration {
             .update()
     }
 }
+
+// MARK: - Create Page Timing Event Table
+
+/// 页面耗时事件表
+struct CreatePageTimingEvent: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("page_timing_events")
+            .field("id", .string, .identifier(auto: false))
+            .field("device_id", .string, .required)
+            .field("visit_id", .string, .required)
+            .field("page_id", .string, .required)
+            .field("page_name", .string, .required)
+            .field("route", .string)
+            .field("start_at", .datetime, .required)
+            .field("first_layout_at", .datetime)
+            .field("appear_at", .datetime)
+            .field("end_at", .datetime)
+            .field("load_duration", .double)
+            .field("appear_duration", .double)
+            .field("total_duration", .double)
+            .field("markers_json", .string)
+            .field("app_version", .string)
+            .field("app_build", .string)
+            .field("os_version", .string)
+            .field("device_model", .string)
+            .field("is_cold_start", .bool, .required)
+            .field("is_push", .bool)
+            .field("parent_page_id", .string)
+            .field("seq_num", .int64, .required, .sql(.default(0)))
+            .create()
+
+        // 创建索引
+        try await database.schema("page_timing_events")
+            .unique(on: "id")
+            .update()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("page_timing_events").delete()
+    }
+}

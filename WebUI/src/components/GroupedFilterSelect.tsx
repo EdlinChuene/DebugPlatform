@@ -3,6 +3,7 @@
  * 支持首字母分组、排序、关键字搜索
  */
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { SearchIcon, XMarkIcon, ChevronDownIcon, CheckIcon } from './icons'
 
@@ -75,16 +76,34 @@ export function GroupedFilterSelect({
 }: Props) {
     const [isOpen, setIsOpen] = useState(false)
     const [searchText, setSearchText] = useState('')
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
     const containerRef = useRef<HTMLDivElement>(null)
+    const dropdownRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
 
     // 格式化显示文本
     const formatDisplay = (val: string) => formatOption ? formatOption(val) : val
 
+    // 计算下拉菜单位置
+    useEffect(() => {
+        if (isOpen && containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect()
+            setDropdownPosition({
+                top: rect.bottom + 4, // 4px margin
+                left: rect.left,
+                width: Math.max(rect.width, 256), // 最小宽度 256px
+            })
+        }
+    }, [isOpen])
+
     // 点击外部关闭
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+            const target = event.target as Node
+            if (
+                containerRef.current && !containerRef.current.contains(target) &&
+                dropdownRef.current && !dropdownRef.current.contains(target)
+            ) {
                 setIsOpen(false)
             }
         }
@@ -180,9 +199,18 @@ export function GroupedFilterSelect({
                 </div>
             </button>
 
-            {/* 下拉面板 */}
-            {isOpen && (
-                <div className="absolute top-full left-0 mt-1 w-64 bg-bg-dark border border-border rounded-lg shadow-xl z-50 overflow-hidden">
+            {/* 下拉面板 - 使用 Portal 渲染到 body，避免被父容器 overflow 裁切 */}
+            {isOpen && createPortal(
+                <div 
+                    ref={dropdownRef}
+                    className="fixed bg-bg-dark border border-border rounded-lg shadow-xl overflow-hidden"
+                    style={{
+                        top: dropdownPosition.top,
+                        left: dropdownPosition.left,
+                        width: dropdownPosition.width,
+                        zIndex: 9999,
+                    }}
+                >
                     {/* 搜索框 */}
                     <div className="p-2 border-b border-border">
                         <div className="relative">
@@ -270,7 +298,8 @@ export function GroupedFilterSelect({
                             <span>，已筛选 {filteredOptions.length} 项</span>
                         )}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     )
