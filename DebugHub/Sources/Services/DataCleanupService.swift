@@ -6,6 +6,7 @@
 //
 
 import Fluent
+import FluentSQL
 import Foundation
 import Vapor
 
@@ -89,6 +90,7 @@ final class DataCleanupService: LifecycleHandler, @unchecked Sendable {
             let perfMetricsCount = try await PerformanceMetricsModel.query(on: db).count()
             let jankEventsCount = try await JankEventModel.query(on: db).count()
             let alertsCount = try await AlertModel.query(on: db).count()
+            let pageTimingCount = try await PageTimingEventModel.query(on: db).count()
 
             // 统计规则数量
             let mockRuleCount = try await MockRuleModel.query(on: db).count()
@@ -105,6 +107,7 @@ final class DataCleanupService: LifecycleHandler, @unchecked Sendable {
             try await PerformanceMetricsModel.query(on: db).delete()
             try await JankEventModel.query(on: db).delete()
             try await AlertModel.query(on: db).delete()
+            try await PageTimingEventModel.query(on: db).delete()
 
             // 删除所有规则
             try await MockRuleModel.query(on: db).delete()
@@ -115,11 +118,25 @@ final class DataCleanupService: LifecycleHandler, @unchecked Sendable {
             // 重置序号缓存
             await SequenceNumberManager.shared.resetAll()
 
-            let totalDeleted = httpCount + logCount + wsFrameCount + wsSessionCount + deviceSessionCount + perfMetricsCount + jankEventsCount + alertsCount
+            // 执行 VACUUM 以回收数据库空间
+            let databaseMode = Environment.get("DATABASE_MODE")?.lowercased() ?? "postgres"
+            if let rawSQL = db as? SQLDatabase {
+                if databaseMode == "sqlite" {
+                    // SQLite VACUUM
+                    try? await rawSQL.raw("VACUUM").run()
+                    app.logger.info("SQLite VACUUM completed")
+                } else {
+                    // PostgreSQL: VACUUM（非完全模式，允许并发）
+                    try? await rawSQL.raw("VACUUM").run()
+                    app.logger.info("PostgreSQL VACUUM completed")
+                }
+            }
+
+            let totalDeleted = httpCount + logCount + wsFrameCount + wsSessionCount + deviceSessionCount + perfMetricsCount + jankEventsCount + alertsCount + pageTimingCount
             let totalRulesDeleted = mockRuleCount + breakpointRuleCount + chaosRuleCount + trafficRuleCount
 
             app.logger.warning(
-                "Database truncated: HTTP=\(httpCount), Log=\(logCount), WSFrame=\(wsFrameCount), WSSession=\(wsSessionCount), DeviceSession=\(deviceSessionCount), PerfMetrics=\(perfMetricsCount), JankEvents=\(jankEventsCount), Alerts=\(alertsCount), MockRule=\(mockRuleCount), BreakpointRule=\(breakpointRuleCount), ChaosRule=\(chaosRuleCount), TrafficRule=\(trafficRuleCount)"
+                "Database truncated: HTTP=\(httpCount), Log=\(logCount), WSFrame=\(wsFrameCount), WSSession=\(wsSessionCount), DeviceSession=\(deviceSessionCount), PerfMetrics=\(perfMetricsCount), JankEvents=\(jankEventsCount), Alerts=\(alertsCount), PageTiming=\(pageTimingCount), MockRule=\(mockRuleCount), BreakpointRule=\(breakpointRuleCount), ChaosRule=\(chaosRuleCount), TrafficRule=\(trafficRuleCount)"
             )
 
             return TruncateResult(

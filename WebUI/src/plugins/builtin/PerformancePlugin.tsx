@@ -232,12 +232,15 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
         }
     }, [deviceId])
 
-    // 清除数据
+    // 清除数据（包含页面耗时）
     const handleClear = useCallback(async () => {
         if (deviceId) {
             setIsClearing(true)
             try {
-                await store.clearMetrics(deviceId)
+                await Promise.all([
+                    store.clearMetrics(deviceId),
+                    store.clearPageTimingEvents(deviceId),
+                ])
                 toast.show('success', '已清除性能数据')
                 setShowClearConfirm(false)
             } finally {
@@ -390,8 +393,8 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
                         )}
                     </div>
 
-                    {/* 清除数据 */}
-                    {(store.realtimeMetrics.length > 0 || store.jankEvents.length > 0) && (
+                    {/* 清除数据（包含页面耗时） */}
+                    {(store.realtimeMetrics.length > 0 || store.jankEvents.length > 0 || store.pageTimingTotal > 0) && (
                         <>
                             <div className="h-5 w-px bg-border flex-shrink-0" />
                             <button
@@ -473,7 +476,6 @@ function PerformancePluginView({ context, isActive }: PluginRenderProps) {
                         onFetch={(params) => store.fetchPageTimingEvents(deviceId, params)}
                         onFetchSummary={(from, to) => store.fetchPageTimingSummary(deviceId, from, to)}
                         onSelectEvent={(event) => store.setSelectedPageTimingEvent(event)}
-                        onClear={() => store.clearPageTimingEvents(deviceId)}
                     />
                 )}
             </div>
@@ -2604,7 +2606,6 @@ interface PageTimingContentProps {
     onFetch: (params: PageTimingQueryParams) => void
     onFetchSummary: (from?: Date, to?: Date) => void
     onSelectEvent: (event: PageTimingEvent | null) => void
-    onClear: () => void
 }
 
 function PageTimingContent({
@@ -2619,11 +2620,9 @@ function PageTimingContent({
     onFetch,
     onFetchSummary,
     onSelectEvent,
-    onClear,
 }: PageTimingContentProps) {
     // 视图模式: summary=汇总, list=列表, distribution=分布图
     const [viewMode, setViewMode] = useState<'summary' | 'list' | 'distribution'>('summary')
-    const [showClearConfirm, setShowClearConfirm] = useState(false)
     const [showFilters, setShowFilters] = useState(false)
 
     // 筛选状态
@@ -2741,15 +2740,6 @@ function PageTimingContent({
                     <span className="text-xs text-text-muted">
                         共 {total} 条记录
                     </span>
-                    {total > 0 && (
-                        <button
-                            onClick={() => setShowClearConfirm(true)}
-                            className="btn btn-ghost text-red-400 hover:bg-red-500/10 text-xs px-2 py-0.5 flex items-center"
-                        >
-                            <TrashIcon size={12} className="mr-1" />
-                            清空
-                        </button>
-                    )}
                 </div>
             </div>
 
@@ -2857,21 +2847,6 @@ function PageTimingContent({
                     onClose={() => onSelectEvent(null)}
                 />
             )}
-
-            {/* 清空确认对话框 */}
-            <ConfirmDialog
-                isOpen={showClearConfirm}
-                onClose={() => setShowClearConfirm(false)}
-                onConfirm={() => {
-                    onClear()
-                    setShowClearConfirm(false)
-                }}
-                title="清空页面耗时数据"
-                message="确定要清空该设备的全部页面耗时数据吗？此操作不可恢复。"
-                confirmText="确认清空"
-                cancelText="取消"
-                type="danger"
-            />
         </div>
     )
 }
@@ -3017,7 +2992,7 @@ function PageTimingDistributionView({
         return (
             <div className="flex flex-col items-center justify-center h-full">
                 <ClockIcon size={48} className="text-text-muted mb-4" />
-                <span className="text-text-muted text-sm">暂无数据</span>
+                <span className="text-text-muted text-sm">暂无页面耗时数据</span>
             </div>
         )
     }
