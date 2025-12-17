@@ -575,12 +575,12 @@ export function Sidebar() {
                     <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
                       <div className="relative">
                         <div className={clsx(
-                          "w-9 h-9 rounded-lg flex items-center justify-center",
+                          "w-9 h-9 rounded-lg flex items-center justify-center border",
                           isSelected
-                            ? "bg-primary/20"
+                            ? "bg-primary/20 border-primary/30"
                             : isOffline
-                              ? "bg-bg-medium/50"
-                              : "bg-bg-medium"
+                              ? "bg-bg-medium/50 border-border"
+                              : "bg-bg-medium border-white/10"
                         )}>
                           {getPlatformIcon(device.platform, 18, undefined, device.isSimulator)}
                         </div>
