@@ -264,6 +264,9 @@ struct PerfAppLaunchDTO: Codable {
     let launchToFirstFrameTime: Double?
     /// 记录时间戳
     let timestamp: Date
+    /// PreMain 细分详情（可选）
+    /// 使用 PerformanceBackendPlugin 中定义的 PreMainDetailsDTO
+    let preMainDetails: PreMainDetailsDTO?
 }
 
 // MARK: - Page Timing Event DTO

@@ -324,7 +324,8 @@ public final class PerformanceBackendPlugin: BackendPlugin, @unchecked Sendable 
                     preMainTime: launchMetrics.preMainTime,
                     mainToLaunchTime: launchMetrics.mainToLaunchTime,
                     launchToFirstFrameTime: launchMetrics.launchToFirstFrameTime,
-                    timestamp: launchMetrics.timestamp
+                    timestamp: launchMetrics.timestamp,
+                    preMainDetails: launchMetrics.preMainDetails
                 ),
                 pageTiming: nil
             )
@@ -1241,6 +1242,8 @@ public struct AppLaunchMetricsDTO: Codable, Content {
     public let launchToFirstFrameTime: Double?
     /// 记录时间戳
     public let timestamp: Date
+    /// PreMain 细分详情（可选）
+    public let preMainDetails: PreMainDetailsDTO?
 
     public func toDictionary() -> [String: Any] {
         var result: [String: Any] = [
@@ -1256,7 +1259,90 @@ public struct AppLaunchMetricsDTO: Codable, Content {
         if let launchToFirstFrameTime {
             result["launchToFirstFrameTime"] = launchToFirstFrameTime
         }
+        if let preMainDetails {
+            result["preMainDetails"] = preMainDetails.toDictionary()
+        }
         return result
+    }
+}
+
+/// PreMain 细分详情 DTO
+public struct PreMainDetailsDTO: Codable, Content {
+    /// dylib 加载耗时（毫秒）
+    public let dylibLoadingMs: Double?
+    /// 静态初始化器耗时（毫秒）
+    public let staticInitializerMs: Double?
+    /// dyld 结束到 main 的耗时（毫秒）
+    public let postDyldToMainMs: Double?
+    /// ObjC +load 耗时（毫秒）
+    public let objcLoadMs: Double?
+    /// 估算的内核启动到 constructor 的时间（毫秒）
+    public let estimatedKernelToConstructorMs: Double?
+    /// dylib 统计
+    public let dylibStats: DylibStatsDTO?
+    /// 加载最慢的 dylib 列表
+    public let slowestDylibs: [DylibLoadInfoDTO]?
+
+    public func toDictionary() -> [String: Any] {
+        var result: [String: Any] = [:]
+        if let dylibLoadingMs {
+            result["dylibLoadingMs"] = dylibLoadingMs
+        }
+        if let staticInitializerMs {
+            result["staticInitializerMs"] = staticInitializerMs
+        }
+        if let postDyldToMainMs {
+            result["postDyldToMainMs"] = postDyldToMainMs
+        }
+        if let objcLoadMs {
+            result["objcLoadMs"] = objcLoadMs
+        }
+        if let estimatedKernelToConstructorMs {
+            result["estimatedKernelToConstructorMs"] = estimatedKernelToConstructorMs
+        }
+        if let dylibStats {
+            result["dylibStats"] = dylibStats.toDictionary()
+        }
+        if let slowestDylibs {
+            result["slowestDylibs"] = slowestDylibs.map { $0.toDictionary() }
+        }
+        return result
+    }
+}
+
+/// dylib 统计 DTO
+public struct DylibStatsDTO: Codable, Content {
+    /// 总 dylib 数量
+    public let totalCount: Int
+    /// 系统库数量
+    public let systemCount: Int
+    /// 用户库数量
+    public let userCount: Int
+
+    public func toDictionary() -> [String: Any] {
+        [
+            "totalCount": totalCount,
+            "systemCount": systemCount,
+            "userCount": userCount,
+        ]
+    }
+}
+
+/// dylib 加载信息 DTO
+public struct DylibLoadInfoDTO: Codable, Content {
+    /// dylib 名称
+    public let name: String
+    /// 加载耗时（毫秒）
+    public let loadDurationMs: Double
+    /// 是否为系统库
+    public let isSystemLibrary: Bool
+
+    public func toDictionary() -> [String: Any] {
+        [
+            "name": name,
+            "loadDurationMs": loadDurationMs,
+            "isSystemLibrary": isSystemLibrary,
+        ]
     }
 }
 

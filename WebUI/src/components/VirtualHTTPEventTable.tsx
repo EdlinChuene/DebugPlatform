@@ -12,6 +12,7 @@ import { type ListItem, isSessionDivider } from '@/stores/httpStore'
 import { useRuleStore } from '@/stores/ruleStore'
 import { useFavoriteUrlStore } from '@/stores/favoriteUrlStore'
 import { useResizableColumns, ColumnResizeHandle, ColumnDivider, type ColumnConfig } from '@/hooks/useResizableColumns'
+import { useNewItemHighlight } from '@/hooks/useNewItemHighlight'
 import {
     formatSmartTime,
     formatDuration,
@@ -176,6 +177,9 @@ export function VirtualHTTPEventTable({
         })
     }, [rawHttpEvents, applicableRules, showBlacklisted])
 
+    // 跟踪新增项高亮
+    const { isNewItem } = useNewItemHighlight(httpEvents)
+
     // 生成一个稳定的 key，当 httpEvents 数组内容变化时更新
     // 使用第一个事件的 ID 和数组长度来唯一标识当前数据状态
     const virtualizerKey = useMemo(() => {
@@ -297,6 +301,9 @@ export function VirtualHTTPEventTable({
             ? { borderLeftColor: ruleColor }
             : {}
 
+        // 检查是否为新增项
+        const isNew = isNewItem(event.id)
+
         return (
             <div
                 style={rowStyle}
@@ -314,7 +321,9 @@ export function VirtualHTTPEventTable({
                     // 错误状态（非选中、非高亮状态）
                     !isSelected && !isChecked && !isHighlighted && isError && 'bg-red-500/5 hover:bg-red-500/10',
                     // 默认悬停
-                    !isSelected && !isChecked && !isHighlighted && !isError && 'hover:bg-bg-light/60'
+                    !isSelected && !isChecked && !isHighlighted && !isError && 'hover:bg-bg-light/60',
+                    // 新增项高亮动画
+                    isNew && !isSelected && 'animate-row-new'
                 )}
             >
                 {/* 序号列 */}

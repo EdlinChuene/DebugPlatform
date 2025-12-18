@@ -10,6 +10,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type { LogEvent, LogLevel } from '@/types'
 import { formatSmartTime, getLogLevelClass } from '@/utils/format'
 import { useResizableColumns, ColumnResizeHandle, ColumnDivider, type ColumnConfig } from '@/hooks/useResizableColumns'
+import { useNewItemHighlight } from '@/hooks/useNewItemHighlight'
 import clsx from 'clsx'
 import { LogIcon } from './icons'
 import { Checkbox } from './Checkbox'
@@ -89,6 +90,9 @@ export function VirtualLogList({
     storageKey: 'log-table',
     columns: LOG_COLUMNS,
   })
+
+  // 跟踪新增项高亮
+  const { isNewItem } = useNewItemHighlight(events)
 
   // 生成稳定的 key
   const virtualizerKey = useMemo(() => {
@@ -175,6 +179,8 @@ export function VirtualLogList({
     const isSelected = !isSelectMode && selectedId === event.id
     // 使用后端返回的序号，保证删除数据后原有序号不变
     const rowNumber = event.seqNum
+    // 检查是否为新增项
+    const isNew = isNewItem(event.id)
 
     const handleClick = () => {
       if (isSelectMode) {
@@ -202,7 +208,9 @@ export function VirtualLogList({
           !isSelected && isChecked && 'bg-primary/15',
           // 默认状态
           !isSelected && !isChecked && (index % 2 === 0 ? 'bg-bg-dark/20' : 'bg-transparent'),
-          !isSelected && !isChecked && 'hover:bg-bg-light/60'
+          !isSelected && !isChecked && 'hover:bg-bg-light/60',
+          // 新增项高亮动画
+          isNew && !isSelected && 'animate-row-new'
         )}
       >
         {/* Level indicator bar */}
@@ -264,7 +272,7 @@ export function VirtualLogList({
         </div>
       </div>
     )
-  }, [selectedId, isSelectMode, selectedIds, onSelect, onToggleSelect, onDoubleClick, getColumnStyle])
+  }, [selectedId, isSelectMode, selectedIds, onSelect, onToggleSelect, onDoubleClick, getColumnStyle, isNewItem])
 
   return (
     <div className={clsx('h-full flex flex-col overflow-hidden', isResizing && 'select-none')}>

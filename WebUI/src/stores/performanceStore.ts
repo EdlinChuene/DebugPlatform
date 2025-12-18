@@ -55,6 +55,31 @@ export interface DiskIOMetrics {
     writeRate: number // bytes/s
 }
 
+// PreMain 细分详情
+export interface PreMainDetails {
+    dylibLoadingMs?: number              // dylib 加载耗时（毫秒）
+    staticInitializerMs?: number         // 静态初始化器耗时（毫秒）
+    postDyldToMainMs?: number           // dyld 结束到 main 的耗时（毫秒）
+    objcLoadMs?: number                 // ObjC +load 耗时（毫秒）
+    estimatedKernelToConstructorMs?: number // 估算的内核启动时间（毫秒）
+    dylibStats?: DylibStats             // dylib 统计
+    slowestDylibs?: DylibLoadInfo[]     // 加载最慢的 dylib 列表
+}
+
+// dylib 统计
+export interface DylibStats {
+    totalCount: number            // 总 dylib 数量
+    systemCount: number           // 系统库数量
+    userCount: number             // 用户库数量
+}
+
+// dylib 加载信息
+export interface DylibLoadInfo {
+    name: string                  // dylib 名称
+    loadDurationMs: number        // 加载耗时（毫秒）
+    isSystemLibrary: boolean      // 是否为系统库
+}
+
 // App 启动时间指标（分阶段记录）
 export interface AppLaunchMetrics {
     totalTime: number              // 总启动时间（毫秒）
@@ -62,6 +87,7 @@ export interface AppLaunchMetrics {
     mainToLaunchTime?: number      // Main 到 Launch 阶段耗时（毫秒）
     launchToFirstFrameTime?: number // Launch 到首帧阶段耗时（毫秒）
     timestamp: string              // 记录时间（ISO 字符串）
+    preMainDetails?: PreMainDetails // PreMain 细分详情
 }
 
 // App 启动历史记录项
@@ -72,6 +98,7 @@ export interface AppLaunchHistoryItem {
     mainToLaunchTime?: number
     launchToFirstFrameTime?: number
     timestamp: string // ISO 时间字符串
+    preMainDetails?: PreMainDetails // PreMain 细分详情
 }
 
 // App 启动统计指标
@@ -714,6 +741,7 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
                     mainToLaunchTime: response.launchMetrics.mainToLaunchTime,
                     launchToFirstFrameTime: response.launchMetrics.launchToFirstFrameTime,
                     timestamp: response.launchMetrics.timestamp,
+                    preMainDetails: response.launchMetrics.preMainDetails,
                 } : null,
                 appLaunchHistory: response.history,
                 appLaunchStats: response.stats,
@@ -973,7 +1001,7 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
 
             case 'appLaunch':
                 if (event.appLaunch) {
-                    // SDK 发送分阶段启动数据: { totalTime, preMainTime, mainToLaunchTime, launchToFirstFrameTime, timestamp }
+                    // SDK 发送分阶段启动数据: { totalTime, preMainTime, mainToLaunchTime, launchToFirstFrameTime, timestamp, preMainDetails }
                     set({
                         appLaunchMetrics: {
                             totalTime: event.appLaunch.totalTime,
@@ -981,6 +1009,7 @@ export const usePerformanceStore = create<PerformanceState>((set, get) => ({
                             mainToLaunchTime: event.appLaunch.mainToLaunchTime,
                             launchToFirstFrameTime: event.appLaunch.launchToFirstFrameTime,
                             timestamp: event.appLaunch.timestamp,
+                            preMainDetails: event.appLaunch.preMainDetails,
                         },
                     })
                 }

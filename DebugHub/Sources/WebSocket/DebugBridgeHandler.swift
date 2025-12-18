@@ -333,12 +333,45 @@ final class DebugBridgeHandler: @unchecked Sendable {
             case "appLaunch":
                 pluginEventType = "app_launch"
                 guard let appLaunch = event.appLaunch else { return }
+
+                // 转换 PreMain 细分数据
+                var preMainDetailsDTO: PreMainDetailsDTO?
+                if let details = appLaunch.preMainDetails {
+                    var dylibStatsDTO: DylibStatsDTO?
+                    if let stats = details.dylibStats {
+                        dylibStatsDTO = DylibStatsDTO(
+                            totalCount: stats.totalCount,
+                            systemCount: stats.systemCount,
+                            userCount: stats.userCount
+                        )
+                    }
+
+                    let slowestDylibsDTO = details.slowestDylibs?.map { dylib in
+                        DylibLoadInfoDTO(
+                            name: dylib.name,
+                            loadDurationMs: dylib.loadDurationMs,
+                            isSystemLibrary: dylib.isSystemLibrary
+                        )
+                    }
+
+                    preMainDetailsDTO = PreMainDetailsDTO(
+                        dylibLoadingMs: details.dylibLoadingMs,
+                        staticInitializerMs: details.staticInitializerMs,
+                        postDyldToMainMs: details.postDyldToMainMs,
+                        objcLoadMs: details.objcLoadMs,
+                        estimatedKernelToConstructorMs: details.estimatedKernelToConstructorMs,
+                        dylibStats: dylibStatsDTO,
+                        slowestDylibs: slowestDylibsDTO
+                    )
+                }
+
                 let launchDTO = AppLaunchMetricsDTO(
                     totalTime: appLaunch.totalTime,
                     preMainTime: appLaunch.preMainTime,
                     mainToLaunchTime: appLaunch.mainToLaunchTime,
                     launchToFirstFrameTime: appLaunch.launchToFirstFrameTime,
-                    timestamp: appLaunch.timestamp
+                    timestamp: appLaunch.timestamp,
+                    preMainDetails: preMainDetailsDTO
                 )
                 payload = try encoder.encode(launchDTO)
 

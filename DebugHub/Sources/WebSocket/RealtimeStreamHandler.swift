@@ -298,12 +298,14 @@ final class RealtimeStreamHandler: LifecycleHandler, @unchecked Sendable {
                     // 对于 frame 事件添加序号
                     var dict = try JSONSerialization.jsonObject(with: encoder.encode(wsEvent)) as? [String: Any] ?? [:]
                     if case let .frame(frame) = wsEvent.kind, let seqNum = seqNumMap[frame.id] {
-                        // frame 数据在 kind.frame 中，需要深入修改
+                        // Swift Codable 将无标签关联值编码为 _0，所以结构是 kind.frame._0
                         if
                             var kind = dict["kind"] as? [String: Any],
-                            var frameDict = kind["frame"] as? [String: Any] {
+                            var frameWrapper = kind["frame"] as? [String: Any],
+                            var frameDict = frameWrapper["_0"] as? [String: Any] {
                             frameDict["seqNum"] = seqNum
-                            kind["frame"] = frameDict
+                            frameWrapper["_0"] = frameDict
+                            kind["frame"] = frameWrapper
                             dict["kind"] = kind
                         }
                     }

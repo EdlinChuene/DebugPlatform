@@ -548,6 +548,32 @@ export interface AppLaunchEventItem {
   mainToLaunchTime?: number     // Main 到 Launch 阶段耗时（毫秒）
   launchToFirstFrameTime?: number // Launch 到首帧阶段耗时（毫秒）
   timestamp: string             // 记录时间
+  preMainDetails?: PreMainDetails // PreMain 细分详情
+}
+
+// PreMain 细分详情
+export interface PreMainDetails {
+  dylibLoadingMs?: number              // dylib 加载耗时（毫秒）
+  staticInitializerMs?: number         // 静态初始化器耗时（毫秒）
+  postDyldToMainMs?: number           // dyld 结束到 main 的耗时（毫秒）
+  objcLoadMs?: number                 // ObjC +load 耗时（毫秒）
+  estimatedKernelToConstructorMs?: number // 估算的内核启动时间（毫秒）
+  dylibStats?: DylibStats             // dylib 统计
+  slowestDylibs?: DylibLoadInfo[]     // 加载最慢的 dylib 列表
+}
+
+// dylib 统计
+export interface DylibStats {
+  totalCount: number            // 总 dylib 数量
+  systemCount: number           // 系统库数量
+  userCount: number             // 用户库数量
+}
+
+// dylib 加载信息
+export interface DylibLoadInfo {
+  name: string                  // dylib 名称
+  loadDurationMs: number        // 加载耗时（毫秒）
+  isSystemLibrary: boolean      // 是否为系统库
 }
 
 // 页面耗时事件数据（来自实时流）

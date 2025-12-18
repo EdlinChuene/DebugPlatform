@@ -10,6 +10,7 @@ import {
     PluginRenderProps,
     PluginState,
 } from '../types'
+import { useNewItemHighlight } from '@/hooks/useNewItemHighlight'
 import { PerformanceIcon, CPUIcon, MemoryIcon, FPSIcon, SettingsIcon, AlertIcon, TrashIcon, ClockIcon, SummaryIcon, ListIcon, DistributionIcon } from '@/components/icons'
 import { Checkbox } from '@/components/Checkbox'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -32,10 +33,12 @@ import {
     type Alert,
     type AlertRule,
     type AlertSeverity,
+    type AppLaunchMetrics,
     type AppLaunchHistoryItem,
     type AppLaunchStats,
     type PageTimingEvent,
     type PageTimingSummary,
+    type DylibLoadInfo,
 } from '@/stores/performanceStore'
 import { useDeviceStore } from '@/stores/deviceStore'
 import { useToastStore } from '@/stores/toastStore'
@@ -685,12 +688,13 @@ function OverviewContent({
                         <div className="flex-shrink-0 w-[280px]">
                             {/* 优先使用 appLaunchMetrics，如果没有则从历史数据取最新一条 */}
                             {(() => {
-                                const latestLaunch = appLaunchMetrics ?? (appLaunchHistory.length > 0 ? {
+                                const latestLaunch: AppLaunchMetrics | null = appLaunchMetrics ?? (appLaunchHistory.length > 0 ? {
                                     totalTime: appLaunchHistory[0].totalTime,
                                     preMainTime: appLaunchHistory[0].preMainTime,
                                     mainToLaunchTime: appLaunchHistory[0].mainToLaunchTime,
                                     launchToFirstFrameTime: appLaunchHistory[0].launchToFirstFrameTime,
                                     timestamp: appLaunchHistory[0].timestamp,
+                                    preMainDetails: appLaunchHistory[0].preMainDetails,
                                 } : null)
 
                                 if (!latestLaunch) {
@@ -727,6 +731,66 @@ function OverviewContent({
                                                 </div>
                                             </div>
                                         </div>
+
+                                        {/* PreMain 细分详情 */}
+                                        {latestLaunch.preMainDetails && (
+                                            <div className="mt-3 pt-3 border-t border-purple-200/30 dark:border-purple-500/20">
+                                                <div className="text-[10px] text-text-muted mb-2 font-medium">PreMain 细分</div>
+                                                <div className="grid grid-cols-4 gap-2 text-[10px]">
+                                                    {latestLaunch.preMainDetails.dylibLoadingMs != null && (
+                                                        <div>
+                                                            <div className="text-text-muted">dylib 加载</div>
+                                                            <div className="font-medium text-purple-500">{latestLaunch.preMainDetails.dylibLoadingMs.toFixed(1)}ms</div>
+                                                        </div>
+                                                    )}
+                                                    {latestLaunch.preMainDetails.staticInitializerMs != null && (
+                                                        <div>
+                                                            <div className="text-text-muted">静态初始化</div>
+                                                            <div className="font-medium text-purple-500">{latestLaunch.preMainDetails.staticInitializerMs.toFixed(1)}ms</div>
+                                                        </div>
+                                                    )}
+                                                    {latestLaunch.preMainDetails.postDyldToMainMs != null && (
+                                                        <div>
+                                                            <div className="text-text-muted">Post-dyld</div>
+                                                            <div className="font-medium text-purple-500">{latestLaunch.preMainDetails.postDyldToMainMs.toFixed(1)}ms</div>
+                                                        </div>
+                                                    )}
+                                                    {latestLaunch.preMainDetails.estimatedKernelToConstructorMs != null && (
+                                                        <div>
+                                                            <div className="text-text-muted">内核→构造</div>
+                                                            <div className="font-medium text-purple-500">{latestLaunch.preMainDetails.estimatedKernelToConstructorMs.toFixed(1)}ms</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {/* dylib 统计 */}
+                                                {latestLaunch.preMainDetails.dylibStats && (
+                                                    <div className="mt-2 text-[10px] text-text-muted">
+                                                        <span>共 {latestLaunch.preMainDetails.dylibStats.totalCount} 个 dylib</span>
+                                                        <span className="mx-1">|</span>
+                                                        <span>用户库 {latestLaunch.preMainDetails.dylibStats.userCount}</span>
+                                                        <span className="mx-1">|</span>
+                                                        <span>系统库 {latestLaunch.preMainDetails.dylibStats.systemCount}</span>
+                                                    </div>
+                                                )}
+                                                {/* 加载最慢的 dylib */}
+                                                {latestLaunch.preMainDetails.slowestDylibs && latestLaunch.preMainDetails.slowestDylibs.length > 0 && (
+                                                    <div className="mt-2">
+                                                        <div className="text-[10px] text-text-muted mb-1">耗时最长的用户库:</div>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {latestLaunch.preMainDetails.slowestDylibs
+                                                                .filter((d: DylibLoadInfo) => !d.isSystemLibrary)
+                                                                .slice(0, 5)
+                                                                .map((dylib: DylibLoadInfo, idx: number) => (
+                                                                    <span key={idx} className="text-[9px] px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded">
+                                                                        {dylib.name}: {dylib.loadDurationMs.toFixed(1)}ms
+                                                                    </span>
+                                                                ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         <div className="mt-3 text-[10px] text-text-muted">
                                             记录于: {latestLaunch.timestamp ? new Date(latestLaunch.timestamp).toLocaleString() : '--'}
                                         </div>
@@ -3029,7 +3093,8 @@ function PageTimingSummaryView({
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [selectedItem])
 
-    if (isLoading) {
+    // 仅在无数据时显示全屏加载状态
+    if (isLoading && summary.length === 0) {
         return (
             <div className="flex items-center justify-center h-full">
                 <span className="text-text-muted text-sm">加载中...</span>
@@ -3052,7 +3117,12 @@ function PageTimingSummaryView({
             <div className="space-y-1">
                 {/* 表头 */}
                 <div className="grid grid-cols-[1fr_80px_70px_70px_70px_70px_60px] gap-2 px-3 py-1.5 text-xs text-text-muted border-b border-border">
-                    <span>页面</span>
+                    <span className="flex items-center gap-1">
+                        页面
+                        {isLoading && (
+                            <span className="inline-block w-3 h-3 border border-text-muted/30 border-t-text-muted rounded-full animate-spin" />
+                        )}
+                    </span>
                     <span className="text-right">访问次数</span>
                     <span className="text-right">平均</span>
                     <span className="text-right">P50</span>
@@ -3272,7 +3342,8 @@ function PageTimingDistributionView({
             .slice(0, 10)
     }, [summary])
 
-    if (isLoading) {
+    // 仅在无数据时显示全屏加载状态
+    if (isLoading && events.length === 0 && summary.length === 0) {
         return (
             <div className="flex items-center justify-center h-full">
                 <span className="text-text-muted text-sm">加载中...</span>
@@ -3293,8 +3364,11 @@ function PageTimingDistributionView({
         <div className="space-y-6">
             {/* 耗时分布直方图 */}
             <div className="bg-bg-light rounded-lg p-4">
-                <h3 className="text-sm font-medium text-text-primary mb-4">
+                <h3 className="text-sm font-medium text-text-primary mb-4 flex items-center gap-2">
                     ⏱️ 可见耗时分布
+                    {isLoading && (
+                        <span className="inline-block w-3 h-3 border border-text-muted/30 border-t-text-muted rounded-full animate-spin" />
+                    )}
                 </h3>
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -3434,6 +3508,9 @@ function PageTimingListView({
     sortKey: ListSortKey
     sortDesc: boolean
 }) {
+    // 跟踪新增项高亮
+    const { isNewItem } = useNewItemHighlight(events)
+
     // 排序后的数据（本地排序当前页）
     const sortedEvents = useMemo(() => {
         const sorted = [...events]
@@ -3460,7 +3537,8 @@ function PageTimingListView({
         return sorted
     }, [events, sortKey, sortDesc])
 
-    if (isLoading) {
+    // 仅在无数据时显示全屏加载状态
+    if (isLoading && events.length === 0) {
         return (
             <div className="flex items-center justify-center h-full">
                 <span className="text-text-muted text-sm">加载中...</span>
@@ -3481,7 +3559,12 @@ function PageTimingListView({
         <div className="space-y-2">
             {/* 表头 */}
             <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs text-text-muted font-medium bg-bg-light rounded">
-                <div className="col-span-3">页面</div>
+                <div className="col-span-3 flex items-center gap-1">
+                    页面
+                    {isLoading && (
+                        <span className="inline-block w-3 h-3 border border-text-muted/30 border-t-text-muted rounded-full animate-spin" />
+                    )}
+                </div>
                 <div className="col-span-2">路由</div>
                 <div className="col-span-2 text-center">加载耗时</div>
                 <div className="col-span-2 text-center">可见耗时</div>
@@ -3497,7 +3580,9 @@ function PageTimingListView({
                     className={clsx(
                         'grid grid-cols-12 gap-2 px-3 py-2 rounded cursor-pointer transition-colors',
                         'hover:bg-bg-light border border-transparent hover:border-border',
-                        getPageTimingBgColor(event.appearDuration)
+                        getPageTimingBgColor(event.appearDuration),
+                        // 新增项高亮动画
+                        isNewItem(event.id) && 'animate-row-new'
                     )}
                 >
                     <div className="col-span-3">

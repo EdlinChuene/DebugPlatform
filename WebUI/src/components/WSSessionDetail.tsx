@@ -6,6 +6,7 @@ import { ProtobufViewer } from './ProtobufViewer'
 import { getWSFrameDetail } from '@/services/api'
 import { Toggle } from './Toggle'
 import { LoadMoreButton } from './LoadMoreButton'
+import { useNewItemHighlight } from '@/hooks/useNewItemHighlight'
 import clsx from 'clsx'
 
 type PayloadFormat = 'auto' | 'text' | 'json' | 'hex' | 'base64' | 'protobuf'
@@ -176,6 +177,9 @@ function FramesTab({
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevFrameCountRef = useRef(frames.length)
 
+  // 跟踪新增项高亮
+  const { isNewItem } = useNewItemHighlight(frames)
+
   // 统计发送/接收帧数
   const sendCount = frames.filter((f) => f.direction === 'send').length
   const receiveCount = frames.filter((f) => f.direction === 'receive').length
@@ -264,21 +268,20 @@ function FramesTab({
                   isExpanded={isExpanded}
                   onToggle={() => onToggleExpand(isExpanded ? null : frame.id)}
                   rowNumber={rowNumber}
+                  isNew={isNewItem(frame.id)}
                 />
               )
             })}
 
-            {/* 加载更多按钮 */}
-            {hasMore && onLoadMore && (
-              <div className="px-4 py-3">
-                <LoadMoreButton
-                  onClick={onLoadMore}
-                  isLoading={loading}
-                  hasMore={hasMore}
-                  loadedCount={loadedCount ?? frames.length}
-                  totalCount={totalCount ?? frames.length}
-                />
-              </div>
+            {/* 加载更多按钮 / 没有更多数据提示 */}
+            {onLoadMore && frames.length > 0 && (
+              <LoadMoreButton
+                onClick={onLoadMore}
+                isLoading={loading}
+                hasMore={hasMore ?? false}
+                loadedCount={loadedCount ?? frames.length}
+                totalCount={totalCount ?? frames.length}
+              />
             )}
           </div>
         )}
@@ -295,6 +298,7 @@ const FrameItem = memo(function FrameItem({
   isExpanded,
   onToggle,
   rowNumber,
+  isNew = false,
 }: {
   deviceId: string
   sessionId: string
@@ -302,6 +306,7 @@ const FrameItem = memo(function FrameItem({
   isExpanded: boolean
   onToggle: () => void
   rowNumber: number
+  isNew?: boolean
 }) {
   const isSend = frame.direction === 'send'
   const isText = frame.opcode === 'text'
@@ -422,7 +427,9 @@ const FrameItem = memo(function FrameItem({
         'hover:bg-bg-light/30',
         isExpanded && 'bg-bg-light/50',
         // 添加方向指示的边框颜色
-        isSend ? 'border-l-2 border-l-blue-500/50' : 'border-l-2 border-l-green-500/50'
+        isSend ? 'border-l-2 border-l-blue-500/50' : 'border-l-2 border-l-green-500/50',
+        // 新增项高亮动画
+        isNew && 'animate-row-new'
       )}
       onClick={handleToggle}
     >

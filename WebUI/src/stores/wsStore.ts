@@ -306,7 +306,8 @@ export const useWSStore = create<WSStore>((set, get) => ({
       const exists = frames.some((f) => f.id === frame.id)
       if (!exists) {
         set((state) => ({
-          frames: [...state.frames, frame],
+          // 新帧插入到顶部，保持与后端时间降序返回一致
+          frames: [frame, ...state.frames],
           totalFrames: state.totalFrames + 1,
         }))
       }
