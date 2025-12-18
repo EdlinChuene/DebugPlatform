@@ -660,13 +660,28 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                         'w-full px-3 py-2 rounded-lg text-left text-xs transition-all',
                                         selectedDb === db.descriptor.id
                                             ? 'bg-primary text-white shadow-sm shadow-primary/30'
-                                            : 'text-text-secondary hover:bg-bg-light'
+                                            : 'text-text-secondary hover:bg-bg-light',
+                                        // 非活跃数据库显示淡色
+                                        !db.descriptor.isActive && selectedDb !== db.descriptor.id && 'opacity-50'
                                     )}
                                 >
                                     <div className="flex items-center gap-2">
                                         <span>{getDbKindIcon(db.descriptor.kind)}</span>
                                         <div className="flex-1 min-w-0">
-                                            <div className="font-medium truncate">{db.descriptor.name}</div>
+                                            <div className="font-medium truncate flex items-center gap-1">
+                                                {db.descriptor.name}
+                                                {/* 非活跃数据库标记 */}
+                                                {!db.descriptor.isActive && (
+                                                    <span className={clsx(
+                                                        'text-2xs px-1 py-0.5 rounded',
+                                                        selectedDb === db.descriptor.id
+                                                            ? 'bg-white/20 text-white/80'
+                                                            : 'bg-bg-lighter text-text-muted'
+                                                    )}>
+                                                        其他账户
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className={clsx(
                                                 'text-2xs',
                                                 selectedDb === db.descriptor.id ? 'text-white/70' : 'text-text-muted'

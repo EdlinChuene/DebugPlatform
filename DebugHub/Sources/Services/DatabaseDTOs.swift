@@ -29,6 +29,8 @@ struct DatabaseDescriptorDTO: Content {
     let location: Location
     let isSensitive: Bool
     let visibleInInspector: Bool
+    /// 是否属于当前活跃用户（多账户场景下用于区分）
+    let isActive: Bool
 }
 
 // MARK: - DB Info DTO

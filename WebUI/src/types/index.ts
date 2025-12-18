@@ -373,6 +373,8 @@ export interface DatabaseDescriptor {
   location: DatabaseLocation
   isSensitive: boolean
   visibleInInspector: boolean
+  /** 是否属于当前活跃用户（多账户场景下用于区分） */
+  isActive: boolean
 }
 
 export interface DBInfo {
