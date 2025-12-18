@@ -15,6 +15,16 @@ struct DatabaseDescriptorDTO: Content {
     /// 数据库类型（使用字符串以便扩展）
     typealias Kind = String
 
+    /// 账户归属状态
+    enum AccountOwnership: String, Content {
+        /// 属于当前活跃用户
+        case currentUser
+        /// 共享数据库（不属于任何特定用户）
+        case shared
+        /// 属于其他用户（非当前登录用户）
+        case otherUser
+    }
+
     enum Location: Content {
         case appSupport(relative: String)
         case documents(relative: String)
@@ -29,8 +39,8 @@ struct DatabaseDescriptorDTO: Content {
     let location: Location
     let isSensitive: Bool
     let visibleInInspector: Bool
-    /// 是否属于当前活跃用户（多账户场景下用于区分）
-    let isActive: Bool
+    /// 账户归属状态（多账户场景下用于区分）
+    let ownership: AccountOwnership
 }
 
 // MARK: - DB Info DTO

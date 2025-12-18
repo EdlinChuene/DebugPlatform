@@ -358,6 +358,9 @@ export interface TrafficRule {
 
 export type DatabaseKind = 'main' | 'message' | 'log' | 'cache' | 'analytics' | 'backup' | 'other'
 
+/** 账户归属状态 */
+export type DatabaseOwnership = 'currentUser' | 'shared' | 'otherUser'
+
 export interface DatabaseLocation {
   appSupport?: { relative: string }
   documents?: { relative: string }
@@ -373,8 +376,8 @@ export interface DatabaseDescriptor {
   location: DatabaseLocation
   isSensitive: boolean
   visibleInInspector: boolean
-  /** 是否属于当前活跃用户（多账户场景下用于区分） */
-  isActive: boolean
+  /** 账户归属状态（多账户场景下用于区分） */
+  ownership: DatabaseOwnership
 }
 
 export interface DBInfo {
