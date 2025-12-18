@@ -424,11 +424,6 @@ export function HTTPEventDetail({
         {/* Request Tab */}
         {activeTab === 'request' && (
           <div className="space-y-6">
-            {/* Headers */}
-            <Section title="Headers">
-              <HeadersTable headers={event.requestHeaders} />
-            </Section>
-
             {/* Query Params */}
             <Section title="Query Params">
               <HeadersTable headers={event.queryItems || {}} />
@@ -498,19 +493,17 @@ export function HTTPEventDetail({
                 <div className="text-text-muted text-sm">无请求体</div>
               )}
             </div>
+
+            {/* Headers */}
+            <Section title="Headers">
+              <HeadersTable headers={event.requestHeaders} />
+            </Section>
           </div>
         )}
 
         {/* Response Tab */}
         {activeTab === 'response' && (
           <div className="space-y-6">
-            {/* Headers */}
-            {event.responseHeaders && (
-              <Section title="Headers">
-                <HeadersTable headers={event.responseHeaders} />
-              </Section>
-            )}
-
             {/* Body */}
             <Section title="Body">
               {event.responseBody ? (
@@ -531,6 +524,13 @@ export function HTTPEventDetail({
                 <div className="text-text-muted text-sm">无响应体</div>
               )}
             </Section>
+
+            {/* Headers */}
+            {event.responseHeaders && (
+              <Section title="Headers">
+                <HeadersTable headers={event.responseHeaders} />
+              </Section>
+            )}
 
             {/* Error */}
             {event.errorDescription && (

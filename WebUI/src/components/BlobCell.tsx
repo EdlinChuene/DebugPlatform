@@ -226,24 +226,24 @@ export function BlobCell({
     const dialogWidth = useMemo(() => {
         // 基础宽度（无 Protobuf 配置时使用）
         const baseWidth = 400
-        
+
         // 如果没有描述符或消息类型，使用基础宽度
         if (!descriptorName || availableMessageTypes.length === 0) {
             return baseWidth
         }
-        
+
         // 计算类型选择行的宽度：
         // 布局: [padding] [标签] [gap] [选择框] [gap] [状态标签?] [padding]
-        
+
         // 1. 左右 padding: 16px * 2 = 32px (px-4)
         const padding = 32
-        
+
         // 2. "Protobuf 类型:" 标签宽度 (约 85px)
         const labelWidth = 85
-        
+
         // 3. 标签和选择框之间的 gap: 12px (gap-3)
         const gap1 = 12
-        
+
         // 4. 选择框宽度：
         //    - 类型名文字（等宽字体，每字符约 7.5px）
         //    - 左右内边距: 12px * 2 = 24px
@@ -257,10 +257,10 @@ export function BlobCell({
         const dropdownArrow = 20
         const selectExtra = 8
         const selectWidth = typeNameWidth + selectPadding + clearButton + dropdownArrow + selectExtra
-        
+
         // 5. 选择框和状态标签之间的 gap: 12px
         const gap2 = 12
-        
+
         // 6. 状态标签宽度（根据显示内容）
         //    - "检测中...": 约 70px
         //    - "→ xxx": 根据实际类型名长度计算
@@ -276,10 +276,10 @@ export function BlobCell({
                 statusLabelWidth = 20 + actualTypeName.length * 7
             }
         }
-        
+
         // 计算总宽度
         const totalWidth = padding + labelWidth + gap1 + selectWidth + (statusLabelWidth > 0 ? gap2 + statusLabelWidth : 0)
-        
+
         // 确保宽度在合理范围内
         return Math.max(baseWidth, Math.min(totalWidth, 800))
     }, [descriptorName, availableMessageTypes.length, displayTypeName, currentMessageType, disableDescriptorDecode, autoDetecting, mappedType, autoDetectedType, manualSelectedType])
@@ -361,222 +361,222 @@ export function BlobCell({
                 className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
                 onClick={handleClose}
             >
-            <div
-                className={clsx(
-                    'bg-bg-dark rounded-lg border border-border shadow-2xl max-h-[80vh] flex flex-col',
-                    isDragging ? '' : 'transition-[width] duration-200'
-                )}
-                style={{
-                    width: `${dialogWidth}px`,
-                    ...(position ? { transform: `translate(${position.x}px, ${position.y}px)` } : {}),
-                }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                {/* 头部 - 可拖动 */}
                 <div
-                    className="flex items-center justify-between px-4 py-3 border-b border-border select-none"
-                    {...dragHandleProps}
+                    className={clsx(
+                        'bg-bg-dark rounded-lg border border-border shadow-2xl max-h-[80vh] flex flex-col',
+                        isDragging ? '' : 'transition-[width] duration-200'
+                    )}
+                    style={{
+                        width: `${dialogWidth}px`,
+                        ...(position ? { transform: `translate(${position.x}px, ${position.y}px)` } : {}),
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                 >
-                    <div className="flex items-center gap-2">
-                        <PackageIcon size={16} className="text-purple-400" />
-                        <span className="font-mono text-sm text-text-primary">{columnName}</span>
-                        <span className="text-xs text-text-muted">({blobSize} bytes)</span>
-                    </div>
-                    <button
-                        onClick={handleClose}
-                        className="p-1 rounded hover:bg-bg-light text-text-muted hover:text-text-secondary transition-colors"
-                        onMouseDown={(e) => e.stopPropagation()}
+                    {/* 头部 - 可拖动 */}
+                    <div
+                        className="flex items-center justify-between px-4 py-3 border-b border-border select-none"
+                        {...dragHandleProps}
                     >
-                        ✕
-                    </button>
-                </div>
-
-                {/* 类型选择器 - 仅当列已配置描述符时显示 */}
-                {descriptorName && availableMessageTypes.length > 0 && (
-                    <div className="px-4 py-2 border-b border-border bg-bg-darker/50">
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs text-text-muted shrink-0">Protobuf 类型:</span>
-                            {disableDescriptorDecode ? (
-                                // 禁用状态：显示恢复按钮
-                                <button
-                                    onClick={() => setDisableDescriptorDecode(false)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-muted hover:text-primary bg-bg-medium hover:bg-bg-light rounded-lg border border-border transition-colors"
-                                >
-                                    <SparklesIcon size={12} />
-                                    启用 Protobuf 解析
-                                </button>
-                            ) : (
-                                <>
-                                    <div className="flex-1 min-w-0">
-                                        <GroupedFilterSelect
-                                            options={availableMessageTypes}
-                                            value={manualSelectedType}
-                                            placeholder={emptyOptionText}
-                                            formatOption={simplifyTypeName}
-                                            showEmptyOption
-                                            onChange={handleTypeChange}
-                                            onClear={handleClearType}
-                                        />
-                                    </div>
-                                    {autoDetecting && (
-                                        <span className="flex items-center gap-1 text-2xs text-primary shrink-0">
-                                            <SparklesIcon size={12} className="animate-pulse" />
-                                            检测中...
-                                        </span>
-                                    )}
-                                    {/* 当选中空选项（映射匹配/自动匹配）时，显示实际匹配到的类型 */}
-                                    {!manualSelectedType && !autoDetecting && (mappedType || autoDetectedType) && (
-                                        <span className={clsx(
-                                            "flex items-center gap-1 text-2xs shrink-0",
-                                            mappedType ? "text-blue-400" : "text-green-400"
-                                        )}>
-                                            →
-                                            <span className="font-mono">{simplifyTypeName(mappedType || autoDetectedType || '')}</span>
-                                        </span>
-                                    )}
-                                </>
-                            )}
+                        <div className="flex items-center gap-2">
+                            <PackageIcon size={16} className="text-purple-400" />
+                            <span className="font-mono text-sm text-text-primary">{columnName}</span>
+                            <span className="text-xs text-text-muted">({blobSize} bytes)</span>
                         </div>
-                    </div>
-                )}
-
-                {/* 视图切换 */}
-                <div className="flex gap-1 px-4 py-2 border-b border-border">
-                    <button
-                        onClick={() => setViewMode('decoded')}
-                        className={clsx(
-                            'px-3 py-1 text-xs rounded transition-colors',
-                            viewMode === 'decoded'
-                                ? 'bg-primary/20 text-primary'
-                                : 'text-text-muted hover:text-text-secondary hover:bg-bg-light'
-                        )}
-                    >
-                        {currentMessageType ? 'Schema 解码' : '自动解析'}
-                    </button>
-                    <button
-                        onClick={() => setViewMode('wire')}
-                        className={clsx(
-                            'px-3 py-1 text-xs rounded transition-colors',
-                            viewMode === 'wire'
-                                ? 'bg-primary/20 text-primary'
-                                : 'text-text-muted hover:text-text-secondary hover:bg-bg-light'
-                        )}
-                    >
-                        Wire Format
-                    </button>
-                    <button
-                        onClick={() => setViewMode('hex')}
-                        className={clsx(
-                            'px-3 py-1 text-xs rounded transition-colors',
-                            viewMode === 'hex'
-                                ? 'bg-primary/20 text-primary'
-                                : 'text-text-muted hover:text-text-secondary hover:bg-bg-light'
-                        )}
-                    >
-                        Hex
-                    </button>
-
-                    {/* 复制按钮 - 靠右 */}
-                    <div className="flex-1" />
-                    {copyableContent && (
                         <button
-                            onClick={() => handleCopy(copyableContent)}
+                            onClick={handleClose}
+                            className="p-1 rounded hover:bg-bg-light text-text-muted hover:text-text-secondary transition-colors"
+                            onMouseDown={(e) => e.stopPropagation()}
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    {/* 类型选择器 - 仅当列已配置描述符时显示 */}
+                    {descriptorName && availableMessageTypes.length > 0 && (
+                        <div className="px-4 py-2 border-b border-border bg-bg-darker/50">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs text-text-muted shrink-0">Protobuf 类型:</span>
+                                {disableDescriptorDecode ? (
+                                    // 禁用状态：显示恢复按钮
+                                    <button
+                                        onClick={() => setDisableDescriptorDecode(false)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-muted hover:text-primary bg-bg-medium hover:bg-bg-light rounded-lg border border-border transition-colors"
+                                    >
+                                        <SparklesIcon size={12} />
+                                        启用 Protobuf 解析
+                                    </button>
+                                ) : (
+                                    <>
+                                        <div className="flex-1 min-w-0">
+                                            <GroupedFilterSelect
+                                                options={availableMessageTypes}
+                                                value={manualSelectedType}
+                                                placeholder={emptyOptionText}
+                                                formatOption={simplifyTypeName}
+                                                showEmptyOption
+                                                onChange={handleTypeChange}
+                                                onClear={handleClearType}
+                                            />
+                                        </div>
+                                        {autoDetecting && (
+                                            <span className="flex items-center gap-1 text-2xs text-primary shrink-0">
+                                                <SparklesIcon size={12} className="animate-pulse" />
+                                                检测中...
+                                            </span>
+                                        )}
+                                        {/* 当选中空选项（映射匹配/自动匹配）时，显示实际匹配到的类型 */}
+                                        {!manualSelectedType && !autoDetecting && (mappedType || autoDetectedType) && (
+                                            <span className={clsx(
+                                                "flex items-center gap-1 text-2xs shrink-0",
+                                                mappedType ? "text-blue-400" : "text-green-400"
+                                            )}>
+                                                →
+                                                <span className="font-mono">{simplifyTypeName(mappedType || autoDetectedType || '')}</span>
+                                            </span>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 视图切换 */}
+                    <div className="flex gap-1 px-4 py-2 border-b border-border">
+                        <button
+                            onClick={() => setViewMode('decoded')}
                             className={clsx(
-                                'flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors',
-                                copied
-                                    ? 'text-green-400 bg-green-400/10'
+                                'px-3 py-1 text-xs rounded transition-colors',
+                                viewMode === 'decoded'
+                                    ? 'bg-primary/20 text-primary'
                                     : 'text-text-muted hover:text-text-secondary hover:bg-bg-light'
                             )}
-                            title={copied ? '已复制' : '复制内容'}
                         >
-                            {copied ? (
-                                <>
-                                    <CheckIcon size={12} />
-                                    已复制
-                                </>
-                            ) : (
-                                <>
-                                    <ClipboardIcon size={12} />
-                                    复制
-                                </>
-                            )}
+                            {currentMessageType ? 'Schema 解码' : '自动解析'}
                         </button>
-                    )}
-                </div>
+                        <button
+                            onClick={() => setViewMode('wire')}
+                            className={clsx(
+                                'px-3 py-1 text-xs rounded transition-colors',
+                                viewMode === 'wire'
+                                    ? 'bg-primary/20 text-primary'
+                                    : 'text-text-muted hover:text-text-secondary hover:bg-bg-light'
+                            )}
+                        >
+                            Wire Format
+                        </button>
+                        <button
+                            onClick={() => setViewMode('hex')}
+                            className={clsx(
+                                'px-3 py-1 text-xs rounded transition-colors',
+                                viewMode === 'hex'
+                                    ? 'bg-primary/20 text-primary'
+                                    : 'text-text-muted hover:text-text-secondary hover:bg-bg-light'
+                            )}
+                        >
+                            Hex
+                        </button>
 
-                {/* 内容 */}
-                <div className="flex-1 overflow-y-auto p-4 min-h-0">
-                    {isLoading ? (
-                        <div className="flex items-center justify-center py-8">
-                            <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
-                        </div>
-                    ) : viewMode === 'decoded' ? (
-                        decodedData ? (
-                            <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all">
-                                {formatDecodedMessage(decodedData)}
-                            </pre>
-                        ) : decodeError ? (
-                            <div className="text-center py-8">
-                                <div className="text-yellow-400 mb-2 flex justify-center"><WarningIcon size={24} /></div>
-                                <p className="text-sm text-text-muted">{decodeError}</p>
-                                {!descriptorName && (
-                                    <p className="text-xs text-text-muted/50 mt-2">
-                                        请在 Protobuf 配置中添加此列的描述符
-                                    </p>
+                        {/* 复制按钮 - 靠右 */}
+                        <div className="flex-1" />
+                        {copyableContent && (
+                            <button
+                                onClick={() => handleCopy(copyableContent)}
+                                className={clsx(
+                                    'flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors',
+                                    copied
+                                        ? 'text-green-400 bg-green-400/10'
+                                        : 'text-text-muted hover:text-text-secondary hover:bg-bg-light'
                                 )}
-                                {descriptorName && !currentMessageType && (
-                                    <p className="text-xs text-text-muted/50 mt-2">
-                                        请在上方选择 Protobuf 消息类型
-                                    </p>
+                                title={copied ? '已复制' : '复制内容'}
+                            >
+                                {copied ? (
+                                    <>
+                                        <CheckIcon size={12} />
+                                        已复制
+                                    </>
+                                ) : (
+                                    <>
+                                        <ClipboardIcon size={12} />
+                                        复制
+                                    </>
                                 )}
-                            </div>
-                        ) : null
-                    ) : viewMode === 'wire' ? (
-                        wireDecoded ? (
-                            <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all">
-                                {formatDecodedMessage(wireDecoded)}
-                            </pre>
-                        ) : (
-                            <div className="text-center py-8 text-text-muted">
-                                无法解析 Wire Format
-                            </div>
-                        )
-                    ) : (
-                        // Hex 视图
-                        <div className="font-mono text-xs">
-                            <div className="flex flex-wrap gap-1">
-                                {hexView.map((byte, idx) => (
-                                    <span
-                                        key={idx}
-                                        className={clsx(
-                                            'px-1 py-0.5 rounded',
-                                            idx % 16 < 8 ? 'bg-bg-light' : 'bg-bg-lighter'
-                                        )}
-                                    >
-                                        {byte}
-                                    </span>
-                                ))}
-                                {blobSize > 256 && (
-                                    <span className="text-text-muted px-2">
-                                        ... 还有 {blobSize - 256} bytes
-                                    </span>
-                                )}
-                            </div>
-                            <div className="mt-4 text-text-muted">
-                                共 {blobSize} bytes
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* 底部提示 */}
-                {!descriptorName && viewMode === 'decoded' && (
-                    <div className="px-4 py-2 border-t border-border text-xs text-text-muted bg-bg-darker">
-                        💡 提示：在 Protobuf 配置中为此列添加描述符可启用自动类型检测
+                            </button>
+                        )}
                     </div>
-                )}
+
+                    {/* 内容 */}
+                    <div className="flex-1 overflow-y-auto p-4 min-h-0">
+                        {isLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+                            </div>
+                        ) : viewMode === 'decoded' ? (
+                            decodedData ? (
+                                <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all">
+                                    {formatDecodedMessage(decodedData)}
+                                </pre>
+                            ) : decodeError ? (
+                                <div className="text-center py-8">
+                                    <div className="text-yellow-400 mb-2 flex justify-center"><WarningIcon size={24} /></div>
+                                    <p className="text-sm text-text-muted">{decodeError}</p>
+                                    {!descriptorName && (
+                                        <p className="text-xs text-text-muted/50 mt-2">
+                                            请在 Protobuf 配置中添加此列的描述符
+                                        </p>
+                                    )}
+                                    {descriptorName && !currentMessageType && (
+                                        <p className="text-xs text-text-muted/50 mt-2">
+                                            请在上方选择 Protobuf 消息类型
+                                        </p>
+                                    )}
+                                </div>
+                            ) : null
+                        ) : viewMode === 'wire' ? (
+                            wireDecoded ? (
+                                <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all">
+                                    {formatDecodedMessage(wireDecoded)}
+                                </pre>
+                            ) : (
+                                <div className="text-center py-8 text-text-muted">
+                                    无法解析 Wire Format
+                                </div>
+                            )
+                        ) : (
+                            // Hex 视图
+                            <div className="font-mono text-xs">
+                                <div className="flex flex-wrap gap-1">
+                                    {hexView.map((byte, idx) => (
+                                        <span
+                                            key={idx}
+                                            className={clsx(
+                                                'px-1 py-0.5 rounded',
+                                                idx % 16 < 8 ? 'bg-bg-light' : 'bg-bg-lighter'
+                                            )}
+                                        >
+                                            {byte}
+                                        </span>
+                                    ))}
+                                    {blobSize > 256 && (
+                                        <span className="text-text-muted px-2">
+                                            ... 还有 {blobSize - 256} bytes
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="mt-4 text-text-muted">
+                                    共 {blobSize} bytes
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 底部提示 */}
+                    {!descriptorName && viewMode === 'decoded' && (
+                        <div className="px-4 py-2 border-t border-border text-xs text-text-muted bg-bg-darker">
+                            💡 提示：在 Protobuf 配置中为此列添加描述符可启用自动类型检测
+                        </div>
+                    )}
+                </div>
             </div>
-        </div>
         </>
     )
 }

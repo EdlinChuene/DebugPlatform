@@ -1386,8 +1386,13 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                 {cellDetailPopup.value}
                             </pre>
                             <button
-                                onClick={() => {
-                                    copyToClipboard(cellDetailPopup.value)
+                                onClick={async () => {
+                                    const success = await copyToClipboard(cellDetailPopup.value)
+                                    if (success) {
+                                        toast.show('success', '已复制到剪贴板')
+                                    } else {
+                                        toast.show('error', '复制失败')
+                                    }
                                 }}
                                 className="flex-shrink-0 self-start p-1.5 text-text-muted hover:text-primary hover:bg-bg-light/50 rounded transition-colors"
                                 title="复制内容"
