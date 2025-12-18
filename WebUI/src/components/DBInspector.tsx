@@ -13,6 +13,7 @@ import { ProtobufConfigPanel } from './ProtobufConfigPanel'
 import { BlobCell, isBase64Blob } from './BlobCell'
 import { SQLEditor } from './SQLEditor'
 import { ListLoadingOverlay } from './ListLoadingOverlay'
+import { TextPopover } from './TextPopover'
 import { useDraggable } from '@/hooks/useDraggable'
 import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, ClipboardIcon, PackageIcon, SearchIcon, XIcon, FolderIcon, CheckIcon, SQLIcon, ChevronDownIcon, ChevronRightIcon } from './icons'
 import { useToastStore } from '@/stores/toastStore'
@@ -765,9 +766,11 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                         <div className="mt-1 space-y-2 opacity-50">
                                             {Object.entries(groupedByOwner).map(([ownerId, dbs]) => (
                                                 <div key={ownerId} className="space-y-1">
-                                                    <div className="px-2 py-0.5 text-2xs text-text-muted/70 font-mono truncate" title={ownerId}>
-                                                        {ownerId.length > 20 ? `${ownerId.slice(0, 8)}...${ownerId.slice(-8)}` : ownerId}
-                                                    </div>
+                                                    <TextPopover text={ownerId} title="账户 ID" trigger="dblclick">
+                                                        <div className="px-2 py-0.5 text-2xs text-text-muted/70 font-mono truncate hover:text-text-muted transition-colors" title="双击查看完整 ID">
+                                                            {ownerId.length > 20 ? `${ownerId.slice(0, 8)}...${ownerId.slice(-8)}` : ownerId}
+                                                        </div>
+                                                    </TextPopover>
                                                     {dbs.map((db) => (
                                                         <DatabaseItem
                                                             key={db.descriptor.id}
