@@ -655,31 +655,13 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                         </div>
                     </div>
                     <div className="space-y-1">
-                        {/* 当前用户数据库 */}
-                        {getSortedDatabases()
-                            .filter(db => (db.descriptor.ownership || 'shared') === 'currentUser')
-                            .map((db) => (
-                                <DatabaseItem
-                                    key={db.descriptor.id}
-                                    db={db}
-                                    isSelected={selectedDb === db.descriptor.id}
-                                    pathPopupDbId={pathPopupDbId}
-                                    pathCopied={pathCopied}
-                                    onSelect={handleSelectDb}
-                                    onTogglePathPopup={(id) => setPathPopupDbId(pathPopupDbId === id ? null : id)}
-                                    onClosePathPopup={() => setPathPopupDbId(null)}
-                                    onCopyPath={handleCopyPath}
-                                    getDisplayPath={getDisplayPath}
-                                />
-                            ))}
-
-                        {/* 共享数据库分组 */}
+                        {/* 共享数据库分组 - 第一个分组 */}
                         {(() => {
                             const sharedDbs = getSortedDatabases().filter(db => (db.descriptor.ownership || 'shared') === 'shared')
                             if (sharedDbs.length === 0) return null
                             return (
-                                <div className="mt-2 pt-2 border-t border-border/50">
-                                    <div className="px-2 py-1 text-2xs text-text-muted flex items-center gap-1">
+                                <div>
+                                    <div className="px-2 py-1 text-2xs text-accent-blue font-medium flex items-center gap-1">
                                         <span>共享</span>
                                         <span className="opacity-60">({sharedDbs.length})</span>
                                     </div>
@@ -703,15 +685,51 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                             )
                         })()}
 
-                        {/* 其他账户数据库分组 */}
+                        {/* 当前账户数据库分组 - 第二个分组 */}
+                        {(() => {
+                            const currentUserDbs = getSortedDatabases().filter(db => (db.descriptor.ownership || 'shared') === 'currentUser')
+                            if (currentUserDbs.length === 0) return null
+                            // 判断前面是否有共享分组，决定是否显示分割线
+                            const hasSharedDbs = getSortedDatabases().some(db => (db.descriptor.ownership || 'shared') === 'shared')
+                            return (
+                                <div className={hasSharedDbs ? 'mt-2 pt-2 border-t border-border' : ''}>
+                                    <div className="px-2 py-1 text-2xs text-primary font-medium flex items-center gap-1">
+                                        <span>当前账户</span>
+                                        <span className="opacity-60">({currentUserDbs.length})</span>
+                                    </div>
+                                    <div className="mt-1 space-y-1">
+                                        {currentUserDbs.map((db) => (
+                                            <DatabaseItem
+                                                key={db.descriptor.id}
+                                                db={db}
+                                                isSelected={selectedDb === db.descriptor.id}
+                                                pathPopupDbId={pathPopupDbId}
+                                                pathCopied={pathCopied}
+                                                onSelect={handleSelectDb}
+                                                onTogglePathPopup={(id) => setPathPopupDbId(pathPopupDbId === id ? null : id)}
+                                                onClosePathPopup={() => setPathPopupDbId(null)}
+                                                onCopyPath={handleCopyPath}
+                                                getDisplayPath={getDisplayPath}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )
+                        })()}
+
+                        {/* 其他账户数据库分组 - 第三个分组 */}
                         {(() => {
                             const otherUserDbs = getSortedDatabases().filter(db => (db.descriptor.ownership || 'shared') === 'otherUser')
                             if (otherUserDbs.length === 0) return null
+                            // 判断前面是否有其他分组，决定是否显示分割线
+                            const hasSharedDbs = getSortedDatabases().some(db => (db.descriptor.ownership || 'shared') === 'shared')
+                            const hasCurrentUserDbs = getSortedDatabases().some(db => (db.descriptor.ownership || 'shared') === 'currentUser')
+                            const hasPreviousGroups = hasSharedDbs || hasCurrentUserDbs
                             return (
-                                <div className="mt-2 pt-2 border-t border-border/50">
+                                <div className={hasPreviousGroups ? 'mt-2 pt-2 border-t border-border' : ''}>
                                     <button
                                         onClick={() => setOtherUserDbExpanded(!otherUserDbExpanded)}
-                                        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-2xs text-text-muted hover:text-text-secondary transition-colors"
+                                        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-2xs text-text-muted font-medium hover:text-text-secondary transition-colors"
                                     >
                                         {otherUserDbExpanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
                                         <span>其他账户</span>
@@ -1420,10 +1438,6 @@ function DatabaseItem({
     onCopyPath,
     getDisplayPath,
 }: DatabaseItemProps) {
-    // 兼容旧版本：ownership 未定义时视为 shared
-    const ownership = db.descriptor.ownership || 'shared'
-    const isCurrentUser = ownership === 'currentUser'
-
     return (
         <div className="relative">
             <button
@@ -1438,19 +1452,8 @@ function DatabaseItem({
                 <div className="flex items-center gap-2">
                     <span>{getDbKindIcon(db.descriptor.kind)}</span>
                     <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate flex items-center gap-1">
+                        <div className="font-medium truncate">
                             {db.descriptor.name}
-                            {/* 当前用户标记 - 使用主题色 */}
-                            {isCurrentUser && (
-                                <span className={clsx(
-                                    'text-2xs px-1 py-0.5 rounded',
-                                    isSelected
-                                        ? 'bg-white/20 text-white/80'
-                                        : 'bg-primary/20 text-primary'
-                                )}>
-                                    当前
-                                </span>
-                            )}
                         </div>
                         <div className={clsx(
                             'text-2xs',
