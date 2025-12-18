@@ -14,7 +14,6 @@ import { BlobCell, isBase64Blob } from './BlobCell'
 import { SQLEditor } from './SQLEditor'
 import { ListLoadingOverlay } from './ListLoadingOverlay'
 import { TextPopover } from './TextPopover'
-import { useDraggable } from '@/hooks/useDraggable'
 import { LogIcon, LightningIcon, DatabaseIcon, WarningIcon, LockIcon, ArrowUpIcon, ArrowDownIcon, ClipboardIcon, PackageIcon, SearchIcon, XIcon, FolderIcon, CheckIcon, SQLIcon, ChevronDownIcon, ChevronRightIcon } from './icons'
 import { useToastStore } from '@/stores/toastStore'
 import type { DatabaseLocation, DBInfo, DBQueryError } from '@/types'
@@ -313,25 +312,7 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
     const [otherUserDbExpanded, setOtherUserDbExpanded] = useState(false)
 
     // 双击单元格弹出框状态
-    const [cellDetailPopup, setCellDetailPopup] = useState<{
-        value: string
-        columnName: string
-        position: { x: number; y: number }
-    } | null>(null)
 
-    // 单元格详情弹窗拖动
-    const {
-        position: cellPopupPosition,
-        isDragging: cellPopupDragging,
-        dragHandleProps: cellPopupDragHandleProps,
-        resetPosition: resetCellPopupPosition,
-    } = useDraggable()
-
-    // 关闭单元格详情弹窗
-    const closeCellDetailPopup = useCallback(() => {
-        setCellDetailPopup(null)
-        resetCellPopupPosition()
-    }, [resetCellPopupPosition])
 
     // 跟踪 deviceId 变化
     const prevDeviceIdRef = useRef(deviceId)
@@ -372,20 +353,6 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
             document.removeEventListener('mousedown', handleClickOutside)
         }
     }, [pathPopupDbId])
-
-    // 单元格详情弹窗：ESC 键关闭
-    useEffect(() => {
-        if (!cellDetailPopup) return
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                closeCellDetailPopup()
-            }
-        }
-
-        document.addEventListener('keydown', handleKeyDown)
-        return () => document.removeEventListener('keydown', handleKeyDown)
-    }, [cellDetailPopup, closeCellDetailPopup])
 
     // 设备切换时重置状态并重新加载
     useEffect(() => {
@@ -466,24 +433,6 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
     const clearAllFilters = useCallback(() => {
         setColumnFilters({})
         setExpandedFilterColumn(null)
-    }, [])
-
-    // 处理双击单元格显示完整数据
-    const handleCellDoubleClick = useCallback((
-        e: React.MouseEvent,
-        value: string | null,
-        columnName: string
-    ) => {
-        if (value === null) return
-        const rect = (e.target as HTMLElement).getBoundingClientRect()
-        setCellDetailPopup({
-            value,
-            columnName,
-            position: {
-                x: Math.min(rect.left, window.innerWidth - 400),
-                y: Math.min(rect.bottom + 5, window.innerHeight - 300)
-            }
-        })
     }, [])
 
     // 复制文本到剪贴板（带回退机制和错误处理）
@@ -1303,12 +1252,10 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                                             <td
                                                                 key={col.name}
                                                                 className={clsx(
-                                                                    "px-3 py-2 text-text-secondary cursor-pointer border-r border-border last:border-r-0 overflow-hidden",
+                                                                    "px-3 py-2 text-text-secondary border-r border-border last:border-r-0 overflow-hidden",
                                                                     isExpandedCell && "bg-purple-500/20 ring-1 ring-purple-500/50 ring-inset"
                                                                 )}
                                                                 style={{ width: isLastColumn ? 'auto' : colWidth, minWidth: 80, maxWidth: colWidth }}
-                                                                onDoubleClick={(e) => handleCellDoubleClick(e, cellValue, col.name)}
-                                                                title="双击查看完整内容"
                                                             >
                                                                 {cellValue === null ? (
                                                                     <span className="text-text-muted italic">NULL</span>
@@ -1325,9 +1272,15 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                                                         isHighlighted={isExpandedCell}
                                                                     />
                                                                 ) : (
-                                                                    <span className="truncate block">
-                                                                        {cellValue}
-                                                                    </span>
+                                                                    <TextPopover
+                                                                        text={String(cellValue)}
+                                                                        title={col.name}
+                                                                        trigger="dblclick"
+                                                                    >
+                                                                        <span className="truncate block cursor-pointer" title="双击查看完整内容">
+                                                                            {cellValue}
+                                                                        </span>
+                                                                    </TextPopover>
                                                                 )}
                                                             </td>
                                                         )
@@ -1391,61 +1344,6 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                     </div>
                 )}
             </div>
-
-            {/* 单元格详情弹出框 */}
-            {cellDetailPopup && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-                    onClick={closeCellDetailPopup}
-                >
-                    <div
-                        className={clsx(
-                            'bg-bg-dark border border-border rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[70vh] overflow-hidden flex flex-col',
-                            cellPopupDragging ? '' : 'transition-transform duration-100'
-                        )}
-                        style={cellPopupPosition ? { transform: `translate(${cellPopupPosition.x}px, ${cellPopupPosition.y}px)` } : undefined}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* 标题栏 - 可拖动 */}
-                        <div
-                            className="px-3 py-2 border-b border-border bg-bg-light/50 flex items-center justify-between shrink-0 select-none cursor-move"
-                            {...cellPopupDragHandleProps}
-                        >
-                            <span className="text-xs font-medium text-text-muted">
-                                {cellDetailPopup.columnName}
-                            </span>
-                            <button
-                                onClick={closeCellDetailPopup}
-                                className="p-1 text-text-muted hover:text-red-400 transition-colors"
-                                title="关闭"
-                                onMouseDown={(e) => e.stopPropagation()}
-                            >
-                                <XIcon size={14} />
-                            </button>
-                        </div>
-                        {/* 内容区域 */}
-                        <div className="p-3 overflow-auto flex-1 flex gap-2 min-h-0">
-                            <pre className="flex-1 text-xs text-text-secondary whitespace-pre-wrap break-all font-mono select-text">
-                                {cellDetailPopup.value}
-                            </pre>
-                            <button
-                                onClick={async () => {
-                                    const success = await copyToClipboard(cellDetailPopup.value)
-                                    if (success) {
-                                        toast.show('success', '已复制到剪贴板')
-                                    } else {
-                                        toast.show('error', '复制失败')
-                                    }
-                                }}
-                                className="flex-shrink-0 self-start p-1.5 text-text-muted hover:text-primary hover:bg-bg-light/50 rounded transition-colors"
-                                title="复制内容"
-                            >
-                                <ClipboardIcon size={14} />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }
