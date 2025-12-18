@@ -378,6 +378,8 @@ export interface DatabaseDescriptor {
   visibleInInspector: boolean
   /** 账户归属状态（多账户场景下用于区分） */
   ownership: DatabaseOwnership
+  /** 数据库所有者标识符（用于其他账户分组） */
+  ownerIdentifier: string | null
 }
 
 export interface DBInfo {

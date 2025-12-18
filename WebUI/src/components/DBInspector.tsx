@@ -731,14 +731,26 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                             )
                         })()}
 
-                        {/* 其他账户数据库分组 - 第三个分组 */}
+                        {/* 其他账户数据库分组 - 第三个分组，按 ownerIdentifier 再分组 */}
                         {(() => {
                             const otherUserDbs = getSortedDatabases().filter(db => (db.descriptor.ownership || 'shared') === 'otherUser')
                             if (otherUserDbs.length === 0) return null
+
+                            // 按 ownerIdentifier 分组
+                            const groupedByOwner = otherUserDbs.reduce((acc, db) => {
+                                const owner = db.descriptor.ownerIdentifier || '未知'
+                                if (!acc[owner]) {
+                                    acc[owner] = []
+                                }
+                                acc[owner].push(db)
+                                return acc
+                            }, {} as Record<string, typeof otherUserDbs>)
+
                             // 判断前面是否有其他分组，决定是否显示分割线
                             const hasSharedDbs = getSortedDatabases().some(db => (db.descriptor.ownership || 'shared') === 'shared')
                             const hasCurrentUserDbs = getSortedDatabases().some(db => (db.descriptor.ownership || 'shared') === 'currentUser')
                             const hasPreviousGroups = hasSharedDbs || hasCurrentUserDbs
+
                             return (
                                 <div className={hasPreviousGroups ? 'mt-2 pt-2 border-t border-border' : ''}>
                                     <button
@@ -750,20 +762,27 @@ export function DBInspector({ deviceId }: DBInspectorProps) {
                                         <span className="opacity-60">({otherUserDbs.length})</span>
                                     </button>
                                     {otherUserDbExpanded && (
-                                        <div className="mt-1 space-y-1 opacity-50">
-                                            {otherUserDbs.map((db) => (
-                                                <DatabaseItem
-                                                    key={db.descriptor.id}
-                                                    db={db}
-                                                    isSelected={selectedDb === db.descriptor.id}
-                                                    pathPopupDbId={pathPopupDbId}
-                                                    pathCopied={pathCopied}
-                                                    onSelect={handleSelectDb}
-                                                    onTogglePathPopup={(id) => setPathPopupDbId(pathPopupDbId === id ? null : id)}
-                                                    onClosePathPopup={() => setPathPopupDbId(null)}
-                                                    onCopyPath={handleCopyPath}
-                                                    getDisplayPath={getDisplayPath}
-                                                />
+                                        <div className="mt-1 space-y-2 opacity-50">
+                                            {Object.entries(groupedByOwner).map(([ownerId, dbs]) => (
+                                                <div key={ownerId} className="space-y-1">
+                                                    <div className="px-2 py-0.5 text-2xs text-text-muted/70 font-mono truncate" title={ownerId}>
+                                                        {ownerId.length > 20 ? `${ownerId.slice(0, 8)}...${ownerId.slice(-8)}` : ownerId}
+                                                    </div>
+                                                    {dbs.map((db) => (
+                                                        <DatabaseItem
+                                                            key={db.descriptor.id}
+                                                            db={db}
+                                                            isSelected={selectedDb === db.descriptor.id}
+                                                            pathPopupDbId={pathPopupDbId}
+                                                            pathCopied={pathCopied}
+                                                            onSelect={handleSelectDb}
+                                                            onTogglePathPopup={(id) => setPathPopupDbId(pathPopupDbId === id ? null : id)}
+                                                            onClosePathPopup={() => setPathPopupDbId(null)}
+                                                            onCopyPath={handleCopyPath}
+                                                            getDisplayPath={getDisplayPath}
+                                                        />
+                                                    ))}
+                                                </div>
                                             ))}
                                         </div>
                                     )}

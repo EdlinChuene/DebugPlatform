@@ -41,6 +41,11 @@ struct DatabaseDescriptorDTO: Content {
     let visibleInInspector: Bool
     /// 账户归属状态（多账户场景下用于区分）
     let ownership: AccountOwnership
+    /// 数据库所有者标识符
+    /// - 对于 currentUser：当前用户 UUID
+    /// - 对于 otherUser：其他用户 UUID
+    /// - 对于 shared：nil
+    let ownerIdentifier: String?
 }
 
 // MARK: - DB Info DTO
